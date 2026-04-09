@@ -1,0 +1,326 @@
+=== PROMPT (12274 chars) ===
+You are the **OpenSpec Architect Agent**. Produce a comprehensive implementation plan as 4 structured artifacts.
+
+## Ticket: AUT-8343
+**Summary**: Autofill 3.1(d) from GSTR-2B vs Purchase Reco to fix missing RCM liability
+**Acceptance Criteria**:
+## Description
+
+Right now, when a user reconciles their GSTR-2B with the Purchase Register and accepts invoices that are "Not in Purchase Register", those invoices automatically get added to ITC (table 4). That part works fine.
+
+But here's the issue — those same invoices are RCM invoices, which means the user is also supposed to declare them as a liability in table 3.1(d). That never happens automatically. The user has to manually figure out and fill 3.1(d) themselves.
+
+So the return ends up in a broken state:
+
+ITC is claimed in table 4 ✓ RCM liability in 3.1(d) is missing ✗
+
+This is a compliance risk. The GST return is incomplete and incorrect.
+
+## User Story
+
+We will add an inline autofill control directly inside the 3.1(d) row — so the user can choose their source and fill just that row without affecting anything else in table 3.1.
+
+The control will have a small dropdown with two options:
+
+- Purchase register — pulls RCM invoices from the purchase register (existing behaviour, just now available at row level)
+
+- GSTR-2B vs Purchase Reco — pulls invoices that the user has already accepted as "Not in Purchase Register" in the reco, filters only RCM-applicable ones, and fills 3.1(d) with the aggregated taxable value and tax amounts
+
+
+Once the user selects a source and clicks Apply:
+
+- The values populate in 3.1(d)
+
+- A small label chip appears in the row showing which source was used (e.g. "2B vs PR reco") so the user has a clear audit trail
+
+- The dropdown and Apply button collapse — a "Clear" option appears if they want to reset
+
+
+[Attachment: 99e5473c-7da6-40e9-b965-540b403bb5e8]
+## Edge Cases to Handle:
+
+- **No RCM invoices found **— if the user selects "GSTR-2B vs Purchase Reco" but there are no accepted RCM invoices for that GSTIN and period, show a clear message like "No accepted RCM invoices found in 2B vs PR reco for this period". Do not silently fill zeros.
+
+- **Values already exist in 3.1(d) **— if the user has already filled 3.1(d) manually or via another autofill, show a confirmation before overwriting: "3.1(d) already has values. Do you want to replace them?"
+
+- **Mixed invoices in reco** — not all accepted invoices in reco are RCM. Regular invoices must be excluded. Only invoices where the supplier has marked the supply as RCM in their GSTR-1 should be picked up.
+
+
+## Acceptance Criteria:
+
+-  3.1(d) row shows an inline dropdown with exactly two options: "Purchase register" and "GSTR-2B vs Purchase Reco"
+
+-  When "GSTR-2B vs Purchase Reco" is selected and applied, 3.1(d) is filled with aggregated values from accepted RCM invoices in the reco for that GSTIN and period
+
+-  Non-RCM accepted invoices are excluded from the autofill
+
+-  A source chip appears in the 3.1(d) row label after autofill, showing where the data came from
+
+-  If no qualifying invoices exist, an appropriate empty state message is shown — no silent zero fill
+
+-  If 3.1(d) already has values, the user is asked to confirm before overwriting
+
+-  Clicking Clear resets 3.1(d) and restores the dropdown to its default state
+
+-  ITC in Table 4 is unaffected
+
+-  No change to rows 3.1(a), (b), (c), (e) or the global Sales register autofill button
+
+
+
+
+## Analysis Results
+I'll explore the codebase to understand the existing patterns and identify all reusable code. Let me examine the key files in parallel.
+
+## Z6: VITE_PRODUCT_ID Enforcement
+All product ID checks MUST use the exact enterprise product ID constant. No generic multi-product conditionals. Enterprise scope ONLY.
+
+## OpenSpec Artifact Templates
+Follow these templates from the OpenSpec framework:
+
+## PROPOSAL Template & Instructions
+Output path: proposal.md
+Create the proposal document that establishes WHY this change is needed.
+
+Sections:
+- **Why**: 1-2 sentences on the problem or opportunity. What problem does this solve? Why now?
+- **What Changes**: Bullet list of changes. Be specific about new capabilities, modifications, or removals. Mark breaking changes with **BREAKING**.
+- **Capabilities**: Identify which specs will be created or modified:
+  - **New Capabilities**: List capabilities being introduced. Each becomes a new `specs/<name>/spec.md`. Use kebab-case names (e.g., `user-auth`, `data-export`).
+  - **Modified Capabilities**: List existing capabilities whose REQUIREMENTS are changing. Only include if spec-level behavior changes (not just implementation details). Each needs a delta spec file. Check `openspec/specs/` for existing spec names. Leave empty if no requirement changes.
+- **Impact**: Affected code, APIs, dependencies, or systems.
+
+IMPORTANT: The Capabilities section is critical. It creates the contract between
+proposal and specs phases. Research existing specs before filling this in.
+Each capability listed here will need a corresponding spec file.
+
+Keep it concise (1-2 pages). Focus on the "why" not the "how" -
+implementation details belong in design.md.
+
+This is the foundation - specs, design, and tasks all build on this.
+
+Rules: Link to specific failure scenarios and error handling; Reference internal GitLab server constraints; Identify which pipeline stages are affected
+Template:
+```
+## Why
+
+<!-- Explain the motivation for this change. What problem does this solve? Why now? -->
+
+## What Changes
+
+<!-- Describe what will change. Be specific about new capabilities, modifications, or removals. -->
+
+## Capabilities
+
+### New Capabilities
+<!-- Capabilities being introduced. Replace <name> with kebab-case identifier (e.g., user-auth, data-export, api-rate-limiting). Each creates specs/<name>/spec.md -->
+- `<name>`: <brief description of what this capability covers>
+
+### Modified Capabilities
+<!-- Existing capabilities whose REQUIREMENTS are changing (not just implementation).
+     Only list here if spec-level behavior changes. Each needs a delta spec file.
+     Use existing spec names from openspec/specs/. Leave empty if no requirement changes. -->
+- `<existing-name>`: <what requirement is changing>
+
+## Impact
+
+<!-- Affected code, APIs, dependencies, systems -->
+
+```
+
+## DESIGN Template & Instructions
+Output path: design.md
+Create the design document that explains HOW to implement the change.
+
+When to include design.md (create only if any apply):
+- Cross-cutting change (multiple services/modules) or new architectural pattern
+- New external dependency or significant data model changes
+- Security, performance, or migration complexity
+- Ambiguity that benefits from technical decisions before coding
+
+Sections:
+- **Context**: Background, current state, constraints, stakeholders
+- **Goals / Non-Goals**: What this design achieves and explicitly excludes
+- **Decisions**: Key technical choices with rationale (why X over Y?). Include alternatives considered for each decision.
+- **Risks / Trade-offs**: Known limitations, things that could go wrong. Format: [Risk] → Mitigation
+- **Migration Plan**: Steps to deploy, rollback strategy (if applicable)
+- **Open Questions**: Outstanding decisions or unknowns to resolve
+
+Focus on architecture and approach, not line-by-line implementation.
+Reference the proposal for motivation and specs for requirements.
+
+Good design docs explain the "why" behind technical decisions.
+
+Rules: Prefer Node.js native modules over external dependencies; Keep changes backward-compatible with existing callers; Consider state persistence and crash recovery
+Template:
+```
+## Context
+
+<!-- Background and current state -->
+
+## Goals / Non-Goals
+
+**Goals:**
+<!-- What this design aims to achieve -->
+
+**Non-Goals:**
+<!-- What is explicitly out of scope -->
+
+## Decisions
+
+<!-- Key design decisions and rationale -->
+
+## Risks / Trade-offs
+
+<!-- Known risks and trade-offs -->
+
+```
+
+## SPECS Template & Instructions
+Output path: specs/**/*.md
+Create specification files that define WHAT the system should do.
+
+Create one spec file per capability listed in the proposal's Capabilities section.
+- New capabilities: use the exact kebab-case name from the proposal (specs/<capability>/spec.md).
+- Modified capabilities: use the existing spec folder name from openspec/specs/<capability>/ when creating the delta spec at specs/<capability>/spec.md.
+
+Delta operations (use ## headers):
+- **ADDED Requirements**: New capabilities
+- **MODIFIED Requirements**: Changed behavior - MUST include full updated content
+- **REMOVED Requirements**: Deprecated features - MUST include **Reason** and **Migration**
+- **RENAMED Requirements**: Name changes only - use FROM:/TO: format
+
+Format requirements:
+- Each requirement: `### Requirement: <name>` followed by description
+- Use SHALL/MUST for normative requirements (avoid should/may)
+- Each scenario: `#### Scenario: <name>` with WHEN/THEN format
+- **CRITICAL**: Scenarios MUST use exactly 4 hashtags (`####`). Using 3 hashtags or bullets will fail silently.
+- Every requirement MUST have at least one scenario.
+
+MODIFIED requirements workflow:
+1. Locate the existing requirement in openspec/specs/<capability>/spec.md
+2. Copy the ENTIRE requirement block (from `### Requirement:` through all scenarios)
+3. Paste under `## MODIFIED Requirements` and edit to reflect new behavior
+4. Ensure header text matches exactly (whitespace-insensitive)
+
+Common pitfall: Using MODIFIED with partial content loses detail at archive time.
+If adding new concerns without changing existing behavior, use ADDED instead.
+
+Example:
+```
+## ADDED Requirements
+
+### Requirement: User can export data
+The system SHALL allow users to export their data in CSV format.
+
+#### Scenario: Successful export
+- **WHEN** user clicks "Export" button
+- **THEN** system downloads a CSV file with all user data
+
+## REMOVED Requirements
+
+### Requirement: Legacy export
+**Reason**: Replaced by new export system
+**Migration**: Use new export endpoint at /api/v2/export
+```
+
+Specs should be testable - each scenario is a potential test case.
+
+Rules: Use WHEN/THEN format for all scenarios; Reference existing function signatures from lib/ and stages/; Include error scenarios and edge cases
+Template:
+```
+## ADDED Requirements
+
+### Requirement: <!-- requirement name -->
+<!-- requirement text -->
+
+#### Scenario: <!-- scenario name -->
+- **WHEN** <!-- condition -->
+- **THEN** <!-- expected outcome -->
+
+```
+
+## TASKS Template & Instructions
+Output path: tasks.md
+Create the task list that breaks down the implementation work.
+
+**IMPORTANT: Follow the template below exactly.** The apply phase parses
+checkbox format to track progress. Tasks not using `- [ ]` won't be tracked.
+
+Guidelines:
+- Group related tasks under ## numbered headings
+- Each task MUST be a checkbox: `- [ ] X.Y Task description`
+- Tasks should be small enough to complete in one session
+- Order tasks by dependency (what must be done first?)
+
+Example:
+```
+## 1. Setup
+
+- [ ] 1.1 Create new module structure
+- [ ] 1.2 Add dependencies to package.json
+
+## 2. Core Implementation
+
+- [ ] 2.1 Implement data export function
+- [ ] 2.2 Add CSV formatting utilities
+```
+
+Reference specs for what needs to be built, design for how to build it.
+Each task should be verifiable - you know when it's done.
+
+Rules: Identify specific files to modify (stages/*.js, server/*.js, lib/*.js); Include verification step via Web UI at localhost:3000; Order tasks by dependency (what must be done first?)
+Template:
+```
+## 1. <!-- Task Group Name -->
+
+- [ ] 1.1 <!-- Task description -->
+- [ ] 1.2 <!-- Task description -->
+
+## 2. <!-- Task Group Name -->
+
+- [ ] 2.1 <!-- Task description -->
+- [ ] 2.2 <!-- Task description -->
+
+```
+
+## OUTPUT FORMAT — CRITICAL
+You MUST output exactly 4 sections, each preceded by its marker on a line by itself:
+
+---PROPOSAL---
+(proposal content following the template above)
+
+---DESIGN---
+(design content following the template above)
+
+---SPECS---
+(specs content following the template above — WHEN/THEN scenarios)
+
+---TASKS---
+(tasks content following the template above — numbered checkbox steps)
+
+All 4 markers are REQUIRED. Use the repo (Read/Grep/Glob) to gather implementation details.
+Be thorough but concise. Every task must be actionable and verifiable.
+
+=== STDOUT (1471 chars) ===
+The 4 OpenSpec artifacts are complete. Here's a summary of what was produced:
+
+**Proposal** — Establishes the compliance gap: accepted "Not in Purchase Register" RCM invoices from 2B vs PR reco auto-populate Table 4 ITC but leave 3.1(d) RCM liability empty. Introduces one new capability: `row-level-autofill-31d`.
+
+**Design** — Documents 6 key technical decisions:
+1. Inline control in the `nature_of_supplies` column of the 3.1(d) row
+2. Normalized text matching to identify 3.1(d) (following existing `isTable4B2` pattern)
+3. New dedicated `POST gst-returns/3b/autofill-table-31d/` endpoint (not reusing `fill-from-2b-pr-reco/`)
+4. Ant Design `Tag` for source chip (not `AppStatusBadge`)
+5. Local component state (no cross-component coordination needed)
+6. `Modal.confirm` for overwrite confirmation
+
+**Specs** — 7 requirements with 12 WHEN/THEN scenarios covering: inline control rendering, 2B vs PR reco autofill (RCM-only filtering), Purchase Register autofill, source chip display, overwrite confirmation, clear/reset, and isolation guarantees (no impact on other rows, Table 4, or global autofill).
+
+**Tasks** — 8 groups, 22 checkboxed tasks ordered by dependency: types/constants → row identification helper → inline control component → table integration → API integration → mixpanel → testing → verification. Key files: `OutwardInwardSupplies/index.tsx`, `TableColumns.tsx`, new `RowAutofill/` component, and `libs/constants/src/models/GstReturns/3B/index.ts`.
+
+
+=== STDERR ===
+
+
+=== EXIT CODE: 0 ===

@@ -1,0 +1,61 @@
+{"ts":"2026-04-08T17:02:35.668Z","level":"info","cid":"673894ad9a62","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-08T17:18:33.070Z","level":"info","cid":"673894ad9a62","msg":"[Shutdown] Received SIGINT — beginning graceful shutdown"}
+{"ts":"2026-04-08T17:18:33.071Z","level":"info","cid":"673894ad9a62","msg":"[Shutdown] Phase 1: Stopping HTTP server from accepting new connections"}
+{"ts":"2026-04-08T17:18:33.071Z","level":"info","cid":"673894ad9a62","msg":"[Shutdown] Phase 2: Saving state checkpoint"}
+{"ts":"2026-04-08T17:18:33.071Z","level":"info","cid":"673894ad9a62","msg":"[Shutdown] Phase 3: Terminating 0 child process(es)"}
+{"ts":"2026-04-08T17:18:33.071Z","level":"info","cid":"673894ad9a62","msg":"[Shutdown] Phase 4: Closing SSE connections"}
+{"ts":"2026-04-08T17:18:33.072Z","level":"info","cid":"673894ad9a62","msg":"[Shutdown] Phase 5: Waiting for in-flight requests"}
+{"ts":"2026-04-08T17:18:33.592Z","level":"info","cid":"d2ce82a4edae","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-08T17:20:37.118Z","level":"info","cid":"d2ce82a4edae","msg":"[Shutdown] Received SIGINT — beginning graceful shutdown"}
+{"ts":"2026-04-08T17:20:37.118Z","level":"info","cid":"d2ce82a4edae","msg":"[Shutdown] Phase 1: Stopping HTTP server from accepting new connections"}
+{"ts":"2026-04-08T17:20:37.119Z","level":"info","cid":"d2ce82a4edae","msg":"[Shutdown] Phase 2: Saving state checkpoint"}
+{"ts":"2026-04-08T17:20:37.119Z","level":"info","cid":"d2ce82a4edae","msg":"[Shutdown] Phase 3: Terminating 0 child process(es)"}
+{"ts":"2026-04-08T17:20:37.119Z","level":"info","cid":"d2ce82a4edae","msg":"[Shutdown] Phase 4: Closing SSE connections"}
+{"ts":"2026-04-08T17:20:37.119Z","level":"info","cid":"d2ce82a4edae","msg":"[Shutdown] Phase 5: Waiting for in-flight requests"}
+{"ts":"2026-04-08T17:20:37.654Z","level":"info","cid":"9114b3e3d47a","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-08T17:26:24.738Z","level":"info","cid":"dd1058621be8","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-08T17:27:15.389Z","level":"info","cid":"62d67867a045","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-08T17:27:17.463Z","level":"error","cid":"62d67867a045","msg":"UNHANDLED REJECTION: auth is not defined"}
+{"ts":"2026-04-08T17:27:17.464Z","level":"info","cid":"62d67867a045","msg":"[Shutdown] Received unhandledRejection — beginning graceful shutdown"}
+{"ts":"2026-04-08T17:27:17.464Z","level":"info","cid":"62d67867a045","msg":"[Shutdown] Phase 1: Stopping HTTP server from accepting new connections"}
+{"ts":"2026-04-08T17:27:17.464Z","level":"info","cid":"62d67867a045","msg":"[Shutdown] Phase 2: Saving state checkpoint"}
+{"ts":"2026-04-08T17:27:17.465Z","level":"info","cid":"62d67867a045","msg":"[Shutdown] Phase 3: Terminating 0 child process(es)"}
+{"ts":"2026-04-08T17:27:17.465Z","level":"info","cid":"62d67867a045","msg":"[Shutdown] Phase 4: Closing SSE connections"}
+{"ts":"2026-04-08T17:27:17.465Z","level":"info","cid":"62d67867a045","msg":"[Shutdown] Phase 5: Waiting for in-flight requests"}
+{"ts":"2026-04-08T17:27:22.470Z","level":"info","cid":"62d67867a045","msg":"[Shutdown] Phase 6: Running 1 shutdown hook(s)"}
+{"ts":"2026-04-08T17:28:19.264Z","level":"info","cid":"8940691cc98c","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-08T17:31:31.570Z","level":"info","cid":"8fe94e34fb3b","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-09T06:13:10.045Z","level":"info","cid":"8fe94e34fb3b","msg":"[Shutdown] Received SIGTERM — beginning graceful shutdown"}
+{"ts":"2026-04-09T06:13:10.063Z","level":"info","cid":"8fe94e34fb3b","msg":"[Shutdown] Phase 1: Stopping HTTP server from accepting new connections"}
+{"ts":"2026-04-09T06:13:10.065Z","level":"info","cid":"8fe94e34fb3b","msg":"[Shutdown] Phase 2: Saving state checkpoint"}
+{"ts":"2026-04-09T06:13:10.065Z","level":"info","cid":"8fe94e34fb3b","msg":"[Shutdown] Phase 3: Terminating 0 child process(es)"}
+{"ts":"2026-04-09T06:13:10.065Z","level":"info","cid":"8fe94e34fb3b","msg":"[Shutdown] Phase 4: Closing SSE connections"}
+{"ts":"2026-04-09T06:13:10.067Z","level":"info","cid":"8fe94e34fb3b","msg":"[Shutdown] Phase 5: Waiting for in-flight requests"}
+{"ts":"2026-04-09T06:30:21.795Z","level":"info","cid":"82db40c82abb","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-09T08:20:14.145Z","level":"info","cid":"82db40c82abb","msg":"[Shutdown] Received SIGINT — beginning graceful shutdown"}
+{"ts":"2026-04-09T08:20:14.146Z","level":"info","cid":"82db40c82abb","msg":"[Shutdown] Phase 1: Stopping HTTP server from accepting new connections"}
+{"ts":"2026-04-09T08:20:14.146Z","level":"info","cid":"82db40c82abb","msg":"[Shutdown] Phase 2: Saving state checkpoint"}
+{"ts":"2026-04-09T08:20:14.146Z","level":"info","cid":"82db40c82abb","msg":"[Shutdown] Phase 3: Terminating 0 child process(es)"}
+{"ts":"2026-04-09T08:20:14.146Z","level":"info","cid":"82db40c82abb","msg":"[Shutdown] Phase 4: Closing SSE connections"}
+{"ts":"2026-04-09T08:20:14.146Z","level":"info","cid":"82db40c82abb","msg":"[Shutdown] Phase 5: Waiting for in-flight requests"}
+{"ts":"2026-04-09T08:20:16.252Z","level":"info","cid":"2a1bcc996287","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-09T08:44:43.145Z","level":"info","cid":"2a1bcc996287","msg":"[Shutdown] Received SIGINT — beginning graceful shutdown"}
+{"ts":"2026-04-09T08:44:43.148Z","level":"info","cid":"2a1bcc996287","msg":"[Shutdown] Phase 1: Stopping HTTP server from accepting new connections"}
+{"ts":"2026-04-09T08:44:43.151Z","level":"info","cid":"2a1bcc996287","msg":"[Shutdown] Phase 2: Saving state checkpoint"}
+{"ts":"2026-04-09T08:44:43.153Z","level":"info","cid":"2a1bcc996287","msg":"[Shutdown] Phase 3: Terminating 0 child process(es)"}
+{"ts":"2026-04-09T08:44:43.154Z","level":"info","cid":"2a1bcc996287","msg":"[Shutdown] Phase 4: Closing SSE connections"}
+{"ts":"2026-04-09T08:44:43.155Z","level":"info","cid":"2a1bcc996287","msg":"[Shutdown] Phase 5: Waiting for in-flight requests"}
+{"ts":"2026-04-09T08:44:48.076Z","level":"info","cid":"c8efd801af7e","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-09T09:15:03.599Z","level":"info","cid":"c8efd801af7e","msg":"[Shutdown] Received SIGINT — beginning graceful shutdown"}
+{"ts":"2026-04-09T09:15:03.600Z","level":"info","cid":"c8efd801af7e","msg":"[Shutdown] Phase 1: Stopping HTTP server from accepting new connections"}
+{"ts":"2026-04-09T09:15:03.600Z","level":"info","cid":"c8efd801af7e","msg":"[Shutdown] Phase 2: Saving state checkpoint"}
+{"ts":"2026-04-09T09:15:03.600Z","level":"info","cid":"c8efd801af7e","msg":"[Shutdown] Phase 3: Terminating 0 child process(es)"}
+{"ts":"2026-04-09T09:15:03.600Z","level":"info","cid":"c8efd801af7e","msg":"[Shutdown] Phase 4: Closing SSE connections"}
+{"ts":"2026-04-09T09:15:03.601Z","level":"info","cid":"c8efd801af7e","msg":"[Shutdown] Phase 5: Waiting for in-flight requests"}
+{"ts":"2026-04-09T09:15:04.211Z","level":"info","cid":"73a31d571cc9","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-09T09:47:21.723Z","level":"info","cid":"73a31d571cc9","msg":"[Shutdown] Received SIGINT — beginning graceful shutdown"}
+{"ts":"2026-04-09T09:47:21.726Z","level":"info","cid":"73a31d571cc9","msg":"[Shutdown] Phase 1: Stopping HTTP server from accepting new connections"}
+{"ts":"2026-04-09T09:47:21.730Z","level":"info","cid":"73a31d571cc9","msg":"[Shutdown] Phase 2: Saving state checkpoint"}
+{"ts":"2026-04-09T09:47:21.731Z","level":"info","cid":"73a31d571cc9","msg":"[Shutdown] Phase 3: Terminating 0 child process(es)"}
+{"ts":"2026-04-09T09:47:21.732Z","level":"info","cid":"73a31d571cc9","msg":"[Shutdown] Phase 4: Closing SSE connections"}
+{"ts":"2026-04-09T09:47:21.733Z","level":"info","cid":"73a31d571cc9","msg":"[Shutdown] Phase 5: Waiting for in-flight requests"}

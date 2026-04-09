@@ -1,0 +1,734 @@
+=== PROMPT (26569 chars) ===
+You are the **Analysis Agent**. YOU HAVE DIRECT ACCESS TO THE REPOSITORY — use Read, Grep, and Glob tools to explore the codebase.
+
+## MANDATORY RULES
+1. **REUSE existing code**: Use the EXACT same components, hooks, utils, services, API calls, styles, constants.
+2. **Match existing patterns EXACTLY**: Same import style, state management, error handling, naming, folder structure.
+3. **Prefer modifying existing files** over creating new ones.
+4. **Import from existing paths**: Same import aliases, relative paths, barrel exports.
+5. **Copy structure from similar features**: If there's an existing edit form, table, modal — copy it.
+6. **No unnecessary abstractions**: Don't create helpers/utils the repo doesn't already have.
+7. **VITE_PRODUCT_ID checks**: Must use the exact enterprise product ID — no generic multi-product conditionals.
+8. **Enterprise app ONLY**: Do NOT modify or reference other product lines (SME, GST, TaxPro, etc.).
+
+**AUT-8343: Autofill 3.1(d) from GSTR-2B vs Purchase Reco to fix missing RCM liability** [New Feature / Medium]
+
+## Description
+<user_content>## Description
+
+Right now, when a user reconciles their GSTR-2B with the Purchase Register and accepts invoices that are "Not in Purchase Register", those invoices automatically get added to ITC (table 4). That part works fine.
+
+But here's the issue — those same invoices are RCM invoices, which means the user is also supposed to declare them as a liability in table 3.1(d). That never happens automatically. The user has to manually figure out and fill 3.1(d) themselves.
+
+So the return ends up in a broken state:
+
+ITC is claimed in table 4 ✓ RCM liability in 3.1(d) is missing ✗
+
+This is a compliance risk. The GST return is incomplete and incorrect.
+
+## User Story
+
+We will add an inline autofill control directly inside the 3.1(d) row — so the user can choose their source and fill just that row without affecting anything else in table 3.1.
+
+The control will have a small dropdown with two options:
+
+- Purchase register — pulls RCM invoices from the purchase register (existing behaviour, just now available at row level)
+
+- GSTR-2B vs Purchase Reco — pulls invoices that the user has already accepted as "Not in Purchase Register" in the reco, filters only RCM-applicable ones, and fills 3.1(d) with the aggregated taxable value and tax amounts
+
+
+Once the user selects a source and clicks Apply:
+
+- The values populate in 3.1(d)
+
+- A small label chip appears in the row showing which source was used (e.g. "2B vs PR reco") so the user has a clear audit trail
+
+- The dropdown and Apply button collapse — a "Clear" option appears if they want to reset
+
+
+[Attachment: 99e5473c-7da6-40e9-b965-540b403bb5e8]
+## Edge Cases to Handle:
+
+- **No RCM invoices found **— if the user selects "GSTR-2B vs Purchase Reco" but there are no accepted RCM invoices for that GSTIN and period, show a clear message like "No accepted RCM invoices found in 2B vs PR reco for this period". Do not silently fill zeros.
+
+- **Values already exist in 3.1(d) **— if the user has already filled 3.1(d) manually or via another autofill, show a confirmation before overwriting: "3.1(d) already has values. Do you want to replace them?"
+
+- **Mixed invoices in reco** — not all accepted invoices in reco are RCM. Regular invoices must be excluded. Only invoices where the supplier has marked the supply as RCM in their GSTR-1 should be picked up.
+
+
+## Acceptance Criteria:
+
+-  3.1(d) row shows an inline dropdown with exactly two options: "Purchase register" and "GSTR-2B vs Purchase Reco"
+
+-  When "GSTR-2B vs Purchase Reco" is selected and applied, 3.1(d) is filled with aggregated values from accepted RCM invoices in the reco for that GSTIN and period
+
+-  Non-RCM accepted invoices are excluded from the autofill
+
+-  A source chip appears in the 3.1(d) row label after autofill, showing where the data came from
+
+-  If no qualifying invoices exist, an appropriate empty state message is shown — no silent zero fill
+
+-  If 3.1(d) already has values, the user is asked to confirm before overwriting
+
+-  Clicking Clear resets 3.1(d) and restores the dropdown to its default state
+
+-  ITC in Table 4 is unaffected
+
+-  No change to rows 3.1(a), (b), (c), (e) or the global Sales register autofill button
+
+
+</user_content>
+
+## Acceptance Criteria
+<user_content>## Description
+
+Right now, when a user reconciles their GSTR-2B with the Purchase Register and accepts invoices that are "Not in Purchase Register", those invoices automatically get added to ITC (table 4). That part works fine.
+
+But here's the issue — those same invoices are RCM invoices, which means the user is also supposed to declare them as a liability in table 3.1(d). That never happens automatically. The user has to manually figure out and fill 3.1(d) themselves.
+
+So the return ends up in a broken state:
+
+ITC is claimed in table 4 ✓ RCM liability in 3.1(d) is missing ✗
+
+This is a compliance risk. The GST return is incomplete and incorrect.
+
+## User Story
+
+We will add an inline autofill control directly inside the 3.1(d) row — so the user can choose their source and fill just that row without affecting anything else in table 3.1.
+
+The control will have a small dropdown with two options:
+
+- Purchase register — pulls RCM invoices from the purchase register (existing behaviour, just now available at row level)
+
+- GSTR-2B vs Purchase Reco — pulls invoices that the user has already accepted as "Not in Purchase Register" in the reco, filters only RCM-applicable ones, and fills 3.1(d) with the aggregated taxable value and tax amounts
+
+
+Once the user selects a source and clicks Apply:
+
+- The values populate in 3.1(d)
+
+- A small label chip appears in the row showing which source was used (e.g. "2B vs PR reco") so the user has a clear audit trail
+
+- The dropdown and Apply button collapse — a "Clear" option appears if they want to reset
+
+
+[Attachment: 99e5473c-7da6-40e9-b965-540b403bb5e8]
+## Edge Cases to Handle:
+
+- **No RCM invoices found **— if the user selects "GSTR-2B vs Purchase Reco" but there are no accepted RCM invoices for that GSTIN and period, show a clear message like "No accepted RCM invoices found in 2B vs PR reco for this period". Do not silently fill zeros.
+
+- **Values already exist in 3.1(d) **— if the user has already filled 3.1(d) manually or via another autofill, show a confirmation before overwriting: "3.1(d) already has values. Do you want to replace them?"
+
+- **Mixed invoices in reco** — not all accepted invoices in reco are RCM. Regular invoices must be excluded. Only invoices where the supplier has marked the supply as RCM in their GSTR-1 should be picked up.
+
+
+## Acceptance Criteria:
+
+-  3.1(d) row shows an inline dropdown with exactly two options: "Purchase register" and "GSTR-2B vs Purchase Reco"
+
+-  When "GSTR-2B vs Purchase Reco" is selected and applied, 3.1(d) is filled with aggregated values from accepted RCM invoices in the reco for that GSTIN and period
+
+-  Non-RCM accepted invoices are excluded from the autofill
+
+-  A source chip appears in the 3.1(d) row label after autofill, showing where the data came from
+
+-  If no qualifying invoices exist, an appropriate empty state message is shown — no silent zero fill
+
+-  If 3.1(d) already has values, the user is asked to confirm before overwriting
+
+-  Clicking Clear resets 3.1(d) and restores the dropdown to its default state
+
+-  ITC in Table 4 is unaffected
+
+-  No change to rows 3.1(a), (b), (c), (e) or the global Sales register autofill button
+
+
+</user_content>
+<user_content>
+## Jira Comments (read ALL — may contain API specs, requirement changes, design decisions)
+### [Yogendra Singh] (2026-04-08):
+Implementation Plan (OpenSpec)
+
+
+
+Proposal
+
+## Why
+
+
+
+GSTR-3B Table 3.1(d) "Inward supplies (liable to reverse charge)" currently only populates from the Sales/Purchase register via the global autofill button. Taxpayers who maintain 2B vs Purchase reconciliation have accepted RCM invoices that should flow directly into 3.1(d), but there is no mechanism to pull this reconciliation data — causing missing or incorrect RCM liability values that must be manually corrected.
+
+
+
+## What Changes
+
+
+
+- Add an inline autofill dropdown control in the 3.1(d) row of the `OutwardInwardSupplies` component with two source options: "Purchase register" and "GSTR-2B vs Purchase Reco"
+
+- When "GSTR-2B vs Purchase Reco" is selected, call a new backend API to fetch aggregated RCM tax values from accepted reconciliation invoices and populate the 3.1(d) row
+
+- When "Purchase register" is selected, call the existing refresh endpoint and apply only the (d) row values
+
+- Show a source indicator badge in the `nature_of_supplies` column after autofill is applied
+
+- Prompt overwrite confirmation via `AppPopConfirm` when 3.1(d) already has non-zero values
+
+- Show an info message when no qualifying RCM invoices are found
+
+- Provide a clear action to reset 3.1(d) values and remove the source indicator
+
+- Add Mixpanel tracking events for 3.1(d) autofill actions
+
+- Add a new response type for the 3.1(d) autofill API
+
+
+
+## Capabilities
+
+
+
+### New Capabilities
+
+- `autofill-31d-from-reco`: Inline row-level autofill for GSTR-3B Table 3.1(d) from GSTR-2B vs Purchase Reconciliation accepted invoices, including source selection dropdown, overwrite confirmation, source badge display, empty state handling, and clear action
+
+
+
+### Modified Capabilities
+
+_(none — the global 3.1 refresh and EligibleITC autofill remain untouched)_
+
+
+
+## Impact
+
+
+
+- **Files modified**: `OutwardInwardSupplies/index.tsx`, `OutwardInwardSupplies/TableColumns.tsx`, `TableWrapper.styled.tsx` (minor), `libs/constants/src/models/GstReturns/3B/index.ts` (new type), `libs/services/mixpanel/src/SMB/GSTModule/GSTR.ts` (new events)
+
+- **New backend API required**: `gst-returns/3b/fill-3-1-d-from-reco/` — aggregates accepted RCM invoices from reconciliation
+
+- **No breaking changes**: The global autofill button, EligibleITC Table 4, and all other 3.1 rows are unaffected
+
+- **Dependencies**: Backend team must deliver the new API endpoint before frontend integration can be verified
+
+
+
+Design
+
+## Context
+
+
+
+GSTR-3B Table 3.1 is rendered by `OutwardInwardSupplies` (`libs/smb/src/lib/gst/3B/Details/OutwardInwardSupplies/index.tsx`). It displays 5 rows — (a) through (e) — each identified by the `nature_of_supplies` string field. Currently, the only autofill mechanism is a global refresh button in the `TableWrapper` header that calls `gst-returns/3b/refresh-table-three-one/` and overwrites all rows from the Sales/Purchase register.
+
+
+
+The EligibleITC component (`libs/smb/src/lib/gst/3B/Details/EligibleITC/index.tsx`) already implements a mature autofill pattern with `AppSelect` dropdown, multiple API sources (`purchase`, `gstr-2b`, `purchase_register`), confirmation modals, lock states, and Mixpanel tracking. This serves as the primary reference pattern.
+
+
+
+Row identification uses `nature_of_supplies` string matching. The 3.1(d) row's value is `"(d) Inward supplies (liable to reverse charge)"` (confirmed from section title and test data patterns).
+
+
+
+## Goals / Non-Goals
+
+
+
+**Goals:**
+
+- Allow users to populate 3.1(d) specifically from accepted RCM invoices in 2B vs PR reconciliation
+
+- Provide visual feedback on which source was used for 3.1(d) values
+
+- Protect against accidental overwrites with confirmation
+
+- Keep the feature isolated to the 3.1(d) row — no side effects on other rows or Table 4
+
+
+
+**Non-Goals:**
+
+- Modifying the global 3.1 autofill button behavior
+
+- Adding autofill dropdowns to rows (a), (b), (c), or (e)
+
+- Adding lock/OTP mechanism for 3.1(d) (that's a Table 4 concern)
+
+- Building a drill-down invoice viewer for 3.1(d) (future scope)
+
+- Modifying backend reconciliation logic
+
+
+
+## Decisions
+
+
+
+### 1. Inline dropdown placement — in `nature_of_supplies` column render
+
+
+
+Place the `AppSelect` dropdown inline within the `nature_of_supplies` column cell for the 3.1(d) row, next to the row label text. This avoids modifying `TableWrapper` and keeps the control co-located with the row it affects.
+
+
+
+**Alternative considered**: A popover triggered from a button in the header actions area. Rejected because it doesn't clearly associate the action with the specific row.
+
+
+
+### 2. State management — local state in `OutwardInwardSupplies`
+
+
+
+Add `autofill31dSource` (string | null) and `autofill31dLoading` (boolean) state to `OutwardInwardSupplies`. Pass these to `getColumns()` to control the column render. This follows the existing pattern where `isEditEnabled` state is managed in the same component and passed to `getColumns()`.
+
+
+
+**Alternative considered**: Lifting state to the parent `GSTR3BDetail`. Rejected because 3.1(d) autofill is entirely local to this section — no other section needs to read or react to this state.
+
+
+
+### 3. Row identification — string constant
+
+
+
+Define a constant `NATURE_31D = '(d) Inward supplies (liable to reverse charge)'` to identify the 3.1(d) row. Use `record.nature_of_supplies.startsWith('(d)')` as a fallback matcher to handle minor backend string variations.
+
+
+
+### 4. "Purchase register" source — reuse existing refresh endpoint
+
+
+
+For the "Purchase register" option, call the existing `gst-returns/3b/refresh-table-three-one/` and extract only the 3.1(d) row from the response `sup_details` array. This avoids needing a second new endpoint.
+
+
+
+### 5. "GSTR-2B vs Purchase Reco" source — new dedicated endpoint
+
+
+
+Call `POST gst-returns/3b/fill-3-1-d-from-reco/` with `{ gstin, ret_period }`. The backend aggregates accepted RCM invoices from reconciliation and returns `{ txval, igst, cgst, sgst, cess, invoice_count }`. If `invoice_count === 0`, show an info message and do not modify the row.
+
+
+
+### 6. Source badge — `AppStatusBadge` after the label text
+
+
+
+After autofill is applied, render `<AppStatusBadge>` inline in the `nature_of_supplies` cell, showing "Sales Register" or "2B vs PR Reco". Define a small local status color map. On clear, remove the badge and reset values to what they were before autofill (store pre-autofill values).
+
+
+
+### 7. Overwrite confirmation — `AppPopConfirm` wrapping the Apply action
+
+
+
+When the user selects a
+
+[...truncated at 4000 chars, full is 5360 chars...]
+
+
+
+Specs
+
+## ADDED Requirements
+
+
+
+### Requirement: Inline autofill source dropdown for 3.1(d)
+
+The system SHALL render an inline `AppSelect` dropdown in the `nature_of_supplies` column cell specifically for the row whose `nature_of_supplies` starts with `"(d)"`. The dropdown SHALL have two options: "Purchase Register" (value: `purchase_register`) and "GSTR-2B vs Purchase Reco" (value: `reco_2b_pr`). The dropdown SHALL be hidden when the form is locked (`isLock === true`) or when edit mode is active (`isEditEnabled === true`). The dropdown SHALL be disabled while an autofill API call is in progress.
+
+
+
+#### Scenario: Dropdown renders only for 3.1(d) row
+
+- **WHEN** the `OutwardInwardSupplies` table renders with multiple rows including 3.1(a), 3.1(b), 3.1(c), 3.1(d), and 3.1(e)
+
+- **THEN** only the 3.1(d) row's `nature_of_supplies` cell SHALL display the autofill source dropdown alongside the row label
+
+
+
+#### Scenario: Dropdown hidden when form is locked
+
+- **WHEN** `isLock` is `true`
+
+- **THEN** the autofill dropdown for 3.1(d) SHALL NOT be rendered
+
+
+
+#### Scenario: Dropdown hidden during edit mode
+
+- **WHEN** `isEditEnabled` is `true`
+
+- **THEN** the autofill dropdown for 3.1(d) SHALL NOT be rendered (edit mode provides direct cell editing instead)
+
+
+
+### Requirement: Autofill 3.1(d) from Purchase Register
+
+The system SHALL, when the user selects "Purchase Register" from the 3.1(d) dropdown, call the existing `gst-returns/3b/refresh-table-three-one/` endpoint, extract only the 3.1(d) row from the response `sup_details` array, and update the local 3.1(d) row values (`txval`, `igst`, `cgst`, `sgst`, `cess`) without modifying any other rows. The system SHALL fire the Mixpanel event `onMPGSTR3bPrepareAutofil31dPR`.
+
+
+
+#### Scenario: Successful autofill from Purchase Register
+
+- **WHEN** user selects "Purchase Register" from the 3.1(d) dropdown
+
+- **THEN** the system SHALL call `gst-returns/3b/refresh-table-three-one/`, extract the `(d)` row from the response, update only the 3.1(d) row in `tableData`, set the source badge to "Sales Register", and show a loading spinner during the API call
+
+
+
+#### Scenario: API error during Purchase Register autofill
+
+- **WHEN** the `refresh-table-three-one` API call fails
+
+- **THEN** the system SHALL display an error message via `infoViewContext.fetchError()`, stop the loading spinner, and leave the existing 3.1(d) values unchanged
+
+
+
+### Requirement: Autofill 3.1(d) from GSTR-2B vs Purchase Reco
+
+The system SHALL, when the user selects "GSTR-2B vs Purchase Reco" from the 3.1(d) dropdown, call `POST gst-returns/3b/fill-3-1-d-from-reco/` with `{ gstin, ret_period }` and update the 3.1(d) row values from the response. The system SHALL fire the Mixpanel event `onMPGSTR3bPrepareAutofil31dReco`.
+
+
+
+#### Scenario: Successful autofill from 2B vs PR Reco with qualifying invoices
+
+- **WHEN** user selects "GSTR-2B vs Purchase Reco" and the API returns `invoice_count > 0`
+
+- **THEN** the system SHALL update the 3.1(d) row's `txval`, `igst`, `cgst`, `sgst`, `cess` from the response, set the source badge to "2B vs PR Reco", and show loading state during the call
+
+
+
+#### Scenario: No qualifying RCM invoices found
+
+- **WHEN** user selects "GSTR-2B vs Purchase Reco" and the API returns `invoice_count === 0`
+
+- **THEN** the system SHALL show an info message "No qualifying RCM invoices found in reconciliation" via `infoViewContext.showMessage()` and SHALL NOT modify the 3.1(d) row values
+
+
+
+#### Scenario: API error during Reco autofill
+
+- **WHEN** the `fill-3-1-d-from-reco` API call fails
+
+- **THEN** the system SHALL display an error via `infoViewContext.fetchError()` and leave values unchanged
+
+
+
+### Requirement: Overwrite confirmation for non-zero 3.1(d) values
+
+The system SHALL, before applying autofill to 3.1(d), check if any of the current 3.1(d) values (`txval`, `igst`, `cgst`, `sgst`, `cess`) are non-zero. If any are non-zero, the system SHALL show an `AppPopConfirm` confirmation with the message "3.1(d) already has values. Overwrite with {source name}?" bef
+
+[...truncated at 4000 chars, full is 8070 chars...]
+
+
+
+Tasks
+
+## 1. Types & Constants
+
+
+
+- [ ] 1.1 Add `ThreeB31dAutofillResponse` type to `libs/constants/src/models/GstReturns/3B/index.ts` with fields `{ txval: number; igst: number; cgst: number; sgst: number; cess: number; invoice_count: number }`
+
+- [ ] 1.2 Add constant `NATURE_31D_PREFIX = '(d)'` to a local constants block in `OutwardInwardSupplies/index.tsx` for row identification
+
+- [ ] 1.3 Add `Autofill31dSource` type (`'purchase_register' | 'reco_2b_pr' | null`) to `OutwardInwardSupplies/index.tsx`
+
+
+
+## 2. Mixpanel Tracking
+
+
+
+- [ ] 2.1 Add `onMPGSTR3bPrepareAutofil31dPR` function to `libs/services/mixpanel/src/SMB/GSTModule/GSTR.ts` tracking event `Gstent_Returns_GSTR-3b_Prepare_autofill31d_PR`
+
+- [ ] 2.2 Add `onMPGSTR3bPrepareAutofil31dReco` function to `libs/services/mixpanel/src/SMB/GSTModule/GSTR.ts` tracking event `Gstent_Returns_GSTR-3b_Prepare_autofill31d_Reco`
+
+- [ ] 2.3 Export both new functions from the mixpanel barrel file (verify `libs/services/mixpanel/src/index.ts` or re-export path)
+
+
+
+## 3. OutwardInwardSupplies Component — State & Logic
+
+
+
+- [ ] 3.1 Add state variables to `OutwardInwardSupplies/index.tsx`: `autofill31dSource` (type `Autofill31dSource`, default `null`), `autofill31dLoading` (boolean, default `false`)
+
+- [ ] 3.2 Add helper `get31dRow()` that finds 
+
+
+
+[...truncated at 11824 chars, full is 18379 chars...]
+
+
+
+</user_content>
+
+Folder structure: .claude, .claude/commands, .claude/projects, @types, @types/styled-components, apps, apps/accounts, apps/admin, apps/arap, apps/edoc, apps/enterprise, apps/global-invoice, apps/masters-import, apps/notices, apps/ocr, apps/tax-gpt, apps/tds, libs, libs/components, libs/constants, libs/entp, libs/global, libs/helpers, libs/icons, libs/jsencrypt, libs/mi-table, libs/models, libs/services, libs/shared, libs/smb
+
+Relevant source files (3501 of 4373):
+@types/styled-components/index.d.ts
+apps/accounts/src/app/Dashboard/FilterOptions/index.tsx
+apps/accounts/src/app/Dashboard/StatsCard/data.tsx
+apps/accounts/src/app/auth/ChangePassword/index.tsx
+apps/accounts/src/app/auth/DataError/index.tsx
+apps/accounts/src/app/auth/ForgotPassword/index.tsx
+apps/accounts/src/app/auth/ResetPassword/index.tsx
+apps/accounts/src/app/auth/TwoFactorConfirm/index.tsx
+apps/accounts/src/app/utility/private/index.tsx
+apps/accounts/src/app/utility/public/RegisterBusiness.tsx
+apps/accounts/src/app/utility/public/index.styled.tsx
+apps/accounts/src/core/AppLayout/AuthLayout/index.styled.tsx
+apps/accounts/src/core/AppLayout/AuthLayout/index.tsx
+apps/accounts/src/core/AppLayout/MainLayout/AppFooter.tsx
+apps/accounts/src/core/AppLayout/MainLayout/AppHeader/HeaderForm.styled.tsx
+apps/accounts/src/core/AppLayout/MainLayout/AppHeader/HeaderForm.tsx
+apps/accounts/src/core/AppLayout/MainLayout/AppHeader/Notification.styled.tsx
+apps/accounts/src/core/AppLayout/MainLayout/AppHeader/Utils.tsx
+apps/accounts/src/core/AppLayout/MainLayout/AppHeader/index.styled.tsx
+apps/accounts/src/core/AppLayout/MainLayout/AppHeader/index.tsx
+apps/accounts/src/core/AppLayout/MainLayout/AppSidebar/SidebarHeader.tsx
+apps/accounts/src/core/AppLayout/MainLayout/AppSidebar/index.styled.tsx
+apps/accounts/src/core/AppLayout/MainLayout/AppSidebar/index.tsx
+apps/accounts/src/core/AppLayout/MainLayout/index.styled.tsx
+apps/accounts/src/core/AppLayout/MainLayout/index.tsx
+apps/accounts/src/core/AppLayout/index.tsx
+apps/accounts/src/core/AppRoutes/AppRoutes.tsx
+apps/accounts/src/core/AppRoutes/BillingRoutes.tsx
+apps/accounts/src/core/AppRoutes/DashboardRoutes.tsx
+apps/accounts/src/core/AppRoutes/HelpRoutes.tsx
+apps/accounts/src/core/AppRoutes/MiProductsRoutes.tsx
+apps/accounts/src/core/AppRoutes/ProductLogRoutes.tsx
+apps/accounts/src/core/AppRoutes/ProfileRoutes.tsx
+apps/accounts/src/core/AppRoutes/SubscriptionRoutes.tsx
+apps/accounts/src/core/AppRoutes/UrilityRoutes.tsx
+apps/accounts/src/core/AppRoutes/index.tsx
+apps/accounts/src/core/AppRoutes/routeConfig.tsx
+apps/accounts/src/polyfills.ts
+apps/accounts/src/svg-icons/GstReturn.tsx
+apps/accounts/src/svg-icons/ImportIcon.tsx
+apps/accounts/src/svg-icons/NoteIcon.tsx
+apps/accounts/src/svg-icons/NotepadIcon.tsx
+apps/accounts/src/svg-icons/Reconciliation.tsx
+apps/accounts/src/theme/index.tsx
+apps/admin/src/app/AuditTrail/index.tsx
+apps/admin/src/app/Customers/ImportForm.tsx
+apps/admin/src/app/Customers/data.tsx
+apps/admin/src/app/Dashboard/FilterOptions/index.tsx
+apps/admin/src/app/Dashboard/StatsCard/data.tsx
+apps/admin/src/app/IRPSwitchover/IRPSwitch.tsx
+apps/admin/src/app/IRPSwitchover/columns.tsx
+apps/admin/src/app/IRPSwitchover/index.tsx
+apps/admin/src/app/ManageUser/ImportForm.tsx
+apps/admin/src/app/ManageUser/UserColumns.tsx
+apps/admin/src/app/ManageUser/data.tsx
+apps/admin/src/app/ManageUser/index.tsx
+apps/admin/src/app/Reports/Daily Report/FilterOptions.tsx
+apps/admin/src/app/Reports/Daily Report/UserInactive/columns.tsx
+apps/admin/src/app/Reports/Daily Report/UserInactive/index.tsx
+apps/admin/src/app/auth/ChangePassword/index.tsx
+apps/admin/src/app/auth/DataError/index.tsx
+apps/admin/src/app/auth/ForgotPassword/index.tsx
+apps/admin/src/app/auth/ResetPassword/index.tsx
+apps/admin/src/app/auth/TwoFactorConfirm/index.tsx
+apps/admin/src/core/AppLayout/AuthLayout/index.styled.tsx
+apps/admin/src/core/AppLayout/AuthLayout/index.tsx
+apps/admin/src/core/AppLayout/MainLayout/AppFooter.tsx
+apps/admin/src/core/AppLayout/MainLayout/AppHeader/HeaderForm.styled.tsx
+apps/admin/src/core/AppLayout/MainLayout/AppHeader/HeaderForm.tsx
+apps/admin/src/core/AppLayout/MainLayout/AppHeader/Notification.styled.tsx
+apps/admin/src/core/AppLayout/MainLayout/AppHeader/Notification.tsx
+apps/admin/src/core/AppLayout/MainLayout/AppHeader/NotificationItem.tsx
+apps/admin/src/core/AppLayout/MainLayout/AppHeader/NotificationList.tsx
+apps/admin/src/core/AppLayout/MainLayout/AppHeader/Utils.tsx
+apps/admin/src/core/AppLayout/MainLayout/AppHeader/index.styled.tsx
+apps/admin/src/core/AppLayout/MainLayout/AppHeader/index.tsx
+apps/admin/src/core/AppLayout/MainLayout/AppSidebar/SidebarHeader.tsx
+apps/admin/src/core/AppLayout/MainLayout/AppSidebar/index.styled.tsx
+apps/admin/src/core/AppLayout/MainLayout/AppSidebar/index.tsx
+apps/admin/src/core/AppLayout/MainLayout/index.styled.tsx
+apps/admin/src/core/AppLayout/MainLayout/index.tsx
+apps/admin/src/core/AppLayout/index.tsx
+apps/admin/src/core/AppRoutes/ApiLogs.tsx
+apps/admin/src/core/AppRoutes/AppRoutes.tsx
+apps/admin/src/core/AppRoutes/AuditTrail.tsx
+apps/admin/src/core/AppRoutes/Billing.tsx
+apps/admin/src/core/AppRoutes/Customers.tsx
+apps/admin/src/core/AppRoutes/DashboardRoutes.tsx
+apps/admin/src/core/AppRoutes/IRPSwitchover.tsx
+apps/admin/src/core/AppRoutes/MastersIndiaProductRoutes.tsx
+apps/admin/src/core/AppRoutes/ProfileRoutes.tsx
+apps/admin/src/core/AppRoutes/SearchCustomer.tsx
+apps/admin/src/core/AppRoutes/Users.tsx
+apps/admin/src/core/AppRoutes/index.tsx
+apps/admin/src/core/AppRoutes/routeConfig.tsx
+apps/admin/src/polyfills.ts
+apps/admin/src/svg-icons/AuditTrail.tsx
+apps/admin/src/svg-icons/GstReturn.tsx
+apps/admin/src/svg-icons/ImportIcon.tsx
+apps/admin/src/svg-icons/NotepadIcon.tsx
+
+## Required Output Format
+Your response MUST include these sections in order:
+### Requirements
+Bullet list of functional requirements, user flows, business rules, UI changes, API interactions.
+### Reusable Code
+Exact file paths and what to reuse from each (components, hooks, utils, services, constants, types).
+### Risks
+Bullet list with severity: [HIGH], [MEDIUM], [LOW]. Include missing requirements, API specs, edge cases, breaking changes.
+### Recommended Approach
+Brief paragraph on the best implementation strategy.
+### Suggestions
+Identify actionable gaps and recommendations. For each suggestion, provide:
+- **Gaps**: Unclear requirements, missing API specs, ambiguous acceptance criteria, undefined error handling
+- **Risks**: Edge cases not covered, potential breaking changes, performance concerns
+- **Recommendations**: Modules to explore for patterns, requirements to clarify with the team, similar features to reuse
+Format each as a bullet starting with [GAP], [RISK], or [REC].
+
+Be thorough in exploration but concise in output.
+
+## User Refinement Instructions (PRIORITY — address these specifically)
+dive deep into this analysis the risk
+
+
+=== STDOUT (14763 chars) ===
+Now I have comprehensive data. Let me compile the final deep-dive risk analysis.
+
+---
+
+### Requirements
+
+- Add inline `AppSelect` dropdown in the `nature_of_supplies` column of the 3.1(d) row with two options: "Purchase Register" (`purchase_register`) and "GSTR-2B vs Purchase Reco" (`reco_2b_pr`)
+- "Purchase Register" calls existing `gst-returns/3b/refresh-table-three-one/`, extracts only the (d) row from `sup_details`
+- "GSTR-2B vs Purchase Reco" calls new `POST gst-returns/3b/fill-3-1-d-from-reco/` with `{ gstin, ret_period }`, returns `{ txval, igst, cgst, sgst, cess, invoice_count }`
+- Show `AppStatusBadge` source chip ("Sales Register" or "2B vs PR Reco") in `nature_of_supplies` cell after autofill
+- `AppPopConfirm` overwrite confirmation when 3.1(d) already has non-zero values
+- Info message when `invoice_count === 0` — no silent zero fill
+- "Clear" button resets 3.1(d) to pre-autofill values and removes source badge
+- Hidden when `isLock === true` or `isEditEnabled === true`
+- Disabled during loading
+- Mixpanel events: `onMPGSTR3bPrepareAutofil31dPR` and `onMPGSTR3bPrepareAutofil31dReco`
+- No change to rows (a), (b), (c), (e), global autofill, or Table 4
+
+### Reusable Code
+
+| File | What to reuse |
+|---|---|
+| `libs/smb/src/lib/gst/3B/Details/EligibleITC/index.tsx` | **Primary pattern**: `AppSelect` dropdown for source selection, `getDataApi`/`postDataApi` API call pattern, `infoViewContext.showMessage()`/`fetchError()` error handling, loading state management, Mixpanel call placement |
+| `libs/smb/src/lib/gst/3B/Details/OutwardInwardSupplies/index.tsx` | Component to modify: add `autofill31dSource`, `autofill31dLoading` state, `get31dRow()` helper, pass new params to `getColumns()` |
+| `libs/smb/src/lib/gst/3B/Details/OutwardInwardSupplies/TableColumns.tsx` | Modify `getColumns()` signature and `nature_of_supplies` column render to add inline dropdown + badge |
+| `libs/components/src/lib/AppStatusBadge/index.tsx` | Import as `AppStatusBadge` — inline `<span>` element, 24px height, 70px min-width, compatible with table cells |
+| `libs/components/src/lib/AppPopConfirm/index.tsx` | Import as `AppPopConfirm` — wraps Ant Design `Popconfirm`, use `placement='bottom'` for table cells |
+| `libs/components/src/lib/AppSelect/index.tsx` | Import as `AppSelect` — wraps Ant Design `Select` with `AppFloatingOutline`, supports `getPopupContainer` |
+| `libs/constants/src/models/GstReturns/3B/index.ts` | Add `ThreeB31dAutofillResponse` type here |
+| `libs/services/mixpanel/src/SMB/GSTModule/GSTR.ts` | Add new event functions following existing naming pattern (`onMPGSTR3bPrepare...`) |
+| `libs/smb/src/lib/gst/3B/Details/TableWrapper.styled.tsx` | Reuse `StyledSelect` if needed for dropdown styling |
+| `@mi/hooks/APIHooks` | `getDataApi`, `postDataApi` for API calls |
+| `@mi/context/AppInfoViewContextProvider` | `useInfoViewActionsContext()` for `.showMessage()` and `.fetchError()` |
+| `@mi/helpers/DateHelper` | `getFinPeriod()` if needed for Mixpanel |
+| `@mi/hooks/AuthHooks` | `useCurrentBusiness()` if needed |
+
+### Risks
+
+#### [HIGH] Global Refresh Overwrites 3.1(d) Autofill Values — Silent Data Loss
+
+The `MainOptions.tsx` global "Autofill GSTR 3B" button calls `gst-returns/3b/refresh/` which returns the **entire** `ThreeBDetailsProps` object and spreads it into parent state via `setData(data.data)`. This triggers `useEffect(() => { setTableData(data); }, [data])` in `OutwardInwardSupplies/index.tsx:40-42`, **completely overwriting local `tableData`** including any values populated by the 3.1(d) inline autofill. The user receives no warning. This is a **critical data loss path** that affects the core feature.
+
+**Mitigation**: The 3.1(d) autofill must immediately call `updateData()` to persist values to parent state (not just local `tableData`). Additionally, consider auto-saving to backend after autofill, or guard the `useEffect` to not overwrite when autofill is active.
+
+#### [HIGH] Autofill Values Are Unsaved Until Manual "Save" Click — No Persistence Guarantee
+
+The autofill will update local `tableData` state, but there is no mechanism to auto-persist. The user must click the "Save Changes" button in the `TableWrapper` header (which only appears in edit mode). However, the spec says the dropdown is **hidden during edit mode** (`isEditEnabled === true`). This creates a **workflow contradiction**: the user applies autofill (outside edit mode), the values sit in local state, but the save button only appears inside edit mode. The values are at risk of being lost on any re-render, navigation, or global refresh.
+
+**Mitigation**: After autofill, immediately call `postDataApi('gst-returns/3b/edit-table-three-one/', ...)` with the updated `tableData` to persist, OR call `updateData()` to sync to parent. The EligibleITC pattern auto-saves after autofill — follow that.
+
+#### [HIGH] No Unsaved Changes Warning on Page Navigation
+
+There is **no `onBeforeUnload`, `isDirty` flag, or navigation guard** anywhere in the 3B module. If the user applies 3.1(d) autofill and navigates away (back button, route change, tab close), all values are silently lost. This is an **existing architectural gap** in the 3B module, not new to this feature, but this feature amplifies it because the autofill is a multi-step action that gives users a false sense of persistence.
+
+#### [HIGH] "Purchase Register" Source — Extracting Only (d) Row From Full 3.1 Refresh Is Fragile
+
+The "Purchase Register" option reuses `gst-returns/3b/refresh-table-three-one/` and extracts only the (d) row from the `sup_details` array. Row matching relies on `nature_of_supplies.startsWith('(d)')` string matching. If the backend changes the label text (e.g., from `"(d) Inward supplies (liable to reverse charge)"` to `"(d) Inward Supplies..."` with different casing), the match breaks silently. More critically, calling this endpoint **returns all 5 rows** — the implementation must carefully **only apply the (d) row** and discard (a), (b), (c), (e) to avoid overwriting other data.
+
+**Mitigation**: Use `NATURE_31D_PREFIX = '(d)'` constant with `startsWith()` as planned. Add an explicit guard that if no matching row is found, show an error rather than silently failing.
+
+#### [HIGH] New Backend API Not Yet Delivered — `fill-3-1-d-from-reco/`
+
+The `POST gst-returns/3b/fill-3-1-d-from-reco/` endpoint is a **new API that must be built by the backend team**. There is no existing endpoint for this. The response shape (`{ txval, igst, cgst, sgst, cess, invoice_count }`) is assumed but unconfirmed. If the backend returns a different structure (e.g., nested under `data`, or uses `tax_value` instead of `txval`), the frontend will fail.
+
+**Mitigation**: Add the `ThreeB31dAutofillResponse` type now, but implement defensive parsing. Coordinate with backend team on exact response contract before integration testing.
+
+#### [MEDIUM] `AppPopConfirm` Placement in Table Cell May Clip or Overflow
+
+`AppPopConfirm` defaults to `placement='top'` with `maxWidth: 500px` and `zIndex: 2000`. When rendered inside a table cell (the `nature_of_supplies` column), the popconfirm may clip against the table border or card container. The 3.1(d) row is typically the 4th of 5 rows, so there's limited space below. With the confirmation message "3.1(d) already has values. Overwrite with {source name}?", the popover will be moderately sized.
+
+**Mitigation**: Use `placement='bottomLeft'` or `placement='right'` explicitly. Test with actual table layout.
+
+#### [MEDIUM] `nature_of_supplies` Column Gets Crowded With Dropdown + Badge + Label
+
+The current `nature_of_supplies` column has no explicit width and renders only text. Adding an `AppSelect` (180px wide), an `AppStatusBadge` (min 70px), and a "Clear" button alongside the row label text in the same cell creates a crowded layout. At smaller screen widths, elements may wrap or overflow.
+
+**Mitigation**: Use `Space` or `Flex` wrapper with `wrap` for the cell content. Consider placing the dropdown below the label text rather than inline. Test at 1280px viewport width.
+
+#### [MEDIUM] Edit Mode + Autofill State Interaction — Cancel Resets Autofill Values
+
+If user applies 3.1(d) autofill (values + source badge appear), then enters edit mode, makes changes, and clicks "Cancel" — the `onEditEnabled(false)` handler at line 54-58 calls `setTableData(data)`, resetting to the **parent's data**. If the autofill values weren't persisted to the parent via `updateData()`, cancel will **destroy the autofilled values** and remove the source badge.
+
+**Mitigation**: Autofill must sync to parent state immediately. Store `autofill31dSource` separately so it persists through edit cancel.
+
+#### [MEDIUM] Race Condition: Rapid Source Selection
+
+If user selects "Purchase Register", API starts loading, then quickly switches to "GSTR-2B vs Purchase Reco" before the first call completes — two API calls will be in flight. The first response may arrive after the second and overwrite the correct values.
+
+**Mitigation**: Use `autofill31dLoading` to disable the dropdown during API calls. Consider an `AbortController` or response-timestamp check.
+
+#### [LOW] Mixpanel Event Names Are Speculative
+
+The event names `onMPGSTR3bPrepareAutofil31dPR` and `onMPGSTR3bPrepareAutofil31dReco` are proposed in the spec but must be confirmed with the analytics team. Existing events follow patterns like `onMPGSTR3bPrepareAutofilfrmSales`, `onMPGSTR3bPrepareAutofilfrm2B`. The "31d" naming is consistent but novel.
+
+#### [LOW] `ThreeBItemProps.txval` Is `number | string` Union Type
+
+The type definition at `libs/constants/src/models/GstReturns/3B/index.ts:41` defines `txval?: number | string`. When the new API returns `txval: number`, it must be compatible with how `TableColumns.tsx` renders values (it calls `parseFloat(value)` which handles both, but also checks `value === 'blank'`). The autofill should set numeric values, matching the API response shape.
+
+#### [LOW] CGST/SGST Auto-Sync in Edit Mode Doesn't Apply to Autofill
+
+In `TableColumns.tsx:104-108`, editing CGST auto-sets SGST (and vice versa). This only applies during `isEditEnabled` mode. The autofill sets values directly without triggering this sync. This is **correct** behavior since the API returns already-calculated values, but should be documented.
+
+### Recommended Approach
+
+Follow the **EligibleITC autofill pattern** but with a much simpler, single-row-scoped implementation. Add `autofill31dSource` and `autofill31dLoading` state to `OutwardInwardSupplies/index.tsx`. Modify `getColumns()` to accept these plus `isLock`, and conditionally render the dropdown + badge in the `nature_of_supplies` column for the `(d)` row. **Critically**, after any successful autofill API call, immediately call both `setTableData(updatedData)` AND `updateData(updatedData)` to persist to the parent state — this prevents the global refresh and edit-cancel data loss scenarios. For the "Purchase Register" source, reuse the existing `refresh-table-three-one` endpoint but surgically extract only the (d) row. For "GSTR-2B vs Purchase Reco", call the new endpoint and map the flat response into the (d) row. Wrap the apply action in `AppPopConfirm` only when existing values are non-zero. Store pre-autofill values for the "Clear" action. Keep `autofill31dSource` in component state (not in the data model) since it's a UI-only concern.
+
+### Suggestions
+
+- **[RISK] Global refresh destroys 3.1(d) autofill values**: The `MainOptions.tsx` global autofill at line 84 calls `setData(data.data)` which spreads the entire backend response into parent state, triggering the `useEffect([data])` in OutwardInwardSupplies that overwrites local `tableData`. This is the **#1 data loss vector**. Recommendation: after autofill, immediately call `updateData()` AND `postDataApi('gst-returns/3b/edit-table-three-one/')` to persist to backend. Alternatively, guard the `useEffect` to skip sync when `autofill31dSource` is active.
+
+- **[RISK] Workflow contradiction — save button only in edit mode, but dropdown hidden in edit mode**: The autofill dropdown is hidden when `isEditEnabled === true`, but the Save button only appears when `isEditEnabled === true`. The autofill must auto-persist values — it cannot rely on the user entering edit mode to save. Follow EligibleITC pattern where autofill auto-saves.
+
+- **[RISK] Race condition on rapid source switching**: No abort mechanism exists. Two concurrent API calls could resolve in wrong order. Add `AbortController` or disable dropdown during `autofill31dLoading`.
+
+- **[RISK] "Clear" action — what does "pre-autofill values" mean if the form was globally refreshed after autofill?**: If user autofills, then global refresh runs, then user clicks Clear, what values restore? The pre-autofill snapshot may be stale. Recommendation: Clear should zero-out 3.1(d) values and remove the badge, then require the user to save explicitly. Don't try to restore "original" values.
+
+- **[GAP] New API response contract not finalized**: The `POST gst-returns/3b/fill-3-1-d-from-reco/` response shape `{ txval, igst, cgst, sgst, cess, invoice_count }` is assumed. Backend team must confirm: is it wrapped in `{ data: {...} }`? Does it include `txval` or `taxable_value`? Is `invoice_count` at root or nested? Add defensive parsing.
+
+- **[GAP] RCM filtering logic is backend-only — frontend cannot verify**: The spec says "Only invoices where the supplier has marked the supply as RCM in their GSTR-1 should be picked up." This filtering happens entirely on the backend. The frontend has no way to verify correctness. If the backend returns non-RCM invoices, the user will unknowingly file incorrect 3.1(d) values.
+
+- **[GAP] What happens when global 3.1 refresh button runs AFTER 3.1(d) was autofilled?**: The table-level refresh button (`refresh-table-three-one/`) returns all 5 rows from the sales register. If 3.1(d) was autofilled from reco, this refresh will overwrite with sales register values. Should the refresh skip the (d) row when autofill is active? The spec doesn't address this.
+
+- **[REC] Explore `libs/smb/src/lib/gst/3B/Details/EligibleITC/index.tsx` lines 420-500**: The exact autofill-then-save flow — after autofill succeeds, EligibleITC calls `updateData()` AND shows a lock modal. Follow this pattern for auto-persisting 3.1(d) autofill.
+
+- **[REC] Test with actual 3.1(d) `nature_of_supplies` string value**: The exact string may vary by locale or backend version. Log the actual values from `gst-returns/3b/display/` response to confirm the `startsWith('(d)')` matcher works.
+
+- **[REC] Consider auto-saving 3.1(d) after autofill instead of requiring manual save**: The EligibleITC pattern auto-persists. Given the data loss risks, auto-saving is strongly recommended for this feature.
+
+
+=== STDERR ===
+
+
+=== EXIT CODE: 0 ===

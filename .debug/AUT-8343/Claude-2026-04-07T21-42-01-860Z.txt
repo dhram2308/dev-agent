@@ -1,0 +1,370 @@
+=== PROMPT (23224 chars) ===
+You are the **OpenSpec Architect Agent**. Produce a comprehensive implementation plan as 4 structured artifacts.
+
+## Ticket: AUT-8343
+**Summary**: Autofill 3.1(d) from GSTR-2B vs Purchase Reco to fix missing RCM liability
+**Acceptance Criteria**:
+## Description
+
+Right now, when a user reconciles their GSTR-2B with the Purchase Register and accepts invoices that are "Not in Purchase Register", those invoices automatically get added to ITC (table 4). That part works fine.
+
+But here's the issue — those same invoices are RCM invoices, which means the user is also supposed to declare them as a liability in table 3.1(d). That never happens automatically. The user has to manually figure out and fill 3.1(d) themselves.
+
+So the return ends up in a broken state:
+
+ITC is claimed in table 4 ✓ RCM liability in 3.1(d) is missing ✗
+
+This is a compliance risk. The GST return is incomplete and incorrect.
+
+## User Story
+
+We will add an inline autofill control directly inside the 3.1(d) row — so the user can choose their source and fill just that row without affecting anything else in table 3.1.
+
+The control will have a small dropdown with two options:
+
+- Purchase register — pulls RCM invoices from the purchase register (existing behaviour, just now available at row level)
+
+- GSTR-2B vs Purchase Reco — pulls invoices that the user has already accepted as "Not in Purchase Register" in the reco, filters only RCM-applicable ones, and fills 3.1(d) with the aggregated taxable value and tax amounts
+
+
+Once the user selects a source and clicks Apply:
+
+- The values populate in 3.1(d)
+
+- A small label chip appears in the row showing which source was used (e.g. "2B vs PR reco") so the user has a clear audit trail
+
+- The dropdown and Apply button collapse — a "Clear" option appears if they want to reset
+
+
+[Attachment: 99e5473c-7da6-40e9-b965-540b403bb5e8]
+## Edge Cases to Handle:
+
+- **No RCM invoices found **— if the user selects "GSTR-2B vs Purchase Reco" but there are no accepted RCM invoices for that GSTIN and period, show a clear message like "No accepted RCM invoices found in 2B vs PR reco for this period". Do not silently fill zeros.
+
+- **Values already exist in 3.1(d) **— if the user has already filled 3.1(d) manually or via another autofill, show a confirmation before overwriting: "3.1(d) already has values. Do you want to replace them?"
+
+- **Mixed invoices in reco** — not all accepted invoices in reco are RCM. Regular invoices must be excluded. Only invoices where the supplier has marked the supply as RCM in their GSTR-1 should be picked up.
+
+
+## Acceptance Criteria:
+
+-  3.1(d) row shows an inline dropdown with exactly two options: "Purchase register" and "GSTR-2B vs Purchase Reco"
+
+-  When "GSTR-2B vs Purchase Reco" is selected and applied, 3.1(d) is filled with aggregated values from accepted RCM invoices in the reco for that GSTIN and period
+
+-  Non-RCM accepted invoices are excluded from the autofill
+
+-  A source chip appears in the 3.1(d) row label after autofill, showing where the data came from
+
+-  If no qualifying invoices exist, an appropriate empty state message is shown — no silent zero fill
+
+-  If 3.1(d) already has values, the user is asked to confirm before overwriting
+
+-  Clicking Clear resets 3.1(d) and restores the dropdown to its default state
+
+-  ITC in Table 4 is unaffected
+
+-  No change to rows 3.1(a), (b), (c), (e) or the global Sales register autofill button
+
+
+
+
+## Analysis Results
+Now I have a thorough understanding of the codebase. Here is the complete analysis:
+
+---
+
+### Requirements
+
+- **Inline dropdown in 3.1(d) row**: Render an `AppSelect` dropdown in the `nature_of_supplies` column cell only for the row whose `nature_of_supplies` starts with `"(d)"`. Two options: "Purchase Register" (`purchase_register`) and "GSTR-2B vs Purchase Reco" (`reco_2b_pr`).
+- **Dropdown visibility**: Hidden when `isLock === true` or `isEditEnabled === true`. Disabled while an autofill API call is in progress.
+- **Purchase Register source**: Call existing `GET gst-returns/3b/refresh-table-three-one/`, extract only the `(d)` row from `sup_details`, and update just that row in `tableData` — no other rows modified.
+- **GSTR-2B vs Purchase Reco source**: Call `POST gst-returns/3b/fill-3-1-d-from-reco/` with `{ gstin, ret_period }`. Response: `{ txval, igst, cgst, sgst, cess, invoice_count }`. If `invoice_count === 0`, show info message, do not modify row.
+- **Source badge**: After autofill, render `AppStatusBadge` inline in `nature_of_supplies` cell showing "Sales Register" or "2B vs PR Reco".
+- **Overwrite confirmation**: If any 3.1(d) value (`txval`, `igst`, `cgst`, `sgst`, `cess`) is non-zero, show `AppPopConfirm` before applying: "3.1(d) already has values. Overwrite with {source name}?"
+- **Clear action**: A "Clear" link/button to reset 3.1(d) values to pre-autofill state and remove the source badge, restoring the dropdown to default.
+- **Error handling**: API errors shown via `infoViewContext.fetchError()`. No RCM invoices message shown via `infoViewContext.showMessage()`.
+- **Mixpanel tracking**: Fire `onMPGSTR3bPrepareAutofil31dPR` for Purchase Register and `onMPGSTR3bPrepareAutofil31dReco` for Reco source.
+- **Isolation**: No changes to rows 3.1(a)–(c), (e), the global refresh button, EligibleITC Table 4, or any other section.
+
+---
+
+### Reusable Code
+
+- **`libs/smb/src/lib/gst/3B/Details/OutwardInwardSupplies/index.tsx`** — Main component to modify. Add `autofill31dSource`, `autofill31dLoading`, `preAutofill31dValues` state. Add `onAutofill31d()` and `onClear31d()` handlers. Pass new state/callbacks to `getColumns()`.
+- **`libs/smb/src/lib/gst/3B/Details/OutwardInwardSupplies/TableColumns.tsx`** — Modify `getColumns()` signature to accept `autofill31dSource`, `autofill31dLoading`, `isLock`, inline control callbacks. Render dropdown + badge + clear in the `nature_of_supplies` column's `render` function for `(d)` rows.
+- **`libs/smb/src/lib/gst/3B/Details/EligibleITC/index.tsx`** — Reference pattern for autofill dropdown, `AppSelect` usage, `getDataApi`/`postDataApi` calls, confirmation flow, Mixpanel tracking, loading states. Lines 606–621 show the AppSelect pattern.
+- **`libs/components/src/lib/AppSelect/index.tsx`** — Use `AppSelect` with `placeholder`, `value`, `onChange`, `disabled` props. Import via `@mi/components/AppSelect`.
+- **`libs/components/src/lib/AppPopConfirm/index.tsx`** — Use `AppPopConfirm` wrapping the Apply action. Props: `title`, `onConfirm`, `disabled`, `okText`, `cancelText`.
+- **`libs/components/src/lib/AppStatusBadge/index.tsx`** — Use `AppStatusBadge` with `status`, `name`, `statusColors` props. Define a local `StatusListProps` map for `purchase_register` and `reco_2b_pr` sources.
+- **`libs/constants/src/models/GstReturns/3B/index.ts`** — Add `ThreeB31dAutofillResponse` type here: `{ txval: number; igst: number; cgst: number; sgst: number; cess: number; invoice_count: number }`.
+- **`libs/constants/src/models/CommonTypes.ts`** — Reuse `StatusListProps` type for the source badge color map.
+- **`libs/services/mixpanel/src/SMB/GSTModule/GSTR.ts`** — Add `onMPGSTR3bPrepareAutofil31dPR` and `onMPGSTR3bPrepareAutofil31dReco` following the existing `onMPGSTR3bPrepareAutofil31` pattern.
+- **`@mi/hooks/APIHooks`** — Reuse `getDataApi` (for Purchase Register refresh) and `postDataApi` (for reco endpoint).
+- **`@mi/context/AppInfoViewContextProvider`** — Reuse `useInfoViewActionsContext()` for `fetchError()` and `showMessage()`.
+- **`libs/smb/src/lib/gst/3B/Details/TableWrapper.styled.tsx`** — Optionally add a small styled wrapper for the inline dropdown+badge layout if needed, but prefer minimal additions.
+- **`libs/smb/src/lib/gst/3B/Details/index.tsx`** — Parent component. `getCommonData()` at line 24 provides `{ gstin, ret_period }` needed for the new API call. Already passed to `OutwardInwardSupplies` as a prop.
+
+---
+
+### Risks
+
+- **[HIGH] New backend API not yet delivered**: `POST gst-returns/3b/fill-3-1-d-from-reco/` does not exist yet. Frontend development can proceed with the contract `{ txval, igst, cgst, sgst, cess, invoice_count }`, but integration testing is blocked until the backend delivers.
+- **[HIGH] Row identification fragility**: The `nature_of_supplies` string for `(d)` is backend-controlled. Using `record.nature_of_supplies.startsWith('(d)')` is reasonable, but if the backend changes the prefix format, the feature breaks silently. The spec acknowledges this with a constant + `startsWith` fallback.
+- **[MEDIUM] Purchase Register source extracts from global refresh**: The "Purchase Register" option reuses `GET gst-returns/3b/refresh-table-three-one/` which returns ALL rows. Extracting only `(d)` from the response avoids modifying other rows, but the server-side effect of this call (if any state mutation happens on the backend) could affect other rows. Need to verify the refresh endpoint is side-effect free for read operations.
+- **[MEDIUM] Race condition with global refresh**: If the user clicks the global "Autofill using Sales register" button in the `TableWrapper` header while an inline 3.1(d) autofill is in progress (or vice versa), both will attempt to write to `tableData`. The global refresh calls `updateData()` which replaces all rows via parent, while the inline only modifies the `(d)` row locally. The global refresh would overwrite the inline autofill values.
+- **[LOW] Pre-autofill value storage**: The spec says "Clear" restores pre-autofill values. Need to store the `(d)` row snapshot before each autofill. If the user does multiple autofills without clearing, the "original" reference should be the values before the very first autofill.
+- **[LOW] `getColumns` parameter expansion**: `getColumns()` currently takes 2 params (`isEditEnabled`, `updateRecord`). Adding 5+ new params will make it unwieldy. Consider passing an options object, following the pattern from other column files in the codebase.
+
+---
+
+### Recommended Approach
+
+Modify `OutwardInwardSupplies/index.tsx` to add three new state variables: `autofill31dSource` (tracks the applied source or `null`), `autofill31dLoading` (loading flag), and `preAutofill31dValues` (snapshot of the `(d)` row before autofill). Add `onAutofill31d(source)` that checks for non-zero values and either calls the API directly or triggers the confirmation via `AppPopConfirm`. For the "Purchase Register" source, call the existing refresh endpoint and filter only the `(d)` row from `sup_details`. For the "Reco" source, call the new `POST` endpoint. After success, update only the `(d)` row in `tableData` using the existing `updateRecord` pattern and set the source state. In `TableColumns.tsx`, expand `getColumns` to accept an options object with the new state/callbacks. In the `nature_of_supplies` column, add a `render` function that checks `startsWith('(d)')` and renders the `AppSelect` dropdown (when no source is applied) or the `AppStatusBadge` + Clear link (when a source is applied). Wrap the apply action in `AppPopConfirm` when current values are non-zero. Add the new response type to `libs/constants/src/models/GstReturns/3B/index.ts` and the two Mixpanel functions to `libs/services/mixpanel/src/SMB/GSTModule/GSTR.ts`.
+
+---
+
+### Suggestions
+
+- **[GAP]** The exact response shape of `POST gst-returns/3b/fill-3-1-d-from-reco/` is only specified in the Jira comment, not in a formal API contract. Confirm with the backend team that the response will be `{ txval: number, igst: number, cgst: number, sgst: number, cess: number, invoice_count: number }` at the top level (not nested under `data.data`), since the `getDataApi`/`postDataApi` hooks unwrap one level automatically.
+- **[GAP]** The spec says "Purchase Register" source should set the badge to "Sales Register" — this is confusing naming. Clarify whether the label should say "Sales Register" (matching the global button tooltip) or "Purchase Register" (matching the dropdown option text). The Jira comment spec says "Sales Register" for badge text.
+- **[GAP]** The `refresh-table-three-one` endpoint is a GET request (no params). Confirm it returns data for the correct GSTIN/period based on the session context, since it doesn't accept `gstin`/`ret_period` as parameters explicitly — unlike the new POST endpoint which requires them.
+- **[RISK]** The global refresh button (`onRefresh` in `OutwardInwardSupplies`) calls `updateData()` which replaces all `sup_details` via the parent. This triggers the `useEffect` that syncs `tableData` from `data` prop, which would wipe out the inline autofill source state and badge. Add logic to either preserve the source state when `data` prop updates from global refresh, or reset the inline state cleanly.
+- **[RISK]** The `onSaved()` function posts `sup_details: tableData` to `edit-table-three-one`. After an inline 3.1(d) autofill, if the user enters edit mode and saves, the autofilled values will be persisted. This is likely the desired behavior, but confirm that saving 3.1(d) values from the reco source through the existing edit endpoint is valid.
+- **[REC]** Use an options object for `getColumns()` instead of positional parameters. The current signature `getColumns(isEditEnabled, updateRecord)` will need 5+ additional params. An object like `getColumns({ isEditEnabled, updateRecord, isLock, autofill31dSource, autofill31dLoading, onAutofill31d, onClear31d })` is cleaner and matches patterns in larger column files like `EligibleITC/TableColumns.tsx`.
+- **[REC]** Store the `NATURE_31D_PREFIX = '(d)'` constant at the top of `OutwardInwardSupplies/index.tsx` (not in a shared constants file) since it's only used in this feature. The spec explicitly recommends this.
+- **[REC]** For the `AppPopConfirm` integration, wrap the entire dropdown's `onChange` handler rather than the Apply button, since the current design doesn't have a separate Apply button — the dropdown `onChange` triggers the autofill directly (matching the EligibleITC pattern at `libs/smb/src/lib/gst/3B/Details/EligibleITC/index.tsx:606-621` where `onChange={autoFillData}` fires immediately on selection).
+- **[REC]** Examine `libs/smb/src/lib/gst/3B/Details/EligibleITC/index.tsx` closely for the state management pattern — it manages `autoFillType` state, multi-step confirmation, and API calls all within the component. Mirror this exact pattern for consistency.
+
+## Z6: VITE_PRODUCT_ID Enforcement
+All product ID checks MUST use the exact enterprise product ID constant. No generic multi-product conditionals. Enterprise scope ONLY.
+
+## OpenSpec Artifact Templates
+Follow these templates from the OpenSpec framework:
+
+## PROPOSAL Template & Instructions
+Output path: proposal.md
+Create the proposal document that establishes WHY this change is needed.
+
+Sections:
+- **Why**: 1-2 sentences on the problem or opportunity. What problem does this solve? Why now?
+- **What Changes**: Bullet list of changes. Be specific about new capabilities, modifications, or removals. Mark breaking changes with **BREAKING**.
+- **Capabilities**: Identify which specs will be created or modified:
+  - **New Capabilities**: List capabilities being introduced. Each becomes a new `specs/<name>/spec.md`. Use kebab-case names (e.g., `user-auth`, `data-export`).
+  - **Modified Capabilities**: List existing capabilities whose REQUIREMENTS are changing. Only include if spec-level behavior changes (not just implementation details). Each needs a delta spec file. Check `openspec/specs/` for existing spec names. Leave empty if no requirement changes.
+- **Impact**: Affected code, APIs, dependencies, or systems.
+
+IMPORTANT: The Capabilities section is critical. It creates the contract between
+proposal and specs phases. Research existing specs before filling this in.
+Each capability listed here will need a corresponding spec file.
+
+Keep it concise (1-2 pages). Focus on the "why" not the "how" -
+implementation details belong in design.md.
+
+This is the foundation - specs, design, and tasks all build on this.
+
+Rules: Link to specific failure scenarios and error handling; Reference internal GitLab server constraints; Identify which pipeline stages are affected
+Template:
+```
+## Why
+
+<!-- Explain the motivation for this change. What problem does this solve? Why now? -->
+
+## What Changes
+
+<!-- Describe what will change. Be specific about new capabilities, modifications, or removals. -->
+
+## Capabilities
+
+### New Capabilities
+<!-- Capabilities being introduced. Replace <name> with kebab-case identifier (e.g., user-auth, data-export, api-rate-limiting). Each creates specs/<name>/spec.md -->
+- `<name>`: <brief description of what this capability covers>
+
+### Modified Capabilities
+<!-- Existing capabilities whose REQUIREMENTS are changing (not just implementation).
+     Only list here if spec-level behavior changes. Each needs a delta spec file.
+     Use existing spec names from openspec/specs/. Leave empty if no requirement changes. -->
+- `<existing-name>`: <what requirement is changing>
+
+## Impact
+
+<!-- Affected code, APIs, dependencies, systems -->
+
+```
+
+## DESIGN Template & Instructions
+Output path: design.md
+Create the design document that explains HOW to implement the change.
+
+When to include design.md (create only if any apply):
+- Cross-cutting change (multiple services/modules) or new architectural pattern
+- New external dependency or significant data model changes
+- Security, performance, or migration complexity
+- Ambiguity that benefits from technical decisions before coding
+
+Sections:
+- **Context**: Background, current state, constraints, stakeholders
+- **Goals / Non-Goals**: What this design achieves and explicitly excludes
+- **Decisions**: Key technical choices with rationale (why X over Y?). Include alternatives considered for each decision.
+- **Risks / Trade-offs**: Known limitations, things that could go wrong. Format: [Risk] → Mitigation
+- **Migration Plan**: Steps to deploy, rollback strategy (if applicable)
+- **Open Questions**: Outstanding decisions or unknowns to resolve
+
+Focus on architecture and approach, not line-by-line implementation.
+Reference the proposal for motivation and specs for requirements.
+
+Good design docs explain the "why" behind technical decisions.
+
+Rules: Prefer Node.js native modules over external dependencies; Keep changes backward-compatible with existing callers; Consider state persistence and crash recovery
+Template:
+```
+## Context
+
+<!-- Background and current state -->
+
+## Goals / Non-Goals
+
+**Goals:**
+<!-- What this design aims to achieve -->
+
+**Non-Goals:**
+<!-- What is explicitly out of scope -->
+
+## Decisions
+
+<!-- Key design decisions and rationale -->
+
+## Risks / Trade-offs
+
+<!-- Known risks and trade-offs -->
+
+```
+
+## SPECS Template & Instructions
+Output path: specs/**/*.md
+Create specification files that define WHAT the system should do.
+
+Create one spec file per capability listed in the proposal's Capabilities section.
+- New capabilities: use the exact kebab-case name from the proposal (specs/<capability>/spec.md).
+- Modified capabilities: use the existing spec folder name from openspec/specs/<capability>/ when creating the delta spec at specs/<capability>/spec.md.
+
+Delta operations (use ## headers):
+- **ADDED Requirements**: New capabilities
+- **MODIFIED Requirements**: Changed behavior - MUST include full updated content
+- **REMOVED Requirements**: Deprecated features - MUST include **Reason** and **Migration**
+- **RENAMED Requirements**: Name changes only - use FROM:/TO: format
+
+Format requirements:
+- Each requirement: `### Requirement: <name>` followed by description
+- Use SHALL/MUST for normative requirements (avoid should/may)
+- Each scenario: `#### Scenario: <name>` with WHEN/THEN format
+- **CRITICAL**: Scenarios MUST use exactly 4 hashtags (`####`). Using 3 hashtags or bullets will fail silently.
+- Every requirement MUST have at least one scenario.
+
+MODIFIED requirements workflow:
+1. Locate the existing requirement in openspec/specs/<capability>/spec.md
+2. Copy the ENTIRE requirement block (from `### Requirement:` through all scenarios)
+3. Paste under `## MODIFIED Requirements` and edit to reflect new behavior
+4. Ensure header text matches exactly (whitespace-insensitive)
+
+Common pitfall: Using MODIFIED with partial content loses detail at archive time.
+If adding new concerns without changing existing behavior, use ADDED instead.
+
+Example:
+```
+## ADDED Requirements
+
+### Requirement: User can export data
+The system SHALL allow users to export their data in CSV format.
+
+#### Scenario: Successful export
+- **WHEN** user clicks "Export" button
+- **THEN** system downloads a CSV file with all user data
+
+## REMOVED Requirements
+
+### Requirement: Legacy export
+**Reason**: Replaced by new export system
+**Migration**: Use new export endpoint at /api/v2/export
+```
+
+Specs should be testable - each scenario is a potential test case.
+
+Rules: Use WHEN/THEN format for all scenarios; Reference existing function signatures from lib/ and stages/; Include error scenarios and edge cases
+Template:
+```
+## ADDED Requirements
+
+### Requirement: <!-- requirement name -->
+<!-- requirement text -->
+
+#### Scenario: <!-- scenario name -->
+- **WHEN** <!-- condition -->
+- **THEN** <!-- expected outcome -->
+
+```
+
+## TASKS Template & Instructions
+Output path: tasks.md
+Create the task list that breaks down the implementation work.
+
+**IMPORTANT: Follow the template below exactly.** The apply phase parses
+checkbox format to track progress. Tasks not using `- [ ]` won't be tracked.
+
+Guidelines:
+- Group related tasks under ## numbered headings
+- Each task MUST be a checkbox: `- [ ] X.Y Task description`
+- Tasks should be small enough to complete in one session
+- Order tasks by dependency (what must be done first?)
+
+Example:
+```
+## 1. Setup
+
+- [ ] 1.1 Create new module structure
+- [ ] 1.2 Add dependencies to package.json
+
+## 2. Core Implementation
+
+- [ ] 2.1 Implement data export function
+- [ ] 2.2 Add CSV formatting utilities
+```
+
+Reference specs for what needs to be built, design for how to build it.
+Each task should be verifiable - you know when it's done.
+
+Rules: Identify specific files to modify (stages/*.js, server/*.js, lib/*.js); Include verification step via Web UI at localhost:3000; Order tasks by dependency (what must be done first?)
+Template:
+```
+## 1. <!-- Task Group Name -->
+
+- [ ] 1.1 <!-- Task description -->
+- [ ] 1.2 <!-- Task description -->
+
+## 2. <!-- Task Group Name -->
+
+- [ ] 2.1 <!-- Task description -->
+- [ ] 2.2 <!-- Task description -->
+
+```
+
+## OUTPUT — CRITICAL: Write files to disk
+You MUST write each artifact as a file using the Write tool. Write ALL 4 files:
+
+1. Write to: /home/yogendra/WebstormProjects/mi-dev-agent/openspec/changes/aut-8343/proposal.md
+2. Write to: /home/yogendra/WebstormProjects/mi-dev-agent/openspec/changes/aut-8343/design.md
+3. Write to: /home/yogendra/WebstormProjects/mi-dev-agent/openspec/changes/aut-8343/specs/change/spec.md
+4. Write to: /home/yogendra/WebstormProjects/mi-dev-agent/openspec/changes/aut-8343/tasks.md
+
+Use the repo (Read/Grep/Glob) to gather implementation details, then Write each artifact file.
+Each file must contain the FULL artifact content following its template. Do NOT summarize.
+Be thorough but concise. Every task must be actionable and verifiable.
+
+=== STDOUT (54 chars) ===
+You've hit your limit · resets 5:30am (Asia/Calcutta)
+
+
+=== STDERR ===
+
+
+=== EXIT CODE: 1 ===

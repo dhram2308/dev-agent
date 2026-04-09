@@ -1,0 +1,4 @@
+{"ts":"2026-04-08T15:26:55.195Z","level":"warn","cid":"b42970ea658f","msg":"Circuit [test] -> OPEN (3 failures in 5000ms window)"}
+{"ts":"2026-04-08T15:26:55.198Z","level":"info","cid":"b42970ea658f","msg":"Circuit [test] manually reset -> CLOSED"}
+{"ts":"2026-04-08T15:26:55.201Z","level":"warn","cid":"b42970ea658f","msg":"Circuit [test2] -> OPEN (2 failures in 5000ms window)"}
+{"ts":"2026-04-08T15:26:55.302Z","level":"info","cid":"b42970ea658f","msg":"Circuit [test2] -> HALF_OPEN (probing)"}

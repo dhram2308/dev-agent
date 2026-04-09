@@ -1,0 +1,5 @@
+node_modules/
+.env
+.repo-cache/
+state-*.json
+/.idea/

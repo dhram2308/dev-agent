@@ -1,0 +1,27 @@
+schema: spec-driven
+
+context: |
+  Tech stack: Node.js (CommonJS), native http/https modules
+  Project: MI Dev Agent — Jira → Claude Code Gen → GitLab MR → QA → Production
+  Pipeline stages: fetch_ticket → explore_plan → generate_code → gate_code_review → deploy_qa → test_qa → gate_preprod_approval → create_preprod_mr → gate_dual_approval → deploy_prod → done
+  Entry: run-agent.js (orchestrator), stages/*.js (stage modules), server.js (Web UI port 3000)
+  GitLab: Internal server at http://10.200.11.32 (prone to ECONNRESET)
+  Branch flow: enterprise-ts → enterprise-ts-{TICKET} → enterprise-qa → enterprise-pre-pro → enterprise-master
+
+rules:
+  proposal:
+    - Link to specific failure scenarios and error handling
+    - Reference internal GitLab server constraints
+    - Identify which pipeline stages are affected
+  specs:
+    - Use WHEN/THEN format for all scenarios
+    - Reference existing function signatures from lib/ and stages/
+    - Include error scenarios and edge cases
+  design:
+    - Prefer Node.js native modules over external dependencies
+    - Keep changes backward-compatible with existing callers
+    - Consider state persistence and crash recovery
+  tasks:
+    - Identify specific files to modify (stages/*.js, server/*.js, lib/*.js)
+    - Include verification step via Web UI at localhost:3000
+    - Order tasks by dependency (what must be done first?)
