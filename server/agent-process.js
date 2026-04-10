@@ -4,10 +4,11 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 
-const { addLog, broadcast } = require("./sse");
+const { addLog, broadcast, clearTicketLogs } = require("./sse");
 const { loadEnv, getState } = require("./state-io");
 const { wrapProcessOutput, setProcessRedactor } = require("../lib/process-redactor");
 const { redactAll } = require("../lib/redaction");
+const { ensureLocalRepo, createWorktree, removeWorktree, cleanOrphanedWorktrees } = require("../lib/local-repo");
 
 // Wire redaction into process output interceptor
 setProcessRedactor(redactAll);
@@ -61,7 +62,7 @@ function startAgent(ticket) {
         const crashCheck = checkCrashLoop(state);
         if (crashCheck.inCrashLoop) {
           const msg = `Agent for ${ticket} is in a crash loop (${crashCheck.recentCount} restarts). Manual intervention required.`;
-          addLog(`[Restart Protection] ${msg}`, "system");
+          addLog(`[Restart Protection] ${msg}`, "system", ticket);
           // [Escalation] Alert on crash loop
           if (escalateImmediate) {
             escalateImmediate("agent_crash_loop", "critical", msg, { notifySlack: true }).catch(() => {});
@@ -75,8 +76,18 @@ function startAgent(ticket) {
   agentStartingSet.add(ticket);
 
   try {
+    // Create per-ticket worktree (ensureLocalRepo is called by run-agent.js if no worktree)
+    let worktreePath = null;
+    try {
+      worktreePath = createWorktree(ticket);
+      addLog(`Worktree created for ${ticket}: ${worktreePath}`, "system", ticket);
+    } catch (e) {
+      addLog(`Worktree creation failed: ${e.message} — agent will use shared repo`, "system", ticket);
+    }
+
     const envVars = { ...process.env, ...loadEnv(), TICKET: ticket };
-    addLog(`Starting agent for ${ticket}...`, "system");
+    if (worktreePath) envVars.WORKTREE_PATH = worktreePath;
+    addLog(`Starting agent for ${ticket}...`, "system", ticket);
 
     const proc = spawn("node", [path.join(BASE_DIR, "run-agent.js")], {
       env: envVars,
@@ -91,13 +102,13 @@ function startAgent(ticket) {
     // Wrap process output with redaction -- all output is redacted before reaching SSE
     const redactorHandle = wrapProcessOutput(proc, {
       onStdoutLine(line) {
-        addLog(line, "stdout");
+        addLog(line, "stdout", ticket);
       },
       onStderrLine(line) {
-        addLog(line, "stderr");
+        addLog(line, "stderr", ticket);
       },
       onBinaryDetected(stream) {
-        addLog(`[${stream}] Binary data detected -- redaction skipped for binary content`, "system");
+        addLog(`[${stream}] Binary data detected -- redaction skipped for binary content`, "system", ticket);
       },
     });
     agentRedactors[ticket] = redactorHandle;
@@ -111,8 +122,15 @@ function startAgent(ticket) {
         agentRedactors[ticket].cleanup();
         delete agentRedactors[ticket];
       }
-      addLog(`Agent for ${ticket} exited with code ${code}`, "system");
+
+      // Remove per-ticket worktree
+      try { removeWorktree(ticket); } catch (e) {
+        console.warn(`[Worktree] Cleanup failed for ${ticket}: ${e.message}`);
+      }
+
+      addLog(`Agent for ${ticket} exited with code ${code}`, "system", ticket);
       broadcast("status", { running: false, code, ticket });
+      clearTicketLogs(ticket);
       delete agentProcs[ticket];
 
       // [Escalation] Track failures and escalate on repeated non-zero exits
@@ -149,7 +167,7 @@ function stopAgent(ticket) {
   // X1: If ticket provided, stop that specific agent; otherwise stop first running
   if (ticket && agentProcs[ticket]) {
     agentProcs[ticket].kill("SIGTERM");
-    addLog(`Agent for ${ticket} stopped by user`, "system");
+    addLog(`Agent for ${ticket} stopped by user`, "system", ticket);
     return { ok: true };
   }
   // Legacy: stop any running agent if no ticket specified
@@ -157,7 +175,7 @@ function stopAgent(ticket) {
   if (keys.length === 0) return { ok: false, error: "No agent running" };
   const firstTicket = keys[0];
   agentProcs[firstTicket].kill("SIGTERM");
-  addLog(`Agent for ${firstTicket} stopped by user`, "system");
+  addLog(`Agent for ${firstTicket} stopped by user`, "system", firstTicket);
   return { ok: true };
 }
 
@@ -216,6 +234,15 @@ const STAGE_DATA_MAP = {
   done: [],
 };
 
+// Clean up orphaned worktrees at startup (alongside cleanOrphanedLocks)
+function cleanOrphanedWorktreesOnStartup() {
+  try {
+    cleanOrphanedWorktrees();
+  } catch (e) {
+    console.warn(`[Worktree] Orphan cleanup failed: ${e.message}`);
+  }
+}
+
 function getAgentProcs() { return agentProcs; }
 
 module.exports = {
@@ -223,6 +250,7 @@ module.exports = {
   stopAgent,
   checkProcessHealth,
   cleanOrphanedLocks,
+  cleanOrphanedWorktreesOnStartup,
   getAgentProcs,
   STAGE_DATA_MAP,
 };

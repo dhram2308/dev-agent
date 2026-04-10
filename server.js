@@ -16,7 +16,7 @@
 const http = require("http");
 const crypto = require("crypto");
 
-const { cleanOrphanedLocks } = require("./server/agent-process");
+const { cleanOrphanedLocks, cleanOrphanedWorktreesOnStartup } = require("./server/agent-process");
 const { handleRequest } = require("./server/routes");
 const { getHTML } = require("./server/html");
 
@@ -49,6 +49,8 @@ const BIND_HOST = process.env.BIND_HOST || "127.0.0.1";
 
 // F10: Clean orphaned agent locks on startup
 cleanOrphanedLocks();
+// Clean orphaned worktrees from previous crashes
+cleanOrphanedWorktreesOnStartup();
 
 // [Graceful Shutdown] Install signal handlers for server context
 installShutdownHandlers();
@@ -81,6 +83,26 @@ registerSseClientGetter(getSseClients);
 // [Graceful Shutdown] Register shutdown hook to log server closure
 onShutdown("http-server-close", async () => {
   console.log("[Shutdown] HTTP server closing...");
+});
+
+// [Graceful Shutdown] Worktree cleanup — remove all worktrees on shutdown
+onShutdown("worktree-cleanup", async () => {
+  const { WORKTREES_DIR, removeWorktree, getActiveWorktrees } = require("./lib/local-repo");
+  const activeWt = getActiveWorktrees();
+  if (activeWt.length > 0) {
+    console.log(`[Shutdown] Cleaning up ${activeWt.length} worktree(s)…`);
+    for (const ticket of activeWt) {
+      try { removeWorktree(ticket); } catch (e) {
+        console.warn(`[Shutdown] Worktree cleanup failed for ${ticket}: ${e.message}`);
+      }
+    }
+    try {
+      const { execFileSync } = require("child_process");
+      const path = require("path");
+      const REPO_CACHE_DIR = path.join(__dirname, ".repo-cache");
+      execFileSync("git", ["-C", REPO_CACHE_DIR, "worktree", "prune"], { stdio: "pipe", timeout: 10_000 });
+    } catch {}
+  }
 });
 
 server.on("error", (err) => {

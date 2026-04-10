@@ -38,7 +38,10 @@ const clients = new Map();
  * @property {string} id - Unique client identifier
  */
 
-let logBuffer = [];
+// Per-ticket log buffers + global buffer for system messages
+const logBuffers = {};           // ticket -> log entry array
+const globalLogBuffer = [];      // system messages (no ticket)
+let logBuffer = [];              // Backward-compat: all logs merged (deprecated, kept for getLogBuffer)
 let nextMessageId = 1;           // Monotonic message counter
 let nextClientId = 1;            // Unique client ID counter
 
@@ -154,8 +157,20 @@ function registerClient(res, request, url, apiToken) {
       }
     }
   } else {
-    // New connection: send full log buffer replay
-    for (const entry of logBuffer) {
+    // New connection: send log buffer replay
+    // If ticket query param is provided, replay only that ticket's buffer + global
+    const rawTicket = url.searchParams.get("ticket") || null;
+    const ticketFilter = rawTicket && /^[A-Za-z]+-\d+$/.test(rawTicket.trim()) ? rawTicket.trim() : null;
+    let replayEntries;
+    if (ticketFilter && logBuffers[ticketFilter]) {
+      // Merge ticket-specific + global, sorted by timestamp
+      replayEntries = [...(logBuffers[ticketFilter] || []), ...globalLogBuffer]
+        .sort((a, b) => a.ts - b.ts);
+    } else {
+      // No filter: replay all (backward compat)
+      replayEntries = logBuffer;
+    }
+    for (const entry of replayEntries) {
       const msgId = nextMessageId++;
       const data = JSON.stringify(entry);
       writeToClient(client, msgId, "log", data);
@@ -294,16 +309,46 @@ function broadcast(event, data) {
  * Add a log entry and broadcast to all SSE clients.
  * @param {string} line
  * @param {string} [type="stdout"]
+ * @param {string|null} [ticket=null] - Ticket ID for per-ticket log buffers
  */
-function addLog(line, type = "stdout") {
-  const entry = { ts: Date.now(), line, type };
+function addLog(line, type = "stdout", ticket = null) {
+  const entry = { ts: Date.now(), line, type, ticket: ticket || null };
+
+  // Store in per-ticket buffer or global buffer
+  if (ticket) {
+    if (!logBuffers[ticket]) logBuffers[ticket] = [];
+    logBuffers[ticket].push(entry);
+    if (logBuffers[ticket].length > MAX_LOG) logBuffers[ticket].shift();
+  } else {
+    globalLogBuffer.push(entry);
+    if (globalLogBuffer.length > MAX_LOG) globalLogBuffer.shift();
+  }
+
+  // Backward compat: also add to merged buffer
   logBuffer.push(entry);
   if (logBuffer.length > MAX_LOG) logBuffer.shift();
+
   broadcast("log", entry);
 }
 
 function getLogBuffer() { return logBuffer; }
 function setLogBuffer(buf) { logBuffer = buf; }
+
+/**
+ * Clear a ticket's per-ticket log buffer.
+ * @param {string} ticket
+ */
+function clearTicketLogs(ticket) {
+  if (ticket && logBuffers[ticket]) {
+    delete logBuffers[ticket];
+  }
+}
+
+/**
+ * Get per-ticket log buffers (for API endpoint).
+ */
+function getLogBuffers() { return logBuffers; }
+function getGlobalLogBuffer() { return globalLogBuffer; }
 
 // ── Backward-compatible client accessors ─────────────────────────
 // These maintain API compatibility with existing code that uses the old interface
@@ -355,6 +400,9 @@ module.exports = {
   addLog,
   getLogBuffer,
   setLogBuffer,
+  getLogBuffers,
+  getGlobalLogBuffer,
+  clearTicketLogs,
   getSseClients,
   addSseClient,
   removeSseClient,

@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { checkRateLimit } = require("./rate-limiter");
-const { addLog, broadcast, getLogBuffer, getSseClients, addSseClient, removeSseClient, registerClient, getSSEStats } = require("./sse");
+const { addLog, broadcast, getLogBuffer, getSseClients, addSseClient, removeSseClient, registerClient, getSSEStats, clearTicketLogs } = require("./sse");
 const { getState, writeStateAsync, readStateAsync, saveReviewComments, getReviewComments, patchUIAsync, updateAsync } = require("./state-io");
 const { startAgent, stopAgent, checkProcessHealth, getAgentProcs, STAGE_DATA_MAP } = require("./agent-process");
 
@@ -144,7 +144,13 @@ async function handleRequest(url, request, res, apiToken, html) {
     try {
       const raw = await parseBody(request, getBodySizeLimit("/api/start"));
       const { ticket } = sanitizeBody("/api/start", raw);
-      const result = startAgent(ticket || "");
+      const t = safeTicket(ticket);
+      if (!t) {
+        res.writeHead(400, {"Content-Type":"application/json"});
+        res.end(JSON.stringify({ ok: false, error: "Valid ticket ID required (e.g. AUT-1234)" }));
+        return true;
+      }
+      const result = startAgent(t);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(result));
     } catch (e) {
@@ -159,8 +165,15 @@ async function handleRequest(url, request, res, apiToken, html) {
     try {
       const raw = await parseBody(request, getBodySizeLimit("/api/stop"));
       const parsed = sanitizeBody("/api/stop", raw);
+      const t = parsed.ticket ? safeTicket(parsed.ticket) : null;
+      // t can be null for legacy "stop any" behavior, but if ticket provided it must be valid
+      if (parsed.ticket && !t) {
+        res.writeHead(400, {"Content-Type":"application/json"});
+        res.end(JSON.stringify({ ok: false, error: "Invalid ticket format" }));
+        return true;
+      }
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(stopAgent(parsed.ticket || null)));
+      res.end(JSON.stringify(stopAgent(t)));
     } catch (e) {
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: false, error: e.message }));
@@ -176,7 +189,7 @@ async function handleRequest(url, request, res, apiToken, html) {
     const agentProcs = getAgentProcs();
     const health = checkProcessHealth(ticket);
     if (!health.alive && agentProcs[ticket]) {
-      addLog(`Agent for ${ticket} detected as unhealthy (${health.reason}), cleaning up`, "system");
+      addLog(`Agent for ${ticket} detected as unhealthy (${health.reason}), cleaning up`, "system", ticket);
       delete agentProcs[ticket];
     }
     const completedGates = (state && state.data && state.data._completedGates) || null;
@@ -221,7 +234,8 @@ async function handleRequest(url, request, res, apiToken, html) {
     try {
       const rawBody = await parseBody(request, getBodySizeLimit("/api/reset"));
       const { ticket } = sanitizeBody("/api/reset", rawBody);
-      const t = (ticket || "").replace(/[^A-Za-z0-9\-]/g, "");
+      const t = safeTicket(ticket);
+      if (!t) { res.writeHead(400, {"Content-Type":"application/json"}); res.end(JSON.stringify({ok:false, error:"Valid ticket ID required"})); return true; }
       const f = path.join(BASE_DIR, `state-${t}.json`);
       const agentProcs = getAgentProcs();
       const runningProc = agentProcs[t];
@@ -308,7 +322,7 @@ async function handleRequest(url, request, res, apiToken, html) {
         "_ui_refine": null,      // delete
         "_ui_refine_instructions": null,  // delete
       });
-      broadcast("review", { gate: g, action: "approved" });
+      broadcast("review", { gate: g, action: "approved", ticket: t });
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: true }));
     } catch (e) {
@@ -336,7 +350,7 @@ async function handleRequest(url, request, res, apiToken, html) {
         "_ui_refine": null,      // delete
         "_ui_refine_instructions": null,  // delete
       });
-      broadcast("review", { gate: g, action: "rejected", feedback });
+      broadcast("review", { gate: g, action: "rejected", feedback, ticket: t });
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: true }));
     } catch (e) {
@@ -369,7 +383,7 @@ async function handleRequest(url, request, res, apiToken, html) {
         "_ui_rejected": null,    // delete
         "_ui_feedback": null,    // delete
       });
-      broadcast("review", { gate: g, action: "refine", instructions: instructions.trim() });
+      broadcast("review", { gate: g, action: "refine", instructions: instructions.trim(), ticket: t });
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: true }));
     } catch (e) {
@@ -440,7 +454,7 @@ async function handleRequest(url, request, res, apiToken, html) {
         state.data._force_advance = true;
         return state;
       });
-      addLog(`[O7] Stage skip requested for ${t} (current stage: ${updated.stage})`, "system");
+      addLog(`[O7] Stage skip requested for ${t} (current stage: ${updated.stage})`, "system", t);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: true, stage: updated.stage }));
     } catch (e) {
@@ -475,7 +489,7 @@ async function handleRequest(url, request, res, apiToken, html) {
         state.stage = s;
         return state;
       });
-      addLog(`[O8] Stage reset to '${s}' for ${t}, cleared ${fieldsToClear.length} fields`, "system");
+      addLog(`[O8] Stage reset to '${s}' for ${t}, cleared ${fieldsToClear.length} fields`, "system", t);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: true, stage: s, clearedFields: fieldsToClear }));
     } catch (e) {
@@ -534,7 +548,7 @@ async function handleRequest(url, request, res, apiToken, html) {
         state.data._injectedContext = { text: context.trim(), timestamp: new Date().toISOString() };
         return state;
       });
-      addLog(`[O9] Context injected for ${t} (${context.trim().length} chars)`, "system");
+      addLog(`[O9] Context injected for ${t} (${context.trim().length} chars)`, "system", t);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: true }));
     } catch (e) {
@@ -648,6 +662,35 @@ async function handleRequest(url, request, res, apiToken, html) {
     return true;
   }
 
+  // ── GET /api/tickets — Overview of all active tickets ──
+  if (url.pathname === "/api/tickets" && request.method === "GET") {
+    const { STAGES } = require("../lib/constants");
+    const GATE_STAGES = new Set(["gate_code_review", "gate_preprod_approval", "gate_dual_approval", "explore_plan"]);
+    const agentProcs = getAgentProcs();
+    const tickets = [];
+
+    // Iterate all running agent tickets
+    for (const ticket of Object.keys(agentProcs)) {
+      const state = getState(ticket);
+      const stage = (state && state.stage) || "unknown";
+      const stageIndex = STAGES.indexOf(stage);
+      const progress = stageIndex >= 0 ? parseFloat((stageIndex / STAGES.length).toFixed(2)) : 0;
+      const activeAgents = (state && state.data && state.data._active_agents) || [];
+      const startedAt = (state && state.data && state.data._startedAt) || null;
+      let needsApproval = GATE_STAGES.has(stage);
+      // explore_plan only needs approval when plan is posted
+      if (stage === "explore_plan" && state && state.data && !state.data.explore_plan_posted) {
+        needsApproval = false;
+      }
+
+      tickets.push({ ticket, stage, running: true, activeAgents, startedAt, needsApproval, progress });
+    }
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, tickets }));
+    return true;
+  }
+
   // D14: Unknown API routes return 404
   if (url.pathname.startsWith("/api/")) {
     res.writeHead(404, { "Content-Type": "application/json" });
@@ -656,7 +699,11 @@ async function handleRequest(url, request, res, apiToken, html) {
   }
 
   // Serve UI
-  res.writeHead(200, { "Content-Type": "text/html" });
+  res.writeHead(200, {
+    "Content-Type": "text/html",
+    "Cache-Control": "no-store, no-cache, must-revalidate",
+    "Pragma": "no-cache",
+  });
   res.end(html);
   return true;
 }

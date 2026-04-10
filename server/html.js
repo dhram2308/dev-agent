@@ -16,28 +16,100 @@ function getHTML(apiToken) {
 <title>AI Dev Agent</title>
 <style>
   :root {
-    --bg: #0f1117;
-    --bg2: #1a1d27;
-    --bg3: #242736;
-    --border: #2e3245;
-    --text: #e4e6f0;
-    --text2: #9499b3;
-    --text3: #5c6180;
-    --blue: #4c8dff;
-    --blue-bg: #1a2744;
-    --green: #4ade80;
-    --green-bg: #132e23;
-    --red: #f87171;
-    --red-bg: #2d1a1a;
-    --yellow: #facc15;
-    --yellow-bg: #2d2714;
-    --purple: #a78bfa;
-    --purple-bg: #231e3d;
-    --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    /* Background layers (deep dark like Cursor) */
+    --bg-base:      #0a0a0f;
+    --bg-surface:   #12121a;
+    --bg-elevated:  #1a1a26;
+    --bg-overlay:   rgba(0,0,0,0.7);
+
+    /* Borders (translucent white) */
+    --border-subtle:  rgba(255,255,255,0.06);
+    --border-default: rgba(255,255,255,0.10);
+    --border-strong:  rgba(255,255,255,0.16);
+
+    /* Text hierarchy */
+    --text-primary:   #e8eaf0;
+    --text-secondary: #8b8fa3;
+    --text-tertiary:  #555770;
+    --text-ghost:     #3a3d52;
+
+    /* Primary accent — PURPLE (Cursor-style) */
+    --accent:       #8b5cf6;
+    --accent-hover: #a78bfa;
+    --accent-muted: rgba(139,92,246,0.15);
+    --accent-glow:  rgba(139,92,246,0.25);
+
+    /* Secondary — Blue (for info, links) */
+    --blue:       #3b82f6;
+    --blue-muted: rgba(59,130,246,0.12);
+
+    /* Semantic */
+    --success:       #22c55e;
+    --success-muted: rgba(34,197,94,0.12);
+    --success-glow:  rgba(34,197,94,0.2);
+    --danger:        #ef4444;
+    --danger-muted:  rgba(239,68,68,0.12);
+    --danger-glow:   rgba(239,68,68,0.2);
+    --warning:       #eab308;
+    --warning-muted: rgba(234,179,8,0.12);
+
+    /* Glass */
+    --glass-bg:     rgba(18,18,26,0.80);
+    --glass-border: rgba(255,255,255,0.08);
+    --glass-blur:   12px;
+
+    /* Typography */
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+
+    /* Spacing (4px grid) */
+    --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+    --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+
+    /* Radius */
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px;
+    --radius-xl: 20px; --radius-full: 9999px;
+
+    /* Sidebar */
+    --sidebar-w: 240px;
+    --sidebar-collapsed: 56px;
+
+    /* Transitions */
+    --ease-spring: cubic-bezier(0.34,1.56,0.64,1);
+    --ease-smooth: cubic-bezier(0.4,0,0.2,1);
+
+    /* Legacy aliases for non-replaced references */
+    --bg: var(--bg-base);
+    --bg2: var(--bg-surface);
+    --bg3: var(--bg-elevated);
+    --border: var(--border-default);
+    --text: var(--text-primary);
+    --text2: var(--text-secondary);
+    --text3: var(--text-tertiary);
+    --blue-bg: var(--blue-muted);
+    --green: var(--success);
+    --green-bg: var(--success-muted);
+    --red: var(--danger);
+    --red-bg: var(--danger-muted);
+    --yellow: var(--warning);
+    --yellow-bg: var(--warning-muted);
+    --purple: var(--accent);
+    --purple-bg: var(--accent-muted);
+    --mono: var(--font-mono);
+    --sans: var(--font-sans);
+    --card: var(--bg-surface);
+    --text1: var(--text-primary);
+    --cyan: var(--blue);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+  body { background: var(--bg-base); color: var(--text-primary); font-family: var(--font-sans); min-height: 100vh; overflow-x: hidden; }
+  body::after {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    opacity: 0.015;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 256px 256px;
+  }
 
   .container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
 
@@ -71,9 +143,9 @@ function getHTML(apiToken) {
     padding: 10px 22px; border-radius: 8px; font-size: 13px; font-weight: 600;
     cursor: pointer; border: none; transition: all 0.2s; white-space: nowrap;
   }
-  .btn-start { background: var(--blue); color: #fff; }
-  .btn-start:hover { background: #3a7ae8; }
-  .btn-start:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-start { background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: #fff; box-shadow: 0 0 20px var(--accent-glow); }
+  .btn-start:hover { background: linear-gradient(135deg, #a78bfa, #8b5cf6); box-shadow: 0 0 28px var(--accent-glow); }
+  .btn-start:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
   .btn-stop { background: var(--red-bg); color: var(--red); border: 1px solid #5a2020; }
   .btn-stop:hover { background: #3a1f1f; }
   .btn-reset { background: var(--bg3); color: var(--text2); border: 1px solid var(--border); }
@@ -867,11 +939,26 @@ function getHTML(apiToken) {
 
   /* ── Light/Dark Theme Toggle ── */
   :root[data-theme="light"] {
-    --bg: #f5f6fa; --bg2: #ffffff; --bg3: #e9ebf0; --border: #d1d5e0;
-    --text: #1a1d27; --text2: #5c6180; --text3: #9499b3;
-    --blue: #2563eb; --blue-bg: #dbeafe; --green: #16a34a; --green-bg: #dcfce7;
-    --red: #dc2626; --red-bg: #fee2e2; --yellow: #ca8a04; --yellow-bg: #fef9c3;
-    --purple: #7c3aed; --purple-bg: #ede9fe;
+    --bg-base: #f8f9fc; --bg-surface: #ffffff; --bg-elevated: #f0f1f5;
+    --bg-overlay: rgba(0,0,0,0.4);
+    --border-subtle: rgba(0,0,0,0.04); --border-default: rgba(0,0,0,0.08);
+    --border-strong: rgba(0,0,0,0.14);
+    --text-primary: #1a1d2e; --text-secondary: #64698b; --text-tertiary: #9ca0b8;
+    --text-ghost: #c5c8d8;
+    --glass-bg: rgba(255,255,255,0.85); --glass-border: rgba(0,0,0,0.06);
+    --accent: #7c3aed; --accent-hover: #6d28d9; --accent-muted: rgba(124,58,237,0.08);
+    --accent-glow: rgba(124,58,237,0.15);
+    --blue: #2563eb; --blue-muted: rgba(37,99,235,0.08);
+    --success: #16a34a; --success-muted: rgba(22,163,74,0.08); --success-glow: rgba(22,163,74,0.12);
+    --danger: #dc2626; --danger-muted: rgba(220,38,38,0.08); --danger-glow: rgba(220,38,38,0.12);
+    --warning: #ca8a04; --warning-muted: rgba(202,138,4,0.08);
+    /* Legacy aliases */
+    --bg: var(--bg-base); --bg2: var(--bg-surface); --bg3: var(--bg-elevated);
+    --border: var(--border-default);
+    --text: var(--text-primary); --text2: var(--text-secondary); --text3: var(--text-tertiary);
+    --blue-bg: var(--blue-muted); --green: var(--success); --green-bg: var(--success-muted);
+    --red: var(--danger); --red-bg: var(--danger-muted); --yellow: var(--warning); --yellow-bg: var(--warning-muted);
+    --purple: var(--accent); --purple-bg: var(--accent-muted);
   }
   .theme-toggle {
     display: inline-flex; align-items: center; justify-content: center;
@@ -1182,9 +1269,718 @@ function getHTML(apiToken) {
 
   /* ── Network Error Banner Enhanced ── */
   .network-error-detail {
-    font-family: var(--mono); font-size: 11px; color: var(--text3);
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary);
     margin-top: 4px;
   }
+
+  /* ================================================================
+     REDESIGN: Glassmorphism + Sidebar Layout + UX
+     ================================================================ */
+
+  /* ── Glass Card ── */
+  .glass-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    position: relative;
+  }
+  .glass-card::before {
+    content: '';
+    position: absolute; inset: -1px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, var(--accent-glow), transparent 40%, var(--blue-muted));
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 0.3s var(--ease-smooth);
+  }
+  .glass-card:hover::before { opacity: 1; }
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass-card { background: var(--bg-surface); }
+    .topbar { background: var(--bg-surface); }
+  }
+
+  /* ── App Layout (Sidebar + Main) ── */
+  .app-layout {
+    display: flex;
+    min-height: 100vh;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-w);
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 3px;
+    left: 0;
+    bottom: 0;
+    z-index: 100;
+    transition: width 0.3s var(--ease-smooth), min-width 0.3s var(--ease-smooth);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 2px; }
+  .sidebar.collapsed {
+    width: var(--sidebar-collapsed);
+    min-width: var(--sidebar-collapsed);
+  }
+  .sidebar.collapsed .sidebar-label,
+  .sidebar.collapsed .sidebar-section-title,
+  .sidebar.collapsed .sidebar-timing,
+  .sidebar.collapsed .sidebar-header-text,
+  .sidebar.collapsed .sidebar-footer-text,
+  .sidebar.collapsed .sidebar-sub-items { display: none; }
+  .sidebar.collapsed .sidebar-header { padding: var(--sp-3); justify-content: center; }
+  .sidebar.collapsed .sidebar-nav-item { justify-content: center; padding: var(--sp-2) var(--sp-3); }
+  .sidebar.collapsed .sidebar-footer { padding: var(--sp-3); justify-content: center; }
+
+  .sidebar-header {
+    padding: var(--sp-5) var(--sp-4);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .sidebar-logo {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, var(--accent), var(--blue));
+    border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 16px; flex-shrink: 0;
+  }
+  .sidebar-header-text h1 { font-size: 14px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em; }
+  .sidebar-header-text p { font-size: 10px; color: var(--text-tertiary); margin-top: 1px; }
+
+  .sidebar-section-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-tertiary);
+    padding: var(--sp-4) var(--sp-4) var(--sp-2);
+  }
+
+  .sidebar-nav {
+    flex: 1;
+    padding: var(--sp-2) var(--sp-2);
+  }
+
+  .sidebar-nav-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 150ms var(--ease-smooth);
+    position: relative;
+    border: none;
+    background: transparent;
+    width: 100%;
+    text-align: left;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    color: var(--text-secondary);
+    border-left: 2px solid transparent;
+    margin-bottom: 1px;
+  }
+  .sidebar-nav-item:hover {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    transform: translateX(2px);
+  }
+  .sidebar-nav-item.active {
+    border-left-color: var(--accent);
+    background: var(--accent-muted);
+    color: var(--text-primary);
+  }
+  .sidebar-nav-item.done .sidebar-dot { background: var(--success); box-shadow: 0 0 6px var(--success-glow); }
+  .sidebar-nav-item.current .sidebar-dot { background: var(--warning); animation: dotPulse 2s infinite ease-in-out; }
+  .sidebar-nav-item.pending .sidebar-dot { background: var(--text-ghost); }
+
+  .sidebar-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0;
+    transition: all 0.3s var(--ease-smooth);
+  }
+  @keyframes dotPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(234,179,8,0.4); transform: scale(1); }
+    50% { box-shadow: 0 0 0 5px rgba(234,179,8,0); transform: scale(1.2); }
+  }
+
+  .sidebar-icon {
+    width: 16px; height: 16px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-tertiary);
+  }
+  .sidebar-nav-item:hover .sidebar-icon,
+  .sidebar-nav-item.active .sidebar-icon { color: var(--text-primary); }
+
+  .sidebar-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sidebar-timing { font-size: 10px; color: var(--text-tertiary); font-family: var(--font-mono); white-space: nowrap; }
+
+  /* Pipeline connector line */
+  .sidebar-nav-item::after {
+    content: '';
+    position: absolute;
+    left: 14px;
+    top: 100%;
+    width: 1px;
+    height: 1px;
+    background: var(--border-subtle);
+  }
+  .sidebar-nav-item:last-child::after { display: none; }
+  .sidebar-nav-item.done::after { background: var(--success-muted); }
+
+  /* Sub-items (expand/collapse for Write Code) */
+  .sidebar-sub-items {
+    padding-left: var(--sp-6);
+    overflow: hidden;
+    transition: max-height 0.3s var(--ease-smooth), opacity 0.2s;
+    max-height: 200px; opacity: 1;
+  }
+  .sidebar-sub-items.collapsed { max-height: 0; opacity: 0; }
+  .sidebar-sub-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-1) var(--sp-3);
+    font-size: 12px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: all 150ms;
+    border: none; background: transparent; width: 100%;
+    text-align: left; font-family: var(--font-sans);
+  }
+  .sidebar-sub-item:hover { color: var(--text-primary); background: var(--bg-elevated); }
+  .sidebar-sub-item.active { color: var(--accent); }
+  .sidebar-sub-item .sub-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--text-ghost); flex-shrink: 0;
+  }
+  .sidebar-sub-item.done .sub-dot { background: var(--success); }
+  .sidebar-sub-item.current .sub-dot { background: var(--warning); animation: dotPulse 2s infinite; }
+
+  /* Expand/collapse chevron */
+  .sidebar-expand {
+    cursor: pointer; color: var(--text-tertiary);
+    transition: transform 0.2s var(--ease-smooth);
+    flex-shrink: 0;
+  }
+  .sidebar-expand.open { transform: rotate(90deg); }
+
+  /* Sidebar system links */
+  .sidebar-system {
+    padding: var(--sp-2);
+    border-top: 1px solid var(--border-subtle);
+  }
+  .sidebar-system-item {
+    display: flex; align-items: center; gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-sm);
+    cursor: pointer; font-size: 12px; color: var(--text-tertiary);
+    border: none; background: transparent; width: 100%;
+    text-align: left; font-family: var(--font-sans);
+    transition: all 150ms;
+  }
+  .sidebar-system-item:hover { background: var(--bg-elevated); color: var(--text-primary); }
+
+  /* Sidebar footer */
+  .sidebar-footer {
+    padding: var(--sp-3) var(--sp-4);
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+  }
+  .sidebar-footer-text { font-size: 11px; color: var(--text-tertiary); }
+
+  /* Connection quality indicator */
+  .conn-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block; flex-shrink: 0;
+  }
+  .conn-dot.good { background: var(--success); box-shadow: 0 0 6px var(--success-glow); }
+  .conn-dot.degraded { background: var(--warning); box-shadow: 0 0 6px var(--warning-muted); }
+  .conn-dot.disconnected { background: var(--danger); box-shadow: 0 0 6px var(--danger-glow); }
+
+  /* ── Main Content ── */
+  .main-content {
+    flex: 1;
+    margin-left: var(--sidebar-w);
+    min-height: 100vh;
+    padding-top: 3px;
+    transition: margin-left 0.3s var(--ease-smooth);
+    position: relative;
+    z-index: 1;
+  }
+  .sidebar.collapsed ~ .main-content,
+  .main-content.sidebar-collapsed { margin-left: var(--sidebar-collapsed); }
+
+  /* ── Topbar ── */
+  .topbar {
+    position: sticky;
+    top: 3px;
+    z-index: 50;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border-bottom: 1px solid var(--glass-border);
+    padding: var(--sp-3) var(--sp-5);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+  }
+  .topbar-search {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: var(--sp-2) var(--sp-3);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .topbar-search:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-muted);
+  }
+  .topbar-search svg { flex-shrink: 0; color: var(--text-tertiary); }
+  .topbar-search input {
+    flex: 1; border: none; background: transparent;
+    color: var(--text-primary); font-family: var(--font-mono); font-size: 13px;
+    outline: none;
+  }
+  .topbar-search input::placeholder { color: var(--text-tertiary); }
+  .topbar-search .kbd-hint {
+    font-size: 10px; color: var(--text-ghost);
+    background: var(--bg-surface); border: 1px solid var(--border-default);
+    padding: 1px 6px; border-radius: 4px; font-family: var(--font-mono);
+    white-space: nowrap;
+  }
+  .topbar-status {
+    padding: var(--sp-1) var(--sp-3); border-radius: var(--radius-full);
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+  .topbar-status.idle { background: var(--bg-elevated); color: var(--text-tertiary); }
+  .topbar-status.running { background: var(--success-muted); color: var(--success); animation: pulse 2s infinite; }
+  .topbar-btn {
+    padding: var(--sp-2) var(--sp-4); border-radius: var(--radius-sm); font-size: 12px; font-weight: 600;
+    cursor: pointer; border: none; transition: all 0.2s var(--ease-smooth); white-space: nowrap;
+    display: inline-flex; align-items: center; gap: var(--sp-1);
+    font-family: var(--font-sans);
+  }
+  .topbar-btn.start { background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: #fff; box-shadow: 0 0 16px var(--accent-glow); }
+  .topbar-btn.start:hover { box-shadow: 0 0 24px var(--accent-glow); }
+  .topbar-btn.start:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+  .topbar-btn.stop { background: var(--danger-muted); color: var(--danger); border: 1px solid rgba(239,68,68,0.2); }
+  .topbar-btn.stop:hover { background: var(--danger-glow); }
+  .topbar-btn.reset { background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border-default); }
+  .topbar-btn.reset:hover { color: var(--text-primary); border-color: var(--border-strong); }
+
+  /* ── Hamburger (mobile) ── */
+  .hamburger-btn {
+    display: none;
+    width: 36px; height: 36px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    color: var(--text-secondary);
+    cursor: pointer;
+    align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* ── Mobile overlay ── */
+  .sidebar-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: var(--bg-overlay);
+    z-index: 99;
+  }
+  .sidebar-overlay.visible { display: block; }
+
+  /* ── Ticket Tab Bar ── */
+  .ticket-tabs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: var(--sp-2) var(--sp-5);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-subtle);
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .ticket-tabs:empty { display: none; }
+  .ticket-tab {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid transparent;
+    white-space: nowrap;
+    transition: all 0.15s var(--ease-smooth);
+    position: relative;
+  }
+  .ticket-tab:hover {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+  }
+  .ticket-tab.active {
+    background: var(--accent-muted);
+    color: var(--accent);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .ticket-tab-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .ticket-tab-dot.running { background: var(--success); animation: dotPulse 2s infinite; }
+  .ticket-tab-dot.gate { background: var(--warning); animation: dotPulse 1.5s infinite; }
+  .ticket-tab-dot.done { background: var(--text-tertiary); }
+  .ticket-tab-dot.stopped { background: var(--danger); }
+  .ticket-tab-close {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-tertiary); padding: 0 2px;
+    font-size: 14px; line-height: 1;
+    opacity: 0; transition: opacity 0.15s;
+  }
+  .ticket-tab:hover .ticket-tab-close { opacity: 1; }
+  .ticket-tab-close:hover { color: var(--danger); }
+  .ticket-tab-badge {
+    position: absolute; top: -2px; right: -2px;
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: dotPulse 1.5s infinite;
+  }
+  .ticket-tab-add {
+    display: flex; align-items: center; gap: 4px;
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--radius-sm);
+    cursor: pointer; font-size: 12px;
+    color: var(--text-tertiary);
+    background: none; border: 1px dashed var(--border-default);
+    transition: all 0.15s;
+  }
+  .ticket-tab-add:hover {
+    color: var(--accent); border-color: var(--accent);
+    background: var(--accent-muted);
+  }
+  /* Agent activity bar */
+  .agent-activity-bar {
+    display: flex; gap: var(--sp-2); flex-wrap: wrap;
+    padding: var(--sp-2) 0;
+  }
+  .agent-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: var(--radius-full);
+    font-size: 11px; font-weight: 500;
+    background: var(--bg-elevated); color: var(--text-secondary);
+    border: 1px solid var(--border-subtle);
+  }
+  .agent-pill.running {
+    color: var(--accent);
+    border-color: var(--accent-muted);
+    background: var(--accent-muted);
+  }
+  .agent-pill.running::before {
+    content: ''; width: 6px; height: 6px;
+    border-radius: 50%; background: var(--accent);
+    animation: dotPulse 2s infinite;
+  }
+  .agent-pill.done { color: var(--success); border-color: var(--success-muted); }
+
+  /* ── Empty State / Welcome ── */
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 80px var(--sp-6) 60px;
+    text-align: center;
+  }
+  .empty-state-icon {
+    width: 64px; height: 64px;
+    background: linear-gradient(135deg, var(--accent-muted), var(--blue-muted));
+    border-radius: var(--radius-lg);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: var(--sp-6);
+    font-size: 28px;
+  }
+  .empty-state h2 { font-size: 20px; font-weight: 700; margin-bottom: var(--sp-2); }
+  .empty-state p { font-size: 14px; color: var(--text-secondary); max-width: 400px; line-height: 1.6; }
+  .empty-state .pipeline-hint {
+    margin-top: var(--sp-6); font-size: 12px; color: var(--text-tertiary);
+    font-family: var(--font-mono); letter-spacing: 0.02em;
+  }
+  .empty-state .shortcut-hint {
+    margin-top: var(--sp-4); font-size: 11px; color: var(--text-ghost);
+  }
+  .empty-state .shortcut-hint kbd {
+    display: inline-flex; padding: 1px 6px; border-radius: 4px;
+    background: var(--bg-elevated); border: 1px solid var(--border-default);
+    font-family: var(--font-mono); font-size: 10px;
+  }
+
+  /* ── Action Hint (pulsing dot) ── */
+  .action-hint {
+    display: flex; align-items: center; gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--accent-muted);
+    border: 1px solid rgba(139,92,246,0.2);
+    border-radius: var(--radius-sm);
+    font-size: 13px; color: var(--accent-hover);
+    margin-top: var(--sp-3);
+  }
+  .hint-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+    animation: dotPulse 2s infinite ease-in-out;
+    flex-shrink: 0;
+  }
+
+  /* ── Confirm Dialog Modal ── */
+  .confirm-modal-overlay {
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--bg-overlay); z-index: 2000;
+    align-items: center; justify-content: center;
+  }
+  .confirm-modal-overlay.visible { display: flex; }
+  .confirm-modal {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--sp-6);
+    max-width: 400px; width: 90%;
+    animation: modalIn 0.3s var(--ease-spring);
+  }
+  @keyframes modalIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  .confirm-modal h3 { font-size: 16px; font-weight: 700; margin-bottom: var(--sp-2); }
+  .confirm-modal p { font-size: 13px; color: var(--text-secondary); margin-bottom: var(--sp-5); line-height: 1.6; }
+  .confirm-modal-actions { display: flex; gap: var(--sp-2); justify-content: flex-end; }
+  .confirm-modal-actions button {
+    padding: var(--sp-2) var(--sp-5); border-radius: var(--radius-sm); font-size: 13px;
+    font-weight: 600; cursor: pointer; border: none; transition: all 0.2s;
+    font-family: var(--font-sans);
+  }
+  .confirm-modal-actions .confirm-cancel {
+    background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border-default);
+  }
+  .confirm-modal-actions .confirm-cancel:hover { color: var(--text-primary); }
+  .confirm-modal-actions .confirm-danger { background: var(--danger); color: #fff; }
+  .confirm-modal-actions .confirm-danger:hover { background: #dc2626; }
+
+  /* ── Log Filter ── */
+  .log-filter-bar {
+    display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-2);
+  }
+  .log-filter-bar input {
+    flex: 1; padding: var(--sp-1) var(--sp-3);
+    background: var(--bg-elevated); border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm); color: var(--text-primary);
+    font-family: var(--font-mono); font-size: 11px; outline: none;
+  }
+  .log-filter-bar input:focus { border-color: var(--accent); }
+
+  /* ── Scroll to Bottom Button ── */
+  .scroll-bottom-btn {
+    position: absolute; bottom: var(--sp-3); right: var(--sp-3);
+    padding: var(--sp-1) var(--sp-3); border-radius: var(--radius-full);
+    background: var(--accent); color: #fff; font-size: 11px; font-weight: 600;
+    border: none; cursor: pointer; opacity: 0; transform: translateY(8px);
+    transition: opacity 0.2s, transform 0.2s;
+    z-index: 5;
+    font-family: var(--font-sans);
+  }
+  .scroll-bottom-btn.visible { opacity: 1; transform: translateY(0); }
+
+  /* ── AI Thinking Dots ── */
+  .thinking-dots { display: inline-flex; gap: 3px; align-items: center; }
+  .thinking-dots span {
+    width: 4px; height: 4px; border-radius: 50%;
+    background: var(--accent);
+    animation: thinkDot 1.2s infinite ease-in-out;
+  }
+  .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes thinkDot {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+
+  /* ── Summary Grid (2-col cards) ── */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-2);
+  }
+  .summary-card {
+    display: flex; align-items: center; gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--glass-bg);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.15s var(--ease-smooth);
+  }
+  .summary-card:hover { background: var(--bg-elevated); border-color: var(--border-default); }
+  .summary-card { flex-direction: column; gap: var(--sp-2); }
+  .summary-card-header { display: flex; align-items: center; gap: var(--sp-2); width: 100%; }
+  .summary-card-icon { flex-shrink: 0; display: flex; align-items: center; color: var(--text-secondary); }
+  .summary-card-title { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+  .summary-card-footer { display: flex; align-items: center; gap: var(--sp-2); width: 100%; }
+  .summary-card-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .summary-card-dot.dot-done { background: var(--success); }
+  .summary-card-dot.dot-active { background: var(--warning); animation: dotPulse 2s infinite; }
+  .summary-card-dot.dot-pending { background: var(--text-ghost); }
+  .summary-card-status { font-size: 11px; color: var(--text-secondary); }
+  .summary-card-timing { font-size: 10px; color: var(--text-tertiary); font-family: var(--font-mono); margin-left: auto; }
+
+  /* ── Responsive: Collapsed sidebar ── */
+  @media (max-width: 1200px) {
+    .sidebar:not(.mobile-open) {
+      width: var(--sidebar-collapsed);
+      min-width: var(--sidebar-collapsed);
+    }
+    .sidebar:not(.mobile-open) .sidebar-label,
+    .sidebar:not(.mobile-open) .sidebar-section-title,
+    .sidebar:not(.mobile-open) .sidebar-timing,
+    .sidebar:not(.mobile-open) .sidebar-header-text,
+    .sidebar:not(.mobile-open) .sidebar-footer-text,
+    .sidebar:not(.mobile-open) .sidebar-sub-items,
+    .sidebar:not(.mobile-open) .sidebar-system-item .sidebar-label { display: none; }
+    .sidebar:not(.mobile-open) .sidebar-header { padding: var(--sp-3); justify-content: center; }
+    .sidebar:not(.mobile-open) .sidebar-nav-item { justify-content: center; padding: var(--sp-2) var(--sp-3); }
+    .sidebar:not(.mobile-open) .sidebar-footer { padding: var(--sp-3); justify-content: center; flex-direction: column; }
+    .main-content { margin-left: var(--sidebar-collapsed); }
+  }
+
+  /* ── Responsive: Mobile hidden sidebar ── */
+  @media (max-width: 768px) {
+    .sidebar {
+      transform: translateX(-100%);
+      transition: transform 0.3s var(--ease-smooth);
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      z-index: 200;
+    }
+    .sidebar.mobile-open {
+      transform: translateX(0);
+    }
+    .sidebar.mobile-open .sidebar-label,
+    .sidebar.mobile-open .sidebar-section-title,
+    .sidebar.mobile-open .sidebar-timing,
+    .sidebar.mobile-open .sidebar-header-text,
+    .sidebar.mobile-open .sidebar-footer-text,
+    .sidebar.mobile-open .sidebar-sub-items { display: revert; }
+    .main-content { margin-left: 0; }
+    .hamburger-btn { display: flex; }
+    .topbar { padding: var(--sp-3); }
+    .summary-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── Update detail-card to glass ── */
+  .detail-card {
+    border-radius: var(--radius-lg); border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    padding: 20px 24px; margin-bottom: 24px;
+    animation: cardIn 0.3s var(--ease-smooth);
+  }
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Update review panel to glass ── */
+  #reviewPanel {
+    border-radius: var(--radius-lg); border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    padding: 20px 24px; margin-bottom: 24px; display: none;
+  }
+  #reviewPanel.visible { display: block; animation: reviewIn 0.3s var(--ease-spring); }
+  @keyframes reviewIn {
+    from { opacity: 0; transform: scale(0.98); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  /* ── Update toast to glass ── */
+  .toast {
+    pointer-events: auto; padding: 12px 20px; border-radius: var(--radius-md);
+    font-size: 13px; font-weight: 500; max-width: 380px; min-width: 220px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    display: flex; align-items: center; gap: 10px;
+    animation: toastIn 0.3s var(--ease-spring) forwards;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  /* ── Update approve button glow ── */
+  .btn-approve {
+    padding: 10px 28px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600;
+    cursor: pointer; border: none;
+    background: linear-gradient(135deg, #22c55e, #16a34a); color: #fff;
+    transition: all 0.2s; box-shadow: 0 0 16px var(--success-glow);
+  }
+  .btn-approve:hover { box-shadow: 0 0 24px var(--success-glow); }
+  .btn-approve:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+
+  /* ── Update reject button ── */
+  .btn-reject {
+    padding: 10px 28px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600;
+    cursor: pointer; background: transparent; color: var(--danger);
+    border: 1.5px solid var(--danger); transition: all 0.2s;
+  }
+  .btn-reject:hover { background: var(--danger-muted); box-shadow: 0 0 12px var(--danger-glow); }
+  .btn-reject:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Log viewer glass ── */
+  .log-viewer-panel, .context-inject-panel {
+    border-radius: var(--radius-lg); border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    padding: 16px 20px; margin-bottom: 24px;
+  }
+
+  /* ── Main content padding ── */
+  .main-panels { padding: var(--sp-5); max-width: 1200px; }
+
+  /* ── Update input focus to accent ── */
+  .input-bar input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-muted); }
+  .plan-tab.active { background: var(--bg-elevated); color: var(--accent); border-color: var(--border-default); border-bottom: 2px solid var(--bg-elevated); margin-bottom: -2px; }
+  *:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  /* ── Hide old elements in new layout ── */
+  .app-layout .header { display: none; }
+  .app-layout .input-bar { display: none; }
+  .app-layout .steps-grid { display: none; }
+  .app-layout .nav { display: none; }
 </style>
 </head>
 <body>
@@ -1213,89 +2009,159 @@ function getHTML(apiToken) {
   </div>
 </div>
 
-<div class="container" id="mainContent">
-<div id="subStageProgress"></div>
-
-  <!-- Header -->
-  <div class="header">
-    <span class="header-icon" aria-hidden="true">&#x1F916;</span>
-    <div>
-      <h1>AI Dev Agent</h1>
-      <p>Jira &#x2192; Claude &#x2192; GitLab &#x2192; QA &#x2192; Pre-Prod &#x2192; Production</p>
-    </div>
-    <div id="statusBadge" class="header-status idle" role="status">Idle</div>
-    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle light/dark theme" title="Toggle theme">&#x263E;</button>
-    <div class="heartbeat-wrap">
-      <span class="heartbeat" id="heartbeat" aria-hidden="true"></span>
-      <span class="last-updated" id="lastUpdated"></span>
+<!-- Confirm Dialog Modal -->
+<div class="confirm-modal-overlay" id="confirmModal">
+  <div class="confirm-modal">
+    <h3 id="confirmTitle"></h3>
+    <p id="confirmMsg"></p>
+    <div class="confirm-modal-actions">
+      <button class="confirm-cancel" onclick="closeConfirmDialog()">Cancel</button>
+      <button class="confirm-danger" id="confirmAction">Confirm</button>
     </div>
   </div>
+</div>
 
-  <!-- Input -->
-  <div class="input-bar">
-    <label for="ticket">Jira Ticket</label>
-    <input id="ticket" type="text" value="" placeholder="e.g. AUT-1234" spellcheck="false">
-    <button id="btnStart" class="btn btn-start" onclick="start()" aria-label="Start the agent pipeline">Start Agent</button>
-    <button id="btnStop" class="btn btn-stop" onclick="stop()" style="display:none" aria-label="Stop the running agent">Stop</button>
-    <button class="btn btn-reset" onclick="reset()" aria-label="Reset agent state and clear all progress">Reset</button>
-    <button class="btn btn-reset" id="btnSkipStage" onclick="skipStage()" title="Skip current stage (requires ALLOW_STAGE_SKIP=true)" aria-label="Skip the current pipeline stage">Skip Stage</button>
-  </div>
+<!-- Mobile sidebar overlay -->
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
 
-  <!-- Connection / Offline Banners -->
-  <div class="connection-banner offline" id="offlineBanner" role="alert">
-    <span aria-hidden="true">&#x26A0;</span>
-    <span>Connection lost</span>
-    <span class="countdown" id="offlineCountdown"></span>
-    <button class="retry-btn" onclick="retryConnectionNow()" aria-label="Retry connection now">Retry Now</button>
-  </div>
-  <div class="connection-banner stale" id="staleBanner" role="status">
-    <span aria-hidden="true">&#x23F3;</span>
-    <span>Showing cached data</span>
-    <span id="staleAge"></span>
-  </div>
-  <div class="connection-banner reconnecting" id="reconnectBanner" role="status">
-    <span aria-hidden="true">&#x1F504;</span>
-    <span>Connected! Syncing...</span>
-  </div>
-  <div class="rate-limit-banner" id="rateLimitBanner" role="alert">
-    Rate limited &mdash; retrying in <span class="countdown" id="rateLimitCountdown"></span>s
-  </div>
-
-  <!-- O5: Error/warning banners -->
-  <div id="errorBanner"></div>
-  <div id="warningBanner"></div>
-
-  <!-- O2: Stuck detection banner -->
-  <div id="stuckBanner"></div>
-
-  <!-- O9: Context injection panel (visible only when agent is running) -->
-  <div class="context-inject-panel" id="contextInjectPanel" style="display:none">
-    <h4>Inject Context</h4>
-    <textarea id="contextInjectText" placeholder="Add additional context for the running agent (e.g., clarifications, constraints, API details)..." aria-label="Context injection text"></textarea>
-    <div class="inject-actions">
-      <button class="btn-inject" id="btnInjectContext" onclick="injectContext()" aria-label="Inject additional context into the running agent">Inject Context</button>
-      <span class="inject-status" id="injectStatus"></span>
+<div class="app-layout">
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>
+      </div>
+      <div class="sidebar-header-text">
+        <h1>AI Dev Agent</h1>
+        <p>Pipeline Automation</p>
+      </div>
     </div>
-  </div>
 
-  <!-- O4: Log file viewer panel -->
-  <div class="log-viewer-panel" id="logViewerPanel" style="display:none">
-    <div class="log-viewer-header" id="logViewerHeader" onclick="toggleLogViewer()" role="button" tabindex="0" aria-label="Toggle agent log file viewer" onkeydown="if(event.key==='Enter')toggleLogViewer()">
-      <span class="toggle-icon" id="logViewerToggle">&#9654;</span>
-      <h4>Agent Log File</h4>
-      <span class="log-total" id="logViewerTotal">0 lines</span>
+    <div class="sidebar-section-title">Pipeline</div>
+    <nav class="sidebar-nav" id="sidebarNav" role="tablist" aria-label="Pipeline steps"></nav>
+
+    <div class="sidebar-system">
+      <div class="sidebar-section-title">System</div>
+      <button class="sidebar-system-item" onclick="toggleSection('logOutput')" title="Toggle live output">
+        <span class="sidebar-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="2" width="14" height="12" rx="2"/><path d="M4 6l3 2-3 2m4 0h3"/></svg></span>
+        <span class="sidebar-label">Live Output</span>
+      </button>
+      <button class="sidebar-system-item" onclick="router.navigate('#/settings')" title="Settings">
+        <span class="sidebar-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2m0 10v2M1 8h2m10 0h2M3 3l1.5 1.5m7 7L13 13M13 3l-1.5 1.5m-7 7L3 13"/></svg></span>
+        <span class="sidebar-label">Settings</span>
+      </button>
+      <button class="sidebar-system-item" onclick="showShortcutsModal()" title="Keyboard shortcuts">
+        <span class="sidebar-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="3" width="14" height="10" rx="2"/><path d="M4 7h1m2 0h1m2 0h1M4 10h8"/></svg></span>
+        <span class="sidebar-label">Shortcuts</span>
+      </button>
     </div>
-    <div class="log-viewer-content" id="logViewerContent"></div>
-  </div>
 
-  <!-- Y5: Step pills with ARIA roles -->
-  <div class="steps-grid" id="stepsGrid" role="tablist" aria-label="Pipeline steps"></div>
+    <div class="sidebar-footer">
+      <span class="conn-dot" id="connDot" aria-hidden="true"></span>
+      <span class="sidebar-footer-text" id="connLabel">Connecting...</span>
+      <span class="sidebar-footer-text" id="lastUpdated"></span>
+      <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle light/dark theme" title="Toggle theme" style="margin-left:auto">&#x263E;</button>
+    </div>
+  </aside>
 
-  <!-- Detail card -->
-  <div class="detail-card" id="detailCard" role="tabpanel"></div>
+  <!-- ── MAIN CONTENT ── -->
+  <main class="main-content" id="mainContent">
+    <!-- Topbar -->
+    <div class="topbar" id="topbar">
+      <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleMobileSidebar()" aria-label="Toggle sidebar menu">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
+      </button>
+      <div class="topbar-search">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4"/><path d="M10 10l3.5 3.5"/></svg>
+        <input id="ticket" type="text" value="" placeholder="Enter ticket ID..." spellcheck="false" aria-label="Jira ticket ID">
+        <span class="kbd-hint" id="kbdHint">&#x2318;K</span>
+      </div>
+      <div id="statusBadge" class="topbar-status idle" role="status">Idle</div>
+      <button id="btnStart" class="topbar-btn start" onclick="start()" aria-label="Start the agent pipeline">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><polygon points="3,1 14,8 3,15"/></svg>
+        Start
+      </button>
+      <button id="btnStop" class="topbar-btn stop" onclick="stop()" style="display:none" aria-label="Stop the running agent">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="2" width="12" height="12" rx="2"/></svg>
+        Stop
+      </button>
+      <button class="topbar-btn reset" onclick="reset()" aria-label="Reset agent state">Reset</button>
+      <button class="topbar-btn reset" id="btnSkipStage" onclick="skipStage()" title="Skip current stage" aria-label="Skip stage">Skip</button>
+    </div>
+    <div class="ticket-tabs" id="ticketTabs"></div>
 
-  <!-- 9.1-9.3: Runtime test results panel -->
-  <div id="testResultsPanel"></div>
+    <div class="main-panels">
+      <!-- Agent Activity Bar -->
+      <div class="agent-activity-bar" id="agentActivityBar" style="display:none;padding:var(--sp-2) var(--sp-5)"></div>
+      <!-- Connection / Offline Banners -->
+      <div class="connection-banner offline" id="offlineBanner" role="alert">
+        <span aria-hidden="true">&#x26A0;</span>
+        <span>Connection lost</span>
+        <span class="countdown" id="offlineCountdown"></span>
+        <button class="retry-btn" onclick="retryConnectionNow()" aria-label="Retry connection now">Retry Now</button>
+      </div>
+      <div class="connection-banner stale" id="staleBanner" role="status">
+        <span aria-hidden="true">&#x23F3;</span>
+        <span>Showing cached data</span>
+        <span id="staleAge"></span>
+      </div>
+      <div class="connection-banner reconnecting" id="reconnectBanner" role="status">
+        <span aria-hidden="true">&#x1F504;</span>
+        <span>Connected! Syncing...</span>
+      </div>
+      <div class="rate-limit-banner" id="rateLimitBanner" role="alert">
+        Rate limited &mdash; retrying in <span class="countdown" id="rateLimitCountdown"></span>s
+      </div>
+
+      <!-- O5: Error/warning banners -->
+      <div id="errorBanner"></div>
+      <div id="warningBanner"></div>
+
+      <!-- O2: Stuck detection banner -->
+      <div id="stuckBanner"></div>
+
+      <!-- Empty State (shown when no ticket) -->
+      <div id="emptyState" class="empty-state" style="display:none">
+        <div class="empty-state-icon">
+          <svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>
+        </div>
+        <h2>AI Dev Agent</h2>
+        <p>Enter a Jira ticket ID in the search bar above to start the automated pipeline.</p>
+        <div class="pipeline-hint">Jira &#x2192; Claude &#x2192; GitLab &#x2192; QA &#x2192; Pre-Prod &#x2192; Production</div>
+        <div class="shortcut-hint">Press <kbd>?</kbd> for keyboard shortcuts &middot; Press <kbd>&#x2318;K</kbd> to focus search</div>
+      </div>
+
+      <!-- O9: Context injection panel (visible only when agent is running) -->
+      <div class="context-inject-panel" id="contextInjectPanel" style="display:none">
+        <h4>Inject Context</h4>
+        <textarea id="contextInjectText" placeholder="Add additional context for the running agent (e.g., clarifications, constraints, API details)..." aria-label="Context injection text"></textarea>
+        <div class="inject-actions">
+          <button class="btn-inject" id="btnInjectContext" onclick="injectContext()" aria-label="Inject additional context into the running agent">Inject Context</button>
+          <span class="inject-status" id="injectStatus"></span>
+        </div>
+      </div>
+
+      <!-- Sub-stage progress -->
+      <div id="subStageProgress"></div>
+
+      <!-- Detail card -->
+      <div class="detail-card" id="detailCard" role="tabpanel"></div>
+
+      <!-- 9.1-9.3: Runtime test results panel -->
+      <div id="testResultsPanel"></div>
+
+      <!-- O4: Log file viewer panel -->
+      <div class="log-viewer-panel" id="logViewerPanel" style="display:none">
+        <div class="log-viewer-header" id="logViewerHeader" onclick="toggleLogViewer()" role="button" tabindex="0" aria-label="Toggle agent log file viewer" onkeydown="if(event.key==='Enter')toggleLogViewer()">
+          <span class="toggle-icon" id="logViewerToggle">&#9654;</span>
+          <h4>Agent Log File</h4>
+          <span class="log-total" id="logViewerTotal">0 lines</span>
+        </div>
+        <div class="log-viewer-content" id="logViewerContent"></div>
+      </div>
+
+      <!-- Hidden old elements (kept for backward compat) -->
+      <div class="steps-grid" id="stepsGrid" role="tablist" aria-label="Pipeline steps" style="display:none"></div>
 
   <!-- Review panel (diff viewer + approve/reject) -->
   <div id="reviewPanel">
@@ -1352,34 +2218,43 @@ function getHTML(apiToken) {
     </div>
   </div>
 
-  <!-- Nav -->
-  <div class="nav">
-    <button class="btn btn-reset" id="btnPrev" onclick="nav(-1)" aria-label="Go to previous pipeline step">&#x2190; Prev</button>
-    <button class="btn btn-reset" id="btnNext" onclick="nav(1)" aria-label="Go to next pipeline step">Next &#x2192;</button>
-    <span class="counter" id="counter"></span>
-  </div>
+      <!-- Nav (hidden in sidebar layout, kept for compat) -->
+      <div class="nav" style="display:none">
+        <button class="btn btn-reset" id="btnPrev" onclick="nav(-1)" aria-label="Go to previous pipeline step">&#x2190; Prev</button>
+        <button class="btn btn-reset" id="btnNext" onclick="nav(1)" aria-label="Go to next pipeline step">Next &#x2192;</button>
+        <span class="counter" id="counter"></span>
+      </div>
 
-  <!-- Logs (Enhancement 9: Collapsible) -->
-  <div class="log-section">
-    <div class="log-header collapsible-header" id="logOutput-header" onclick="toggleSection('logOutput')" role="button" tabindex="0" aria-expanded="true" aria-label="Toggle live output log section" onkeydown="if(event.key==='Enter')toggleSection('logOutput')">
-      <span class="collapse-arrow" aria-hidden="true">&#9660;</span>
-      <h3>Live Output</h3>
-      <span class="log-count" id="logCount">0 lines</span>
-    </div>
-    <div id="logOutput-content">
-      <div class="log-terminal" id="logTerminal" role="log" aria-live="polite" aria-label="Agent output log"></div>
-    </div>
-  </div>
+      <!-- Logs (Enhancement 9: Collapsible) -->
+      <div class="log-section">
+        <div class="log-header collapsible-header" id="logOutput-header" onclick="toggleSection('logOutput')" role="button" tabindex="0" aria-expanded="true" aria-label="Toggle live output log section" onkeydown="if(event.key==='Enter')toggleSection('logOutput')">
+          <span class="collapse-arrow" aria-hidden="true">&#9660;</span>
+          <h3>Live Output</h3>
+          <span class="log-count" id="logCount">0 lines</span>
+        </div>
+        <div id="logOutput-content">
+          <div class="log-filter-bar" id="logFilterBar">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4"/><path d="M10 10l3.5 3.5"/></svg>
+            <input type="text" id="logFilterInput" placeholder="Filter logs..." oninput="filterLogs(this.value)" aria-label="Filter log lines">
+          </div>
+          <div style="position:relative">
+            <div class="log-terminal" id="logTerminal" role="log" aria-live="polite" aria-label="Agent output log"></div>
+            <button class="scroll-bottom-btn" id="scrollBottomBtn" onclick="scrollLogsToBottom()">&#x2193; New output</button>
+          </div>
+        </div>
+      </div>
 
-  <!-- Summary (Enhancement 9: Collapsible) -->
-  <div class="summary">
-    <h3 class="collapsible-header" id="summary-header" onclick="toggleSection('summary')" role="button" tabindex="0" aria-expanded="true" aria-label="Toggle summary section" onkeydown="if(event.key==='Enter')toggleSection('summary')"><span class="collapse-arrow" aria-hidden="true">&#9660;</span> Summary &mdash; what you do vs what's automatic</h3>
-    <div id="summary-content">
-      <div id="summaryTable"></div>
-    </div>
-  </div>
+      <!-- Summary (Enhancement 9: Collapsible) -->
+      <div class="summary">
+        <h3 class="collapsible-header" id="summary-header" onclick="toggleSection('summary')" role="button" tabindex="0" aria-expanded="true" aria-label="Toggle summary section" onkeydown="if(event.key==='Enter')toggleSection('summary')"><span class="collapse-arrow" aria-hidden="true">&#9660;</span> Summary</h3>
+        <div id="summary-content">
+          <div id="summaryTable"></div>
+        </div>
+      </div>
 
-</div>
+    </div><!-- .main-panels -->
+  </main>
+</div><!-- .app-layout -->
 
 <!-- Enhancement 1: Toast container -->
 <div class="toast-container" id="toastContainer" role="status" aria-live="polite"></div>
@@ -1395,6 +2270,7 @@ function getHTML(apiToken) {
     <div class="shortcut-row"><span class="shortcut-key">a</span><span class="shortcut-desc">Approve (when gate active)</span></div>
     <div class="shortcut-row"><span class="shortcut-key">r</span><span class="shortcut-desc">Show reject form (when gate active)</span></div>
     <div class="shortcut-row"><span class="shortcut-key">f</span><span class="shortcut-desc">Show refine form (plan review only)</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">&#x2318;K</span><span class="shortcut-desc">Focus ticket input</span></div>
   </div>
 </div>
 
@@ -1413,6 +2289,316 @@ function getHTML(apiToken) {
 <script>
 // M6: Auth token injected at render time
 const API_TOKEN = ${JSON.stringify(apiToken)};
+
+// ── SVG Icon System (16x16, stroke-based, currentColor) ──
+const ICONS = {
+  ticket: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M6 3v10"/><circle cx="4" cy="8" r="1" fill="currentColor" stroke="none"/></svg>',
+  compass: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><polygon points="10,6 6,7.5 6.5,10 10.5,8.5" fill="currentColor" stroke="none" opacity="0.6"/></svg>',
+  code: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="5,3 1,8 5,13"/><polyline points="11,3 15,8 11,13"/></svg>',
+  pencil: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z"/></svg>',
+  flask: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v5L2 14h12L10 7V2M5 2h6"/></svg>',
+  gitMerge: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="4" cy="4" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="4" cy="12" r="2"/><path d="M4 6v4m0-3c3 0 6 2 8 5"/></svg>',
+  eye: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>',
+  rocket: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11l-2 4 4-2m-1-5c1.5-1.5 4-3 6-4-1 2-2.5 4.5-4 6l-4-2z"/><circle cx="10" cy="6" r="1" fill="currentColor" stroke="none"/></svg>',
+  testTube: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2L4 14H12L6 2M5 2h6"/><path d="M5 10h6" stroke-dasharray="2 1"/></svg>',
+  shield: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1l6 3v4c0 4-6 7-6 7S2 12 2 8V4l6-3z"/></svg>',
+  users: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="6" cy="4" r="2.5"/><circle cx="12" cy="5" r="1.8"/><path d="M1 14c0-3 2-5 5-5s5 2 5 5m1-5c2 0 3.5 1.5 3.5 4"/></svg>',
+  globe: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c-2 2.5-2 7.5 0 12M8 2c2 2.5 2 7.5 0 12"/></svg>',
+  checkCircle: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M5.5 8l2 2 3.5-4"/></svg>',
+  sparkle: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>',
+  chevronRight: '<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4l4 4-4 4"/></svg>',
+};
+
+// Sidebar nav item mapping: stage -> icon, label
+const SIDEBAR_MAP = [
+  { stage: "fetch_ticket",          icon: "ticket",      label: "Fetch Ticket",     steps: [0, 1] },
+  { stage: "explore_plan",          icon: "compass",     label: "Explore & Plan",   steps: [2] },
+  { stage: "generate_code",         icon: "code",        label: "Write Code",       steps: [3, 4, 5], expandable: true, subItems: [
+    { icon: "pencil",   label: "Developer",      step: 3, doneKey: "_dev_complete" },
+    { icon: "flask",    label: "Test & Verify",  step: 4, doneKey: "_test_phase_complete" },
+    { icon: "gitMerge", label: "Create MR",      step: 5, doneKey: "code_mr_iid" },
+  ]},
+  { stage: "gate_code_review",      icon: "eye",         label: "Code Review",      steps: [6] },
+  { stage: "deploy_qa",             icon: "rocket",      label: "QA Deploy",        steps: [7] },
+  { stage: "test_qa",               icon: "testTube",    label: "QA Testing",       steps: [8] },
+  { stage: "gate_preprod_approval", icon: "shield",      label: "Pre-Prod Gate",    steps: [9] },
+  { stage: "create_preprod_mr",     icon: "gitMerge",    label: "Pre-Prod MR",      steps: [10] },
+  { stage: "gate_dual_approval",    icon: "users",       label: "Dual Approval",    steps: [11] },
+  { stage: "deploy_prod",           icon: "globe",       label: "Production",       steps: [12] },
+  { stage: "done",                  icon: "checkCircle", label: "Done",             steps: [13] },
+];
+
+var sidebarCodeExpanded = true;
+
+// ── Smart Render System ─────────────────────────────────────────
+// Layer 1: Dirty flags — snapshot each renderer's inputs, skip if unchanged
+// Layer 2: Inline DOM morph — patch existing nodes instead of innerHTML
+// Layer 3: Scroll guards — preserve scroll position across renders
+
+// ── Layer 1: Dirty Flags ──
+var _renderKeys = {};
+function _dirtyCheck(name, key) {
+  if (_renderKeys[name] === key) return false;
+  _renderKeys[name] = key;
+  return true;
+}
+function _invalidateAll() {
+  _renderKeys = {};
+  _previousPollJSON = null;
+  _previousReviewJSON = null;
+  _lastScrolledGate = null;
+}
+
+// Compute dirty-check keys per renderer (reads only the globals each one uses)
+function _keyForPills() {
+  var stages = lastStateData && lastStateData.stages ? JSON.stringify(lastStateData.stages) : "";
+  var subDone = "";
+  if (lastStateData) {
+    subDone = (lastStateData._code_written || "") + "|" + (lastStateData._tests_run || "") + "|" + (lastStateData._mr_created || "");
+  }
+  return activeStep + "|" + currentStage + "|" + sidebarCodeExpanded + "|" + stages + "|" + subDone;
+}
+function _keyForDetail() { return String(activeStep); }
+function _keyForSummary() {
+  var timing = "";
+  if (lastStateData && lastStateData._stage_timings) timing = JSON.stringify(lastStateData._stage_timings);
+  return activeStep + "|" + currentStage + "|" + timing;
+}
+function _keyForReview() {
+  var rk = reviewData ? (reviewData.gate || "") + "|" + (reviewData._ts || "") + "|" + JSON.stringify(reviewData.changes ? reviewData.changes.length : 0) : "none";
+  return rk + "|" + reviewFileIdx + "|" + diffMode + "|" + diffFileFilter;
+}
+function _keyForBanners() {
+  var err = lastStateData && lastStateData._lastError ? lastStateData._lastError.message || "" : "";
+  var warn = lastStateData && lastStateData._warnings ? JSON.stringify(lastStateData._warnings) : "";
+  return err + "|" + warn;
+}
+function _keyForStuck() { return isStuck + "|" + isRunning + "|" + stuckMinutes; }
+function _keyForApproval() {
+  var ap = lastStateData && lastStateData._approvals ? JSON.stringify(lastStateData._approvals) : "";
+  var rg = reviewData && reviewData.gate ? reviewData.gate : "";
+  return ap + "|" + rg;
+}
+function _keyForTests() {
+  var u = lastStateData && lastStateData._unit_tests_complete ? "1" : "0";
+  var e = lastStateData && lastStateData._e2e_tests_complete ? "1" : "0";
+  return u + "|" + e;
+}
+function _keyForEmpty() { return (currentStage || "null") + "|" + isRunning; }
+function _keyForActivity() {
+  return lastStateData && lastStateData._active_agents ? JSON.stringify(lastStateData._active_agents) : "";
+}
+
+// Key function mapping (matches render function array order)
+var _keyFunctions = {
+  renderPills: _keyForPills,
+  renderDetail: _keyForDetail,
+  renderSummary: _keyForSummary,
+  renderReviewPanel: _keyForReview,
+  renderBanners: _keyForBanners,
+  renderStuckBanner: _keyForStuck,
+  renderApprovalStatus: _keyForApproval,
+  renderTestResults: _keyForTests,
+  renderEmptyState: _keyForEmpty,
+  renderAgentActivity: _keyForActivity,
+};
+
+// ── Layer 2: Inline DOM Morph ──
+// Patches existing DOM nodes in-place instead of innerHTML replacement.
+// Preserves scroll, focus, hover, and selection state.
+function morphDOM(parentEl, newHTML) {
+  if (!parentEl) return;
+  // Parse new HTML into a temporary container
+  var tmp = document.createElement("div");
+  tmp.innerHTML = newHTML;
+  _morphChildren(parentEl, tmp);
+}
+
+function _morphChildren(oldParent, newParent) {
+  var oldNodes = Array.prototype.slice.call(oldParent.childNodes);
+  var newNodes = Array.prototype.slice.call(newParent.childNodes);
+  var maxLen = Math.max(oldNodes.length, newNodes.length);
+
+  for (var i = 0; i < maxLen; i++) {
+    var oldNode = oldNodes[i];
+    var newNode = newNodes[i];
+
+    // New node exists but old doesn't — append
+    if (!oldNode && newNode) {
+      oldParent.appendChild(newNode.cloneNode(true));
+      continue;
+    }
+    // Old node exists but new doesn't — remove
+    if (oldNode && !newNode) {
+      oldParent.removeChild(oldNode);
+      // Adjust index since we removed a node
+      oldNodes.splice(i, 1);
+      i--;
+      maxLen--;
+      continue;
+    }
+    // Both exist — compare
+    if (oldNode.nodeType !== newNode.nodeType) {
+      oldParent.replaceChild(newNode.cloneNode(true), oldNode);
+      continue;
+    }
+    // Text nodes
+    if (oldNode.nodeType === 3) {
+      if (oldNode.textContent !== newNode.textContent) {
+        oldNode.textContent = newNode.textContent;
+      }
+      continue;
+    }
+    // Element nodes
+    if (oldNode.nodeType === 1) {
+      // Different tag — replace entirely
+      if (oldNode.tagName !== newNode.tagName) {
+        oldParent.replaceChild(newNode.cloneNode(true), oldNode);
+        continue;
+      }
+      // Same tag — update attributes
+      _syncAttributes(oldNode, newNode);
+      // Recurse into children
+      _morphChildren(oldNode, newNode);
+    }
+  }
+}
+
+function _syncAttributes(oldEl, newEl) {
+  // Update/add new attributes
+  var newAttrs = newEl.attributes;
+  for (var i = 0; i < newAttrs.length; i++) {
+    var attr = newAttrs[i];
+    if (oldEl.getAttribute(attr.name) !== attr.value) {
+      oldEl.setAttribute(attr.name, attr.value);
+    }
+  }
+  // Remove old attributes not in new
+  var oldAttrs = oldEl.attributes;
+  for (var i = oldAttrs.length - 1; i >= 0; i--) {
+    var name = oldAttrs[i].name;
+    if (!newEl.hasAttribute(name)) {
+      oldEl.removeAttribute(name);
+    }
+  }
+}
+
+// ── Layer 3: Scroll Guards ──
+var _lastScrolledGate = null;
+var _previousPollJSON = null;
+var _previousReviewJSON = null;
+
+// ── Render Batching ──
+var _renderScheduled = false;
+function scheduleRender() {
+  if (_renderScheduled) return;
+  _renderScheduled = true;
+  requestAnimationFrame(function() {
+    _renderScheduled = false;
+    render();
+  });
+}
+
+// ── Request Deduplication ──
+var _pendingRequests = {};
+function deduplicatedFetch(key, url, options) {
+  if (_pendingRequests[key]) return _pendingRequests[key];
+  _pendingRequests[key] = classifiedFetch(url, options);
+  var cleanup = function() { delete _pendingRequests[key]; };
+  _pendingRequests[key].then(cleanup, cleanup);
+  return _pendingRequests[key];
+}
+
+// ── Confirm Dialog ──
+var _confirmCallback = null;
+function showConfirmDialog(title, message, actionLabel, onConfirm) {
+  document.getElementById("confirmTitle").textContent = title;
+  document.getElementById("confirmMsg").textContent = message;
+  var actionBtn = document.getElementById("confirmAction");
+  actionBtn.textContent = actionLabel || "Confirm";
+  _confirmCallback = onConfirm;
+  actionBtn.onclick = function() { closeConfirmDialog(); if (_confirmCallback) _confirmCallback(); };
+  document.getElementById("confirmModal").classList.add("visible");
+  trapFocus(document.querySelector(".confirm-modal"));
+}
+function closeConfirmDialog() {
+  document.getElementById("confirmModal").classList.remove("visible");
+  releaseFocusTrap();
+  _confirmCallback = null;
+}
+
+// ── Mobile Sidebar ──
+function toggleMobileSidebar() {
+  var sidebar = document.getElementById("sidebar");
+  var overlay = document.getElementById("sidebarOverlay");
+  sidebar.classList.toggle("mobile-open");
+  overlay.classList.toggle("visible", sidebar.classList.contains("mobile-open"));
+}
+function closeMobileSidebar() {
+  document.getElementById("sidebar").classList.remove("mobile-open");
+  document.getElementById("sidebarOverlay").classList.remove("visible");
+}
+
+// ── Log Filter ──
+var _logFilterQuery = "";
+function filterLogs(query) {
+  _logFilterQuery = (query || "").toLowerCase();
+  var logEl = document.getElementById("logTerminal");
+  if (!logEl) return;
+  var lines = logEl.children;
+  for (var i = 0; i < lines.length; i++) {
+    if (!_logFilterQuery || lines[i].textContent.toLowerCase().indexOf(_logFilterQuery) !== -1) {
+      lines[i].style.display = "";
+    } else {
+      lines[i].style.display = "none";
+    }
+  }
+}
+
+// ── Scroll to Bottom Button ──
+function scrollLogsToBottom() {
+  var logEl = document.getElementById("logTerminal");
+  if (logEl) logEl.scrollTop = logEl.scrollHeight;
+}
+function updateScrollBottomBtn() {
+  var logEl = document.getElementById("logTerminal");
+  var btn = document.getElementById("scrollBottomBtn");
+  if (!logEl || !btn) return;
+  var atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 100;
+  btn.classList.toggle("visible", !atBottom && logEl.scrollHeight > logEl.clientHeight + 100);
+}
+
+// ── Desktop Notifications ──
+var _notifPermissionAsked = false;
+function notifyGateArrival(gateName, ticket) {
+  if (!document.hidden) return;
+  if (typeof Notification === "undefined") return;
+  if (Notification.permission === "granted") {
+    try { new Notification("Gate Ready: " + gateName, { body: ticket + " needs your review", icon: "" }); } catch {}
+  } else if (!_notifPermissionAsked && Notification.permission !== "denied") {
+    _notifPermissionAsked = true;
+    try { Notification.requestPermission(); } catch {}
+  }
+}
+
+// ── Connection Quality ──
+function getConnectionQuality() {
+  if (!isOnline) return "disconnected";
+  var age = Date.now() - lastPollTime;
+  if (age > 30000 || fetchErrorCount > 0) return "degraded";
+  return "good";
+}
+function updateConnectionIndicator() {
+  var dot = document.getElementById("connDot");
+  var label = document.getElementById("connLabel");
+  if (!dot) return;
+  var q = getConnectionQuality();
+  dot.className = "conn-dot " + q;
+  if (label) {
+    var labels = { good: "Online", degraded: "Degraded", disconnected: "Offline" };
+    label.textContent = labels[q] || "Unknown";
+  }
+}
 
 // Y14: javascript: URL prevention
 function safeHref(url) {
@@ -1644,6 +2830,11 @@ function onFetchError() {
  */
 function classifiedFetch(url, options, timeoutMs) {
   timeoutMs = timeoutMs || 10000;
+  // Auto-inject API token for all /api/ requests
+  if (url.indexOf("/api/") === 0) {
+    var sep = url.indexOf("?") === -1 ? "?" : "&";
+    url = url + sep + "token=" + encodeURIComponent(API_TOKEN);
+  }
   var controller = new AbortController();
   var timer = setTimeout(function() { controller.abort(); }, timeoutMs);
   var opts = Object.assign({}, options || {}, { signal: controller.signal });
@@ -1793,6 +2984,15 @@ function hideShortcutsModal() {
   document.getElementById("shortcutsModal").className = "shortcuts-modal-overlay";
   releaseFocusTrap();
 }
+// Cmd+K / Ctrl+K: focus ticket input (works even when in input)
+document.addEventListener("keydown", function(e) {
+  if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+    e.preventDefault();
+    var input = document.getElementById("ticket");
+    if (input) { input.focus(); input.select(); }
+    return;
+  }
+});
 document.addEventListener("keydown", function(e) {
   var tag = (e.target.tagName || "").toLowerCase();
   if (tag === "input" || tag === "textarea" || tag === "select" || e.target.isContentEditable) return;
@@ -1877,6 +3077,65 @@ var logViewerInterval = null;
 let currentStage = null;
 let evtSource = null;
 
+// ── Multi-Ticket State Management ──────────────────────────────
+var ticketStates = {};
+var selectedTicket = null;
+var ticketList = [];
+var ticketLogBuffers = {};
+var DEFAULT_TICKET_STATE = {
+  currentStage: null,
+  isRunning: false,
+  lastStateData: null,
+  reviewData: null,
+  isStuck: false,
+  stuckMinutes: 0,
+  completedGates: null,
+  lastHealth: null,
+  needsApproval: false,
+  activeStep: 0,
+};
+
+function ensureTicketState(ticket) {
+  if (!ticket) return;
+  if (!ticketStates[ticket]) {
+    ticketStates[ticket] = JSON.parse(JSON.stringify(DEFAULT_TICKET_STATE));
+  }
+  if (!ticketLogBuffers[ticket]) {
+    ticketLogBuffers[ticket] = [];
+  }
+}
+
+// Save current global state into the selected ticket's state entry
+function saveTicketState() {
+  if (!selectedTicket) return;
+  ensureTicketState(selectedTicket);
+  var ts = ticketStates[selectedTicket];
+  ts.currentStage = currentStage;
+  ts.isRunning = isRunning;
+  ts.lastStateData = lastStateData;
+  ts.reviewData = reviewData;
+  ts.isStuck = isStuck;
+  ts.stuckMinutes = stuckMinutes;
+  ts.completedGates = completedGates;
+  ts.lastHealth = lastHealth;
+  ts.activeStep = activeStep;
+}
+
+// Restore global state from a ticket's state entry
+function restoreTicketState(ticket) {
+  ensureTicketState(ticket);
+  var ts = ticketStates[ticket];
+  currentStage = ts.currentStage;
+  isRunning = ts.isRunning;
+  lastStateData = ts.lastStateData;
+  reviewData = ts.reviewData;
+  isStuck = ts.isStuck;
+  stuckMinutes = ts.stuckMinutes;
+  completedGates = ts.completedGates;
+  lastHealth = ts.lastHealth;
+  activeStep = ts.activeStep || 0;
+}
+
 // ── Render ──────────────────────────────────────────────────────
 
 function getStepStatus(step) {
@@ -1932,21 +3191,78 @@ function getStageTiming(stage) {
 }
 
 function renderPills() {
-  const grid = document.getElementById("stepsGrid");
-  grid.innerHTML = STEPS.map((s, i) => {
-    const status = getStepStatus(s);
-    const cls = i === activeStep ? "active" : status === "done" ? "done" : status === "active" ? "current" : "";
-    const selected = i === activeStep ? "true" : "false";
-    // O14: Per-stage timing display
-    var timing = getStageTiming(s.stage);
-    var timingHtml = timing ? '<span style="font-size:9px;color:var(--text3);margin-top:1px">' + escHtml(timing) + '</span>' : "";
-    var whoLabel = WHO_LABELS[s.who] || s.who;
-    var ttHtml = '<div class="step-tooltip"><div class="tt-title">' + escHtml(s.title) + '</div><div class="tt-who">' + escHtml(whoLabel) + '</div>' + (timing ? '<div class="tt-timing">' + escHtml(timing) + '</div>' : '') + '</div>';
-    return '<button class="step-pill ' + cls + '" role="tab" aria-selected="' + selected + '" tabindex="' + (i === activeStep ? '0' : '-1') + '" onclick="setActive(' + i + ')" aria-label="Step ' + s.num + ': ' + escHtml(s.title) + (timing ? ' (' + timing + ')' : '') + '">' +
-      ttHtml +
-      '<span class="icon">' + s.icon + '</span>' +
-      '<span class="num">' + s.num + '</span>' + timingHtml + '</button>';
-  }).join("");
+  // Render sidebar nav items
+  var nav = document.getElementById("sidebarNav");
+  if (!nav) return;
+  var html = "";
+  SIDEBAR_MAP.forEach(function(item) {
+    var stageStatus = getSidebarStageStatus(item.stage);
+    var isActive = STEPS[activeStep] && STEPS[activeStep].stage === item.stage;
+    var cls = "sidebar-nav-item" + (isActive ? " active" : "") + " " + stageStatus;
+    var timing = getStageTiming(item.stage);
+    var iconHtml = ICONS[item.icon] || "";
+
+    html += '<button class="' + cls + '" role="tab" aria-selected="' + isActive + '" onclick="setActiveByStage(\\'' + item.stage + '\\')" title="' + escHtml(item.label) + (timing ? ' (' + timing + ')' : '') + '">';
+    html += '<span class="sidebar-dot"></span>';
+    html += '<span class="sidebar-icon">' + iconHtml + '</span>';
+    html += '<span class="sidebar-label">' + escHtml(item.label) + '</span>';
+    if (timing) html += '<span class="sidebar-timing">' + escHtml(timing) + '</span>';
+    if (item.expandable) html += '<span class="sidebar-expand' + (sidebarCodeExpanded ? ' open' : '') + '" onclick="event.stopPropagation();toggleCodeExpand()">' + ICONS.chevronRight + '</span>';
+    html += '</button>';
+
+    // Sub-items for expandable (generate_code)
+    if (item.expandable && item.subItems) {
+      html += '<div class="sidebar-sub-items' + (sidebarCodeExpanded ? '' : ' collapsed') + '">';
+      item.subItems.forEach(function(sub) {
+        var subDone = lastStateData && lastStateData[sub.doneKey];
+        var subActive = !subDone && item.stage === currentStage;
+        // Find the first not-done sub-item to mark as active
+        var isSubActive = false;
+        if (subActive) {
+          var allPriorDone = true;
+          for (var k = 0; k < item.subItems.indexOf(sub); k++) {
+            if (!lastStateData || !lastStateData[item.subItems[k].doneKey]) { allPriorDone = false; break; }
+          }
+          isSubActive = allPriorDone && !subDone;
+        }
+        var subCls = "sidebar-sub-item" + (subDone ? " done" : (isSubActive ? " current" : "")) + (sub.step === activeStep ? " active" : "");
+        var subIcon = ICONS[sub.icon] || "";
+        html += '<button class="' + subCls + '" onclick="setActive(' + sub.step + ')">';
+        html += '<span class="sub-dot"></span>';
+        html += '<span class="sidebar-icon">' + subIcon + '</span>';
+        html += '<span class="sidebar-label">' + escHtml(sub.label) + '</span>';
+        html += '</button>';
+      });
+      html += '</div>';
+    }
+  });
+  // Smart Render: Use DOM morph to patch in-place (preserves focus/hover)
+  morphDOM(nav, html);
+
+  // Also update hidden stepsGrid for backward compat
+  var grid = document.getElementById("stepsGrid");
+  if (grid) grid.style.display = "none";
+}
+
+function getSidebarStageStatus(stage) {
+  if (!currentStage) return "pending";
+  var ci = STAGE_ORDER.indexOf(currentStage);
+  var si = STAGE_ORDER.indexOf(stage);
+  if (currentStage === "done") return "done";
+  if (si < ci) return "done";
+  if (si > ci) return "pending";
+  return "current";
+}
+
+function setActiveByStage(stage) {
+  var idx = findActiveStepForStage(stage);
+  if (idx >= 0) setActive(idx);
+  closeMobileSidebar();
+}
+
+function toggleCodeExpand() {
+  sidebarCodeExpanded = !sidebarCodeExpanded;
+  renderPills();
 }
 
 function renderDetail() {
@@ -1972,44 +3288,101 @@ function renderDetail() {
 
 function renderSummary() {
   const table = document.getElementById("summaryTable");
-  table.innerHTML = STEPS.map((s, i) => {
+  // Map step index to SIDEBAR_MAP icon
+  function getIconForStep(idx) {
+    for (var m = 0; m < SIDEBAR_MAP.length; m++) {
+      var item = SIDEBAR_MAP[m];
+      if (item.steps && item.steps.indexOf(idx) >= 0) {
+        if (item.subItems) {
+          for (var si = 0; si < item.subItems.length; si++) {
+            if (item.subItems[si].step === idx) return ICONS[item.subItems[si].icon] || "";
+          }
+        }
+        return ICONS[item.icon] || "";
+      }
+    }
+    return "";
+  }
+  var summaryHtml = '<div class="summary-grid">' + STEPS.map((s, i) => {
     const status = getStepStatus(s);
-    const cls = status === "done" ? "s-done" : status === "active" ? "s-active" : "s-pending";
+    const dotCls = status === "done" ? "dot-done" : status === "active" ? "dot-active" : "dot-pending";
     const label = status === "done" ? "Done" : status === "active" ? "Active" : "Pending";
-    return '<div class="summary-row" onclick="setActive(' + i + ')">' +
-      '<span class="s-icon">' + s.icon + '</span>' +
-      '<span class="s-title">' + s.title + '</span>' +
-      '<span class="s-status ' + cls + '">' + label + '</span>' +
+    const timing = getStageTiming(s.stage);
+    const icon = getIconForStep(i);
+    return '<div class="summary-card glass-card" onclick="setActive(' + i + ')">' +
+      '<div class="summary-card-header">' +
+        '<span class="summary-card-icon">' + icon + '</span>' +
+        '<span class="summary-card-title">' + escHtml(s.title) + '</span>' +
+      '</div>' +
+      '<div class="summary-card-footer">' +
+        '<span class="summary-card-dot ' + dotCls + '"></span>' +
+        '<span class="summary-card-status">' + label + '</span>' +
+        (timing ? '<span class="summary-card-timing">' + escHtml(timing) + '</span>' : '') +
+      '</div>' +
     '</div>';
-  }).join("");
+  }).join("") + '</div>';
+  // Smart Render: Use DOM morph to patch in-place (preserves scroll position)
+  morphDOM(table, summaryHtml);
 }
 
 function render() {
-  renderPills();
-  renderDetail();
-  renderSummary();
-  renderReviewPanel();
-  renderBanners();
-  renderStuckBanner();
-  renderApprovalStatus();
-  renderTestResults();
-  const badge = document.getElementById("statusBadge");
-  badge.className = "header-status " + (isRunning ? "running" : "idle");
-  badge.textContent = isRunning ? "Running" : "Idle";
-  document.getElementById("btnStart").style.display = isRunning ? "none" : "";
-  document.getElementById("btnStop").style.display = isRunning ? "" : "none";
-  document.getElementById("btnStart").disabled = isRunning;
-  // O9: Show context injection panel only when agent is running
-  document.getElementById("contextInjectPanel").style.display = isRunning ? "" : "none";
-  // O4: Show log viewer panel when there is a ticket with state
-  var hasState = currentStage !== null;
-  document.getElementById("logViewerPanel").style.display = hasState ? "" : "none";
-  // Enhancement 3: Progress bar
-  updateProgressBar();
-  // Enhancement 10: Heartbeat
-  updateHeartbeat();
-  // Sub-stage progress pills
-  renderSubStageProgress();
+  var _renderFns = [
+    ["renderPills", renderPills],
+    ["renderDetail", renderDetail],
+    ["renderSummary", renderSummary],
+    ["renderReviewPanel", renderReviewPanel],
+    ["renderBanners", renderBanners],
+    ["renderStuckBanner", renderStuckBanner],
+    ["renderApprovalStatus", renderApprovalStatus],
+    ["renderTestResults", renderTestResults],
+    ["renderEmptyState", renderEmptyState],
+    ["renderAgentActivity", renderAgentActivity],
+  ];
+  var _firstError = null;
+  var _skipped = 0;
+  for (var i = 0; i < _renderFns.length; i++) {
+    var _name = _renderFns[i][0];
+    // Layer 1: Dirty-flag check — skip renderer if inputs unchanged
+    var _keyFn = _keyFunctions[_name];
+    if (_keyFn) {
+      var _key = _keyFn();
+      if (!_dirtyCheck(_name, _key)) { _skipped++; continue; }
+    }
+    try { _renderFns[i][1](); } catch (e) {
+      console.error("Render error in " + _name + ":", e);
+      if (!_firstError) _firstError = _name + ": " + (e.message || e);
+    }
+  }
+  try {
+    var badge = document.getElementById("statusBadge");
+    badge.className = "topbar-status " + (isRunning ? "running" : "idle");
+    badge.textContent = isRunning ? "Running" : "Idle";
+    document.getElementById("btnStart").style.display = isRunning ? "none" : "";
+    document.getElementById("btnStop").style.display = isRunning ? "" : "none";
+    document.getElementById("btnStart").disabled = isRunning;
+    document.getElementById("contextInjectPanel").style.display = isRunning ? "" : "none";
+    var hasState = currentStage !== null;
+    document.getElementById("logViewerPanel").style.display = hasState ? "" : "none";
+    updateProgressBar();
+    updateHeartbeat();
+    renderSubStageProgress();
+    updateConnectionIndicator();
+  } catch (e) {
+    console.error("Render error in statusUpdate:", e);
+    if (!_firstError) _firstError = "statusUpdate: " + (e.message || e);
+  }
+  if (_firstError) showToast("UI render error: " + _firstError, "error");
+}
+
+// ── Empty State ──
+function renderEmptyState() {
+  var el = document.getElementById("emptyState");
+  if (!el) return;
+  var showEmpty = !currentStage && !isRunning;
+  el.style.display = showEmpty ? "" : "none";
+  // Also hide detail card when showing empty state
+  var detail = document.getElementById("detailCard");
+  if (detail) detail.style.display = showEmpty ? "none" : "";
 }
 
 // ── Sub-stage progress pills ──
@@ -2095,10 +3468,16 @@ function renderBanners() {
   var warnEl = document.getElementById("warningBanner");
   if (!lastStateData) { errEl.innerHTML = ""; warnEl.innerHTML = ""; return; }
   if (lastStateData._lastError) {
-    errEl.innerHTML = '<div class="banner-error banner-enter">Error: ' + escHtml(lastStateData._lastError) + ' <span class="copy-btn" onclick="copyToClipboard(this.parentNode.textContent)" title="Copy error" style="display:inline-flex;vertical-align:middle">&#x2398;</span></div>';
+    var errObj = lastStateData._lastError;
+    var errMsg = typeof errObj === "string" ? errObj : (errObj.message || errObj.stage || JSON.stringify(errObj));
+    if (typeof errObj === "object" && errObj.stage && errObj.message) errMsg = "[" + errObj.stage + "] " + errObj.message;
+    errEl.innerHTML = '<div class="banner-error banner-enter">Error: ' + escHtml(errMsg) + ' <span class="copy-btn" onclick="copyToClipboard(this.parentNode.textContent)" title="Copy error" style="display:inline-flex;vertical-align:middle">&#x2398;</span></div>';
   } else { errEl.innerHTML = ""; }
   if (lastStateData._warnings && lastStateData._warnings.length > 0) {
-    var items = lastStateData._warnings.map(function(w) { return "<li>" + escHtml(w) + "</li>"; }).join("");
+    var items = lastStateData._warnings.map(function(w) {
+      if (typeof w === "string") return "<li>" + escHtml(w) + "</li>";
+      return "<li>" + escHtml(w.message || w.stage || JSON.stringify(w)) + "</li>";
+    }).join("");
     warnEl.innerHTML = '<div class="banner-warning">Warnings:<ul>' + items + '</ul></div>';
   } else { warnEl.innerHTML = ""; }
 }
@@ -2216,6 +3595,11 @@ function nav(d) { setActive(Math.max(0, Math.min(STEPS.length - 1, activeStep + 
 const logEl = document.getElementById("logTerminal");
 let logLines = 0;
 
+// Wire up scroll listener for scroll-to-bottom button
+if (logEl) {
+  logEl.addEventListener("scroll", function() { updateScrollBottomBtn(); });
+}
+
 function appendLog(entry) {
   const div = document.createElement("div");
   div.className = "log-line " + (entry.type || "stdout");
@@ -2224,6 +3608,10 @@ function appendLog(entry) {
   div.style.cursor = "pointer";
   div.title = "Click to copy";
   div.onclick = function() { copyToClipboard(div.textContent); };
+  // Apply current log filter
+  if (_logFilterQuery && div.textContent.toLowerCase().indexOf(_logFilterQuery) === -1) {
+    div.style.display = "none";
+  }
   logEl.appendChild(div);
   while (logEl.children.length > 500) logEl.removeChild(logEl.firstChild);
   logLines++;
@@ -2231,6 +3619,7 @@ function appendLog(entry) {
   // Auto-scroll only when user is at bottom
   var isAtBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 30;
   if (isAtBottom) logEl.scrollTop = logEl.scrollHeight;
+  updateScrollBottomBtn();
 }
 
 // ── SSE connection (Robust: auth, reconnect, cross-tab, offline) ──
@@ -2265,7 +3654,17 @@ function connectSSE() {
   evtSource.addEventListener("log", function(e) {
     try {
       var data = JSON.parse(e.data);
-      appendLog(data);
+      // Store in per-ticket log buffer
+      var logTicket = data.ticket || null;
+      if (logTicket) {
+        if (!ticketLogBuffers[logTicket]) ticketLogBuffers[logTicket] = [];
+        ticketLogBuffers[logTicket].push(data);
+        if (ticketLogBuffers[logTicket].length > 500) ticketLogBuffers[logTicket].shift();
+      }
+      // Only display if for selected ticket or system message
+      if (logTicket === selectedTicket || logTicket === null) {
+        appendLog(data);
+      }
       // Broadcast to other tabs
       if (typeof crossTab !== "undefined") crossTab.send("sse:log", data);
     } catch {}
@@ -2274,8 +3673,17 @@ function connectSSE() {
   evtSource.addEventListener("status", function(e) {
     try {
       var data = JSON.parse(e.data);
-      isRunning = data.running;
-      render();
+      // Always update the per-ticket state
+      if (data.ticket) {
+        ensureTicketState(data.ticket);
+        ticketStates[data.ticket].isRunning = data.running;
+      }
+      // Only update globals if for selected ticket
+      if (!data.ticket || data.ticket === selectedTicket) {
+        isRunning = data.running;
+        scheduleRender();
+      }
+      renderTicketTabs();
       // Broadcast to other tabs
       if (typeof crossTab !== "undefined") crossTab.send("sse:status", data);
     } catch {}
@@ -2349,27 +3757,37 @@ async function start() {
     const res = await authPost("/api/start", { ticket });
     const data = await res.json();
     if (!data.ok) { showToast(data.error, "error"); setButtonLoading(btnS, false, "Start Agent"); }
-    else { isRunning = true; showToast("Agent started for " + ticket, "success"); render(); }
+    else {
+      // Add to ticket list and switch to it
+      ensureTicketState(ticket);
+      if (ticketList.indexOf(ticket) === -1) ticketList.push(ticket);
+      selectedTicket = ticket;
+      isRunning = true;
+      showToast("Agent started for " + ticket, "success");
+      renderTicketTabs();
+      render();
+    }
   } catch (e) { showToast("Start failed: " + e.message, "error"); setButtonLoading(btnS, false, "Start Agent"); }
 }
 
 async function stop() {
-  var ticket = document.getElementById("ticket").value.trim() || "";
-  if (!confirm("Stop the agent" + (ticket ? " for " + ticket : "") + "?")) return;
-  var btnSt = document.getElementById("btnStop");
-  setButtonLoading(btnSt, true, "Stopping...");
-  try {
-    await authPost("/api/stop", { ticket: ticket });
-    isRunning = false;
-    showToast("Agent stopped", "info");
-    render();
-  } catch (e) { showToast("Stop failed: " + e.message, "error"); setButtonLoading(btnSt, false, "Stop"); }
+  var ticket = selectedTicket || document.getElementById("ticket").value.trim() || "";
+  showConfirmDialog("Stop Agent?", "This will terminate the running pipeline" + (ticket ? " for " + ticket : "") + ".", "Stop Agent", async function() {
+    var btnSt = document.getElementById("btnStop");
+    setButtonLoading(btnSt, true, "Stopping...");
+    try {
+      await authPost("/api/stop", { ticket: ticket });
+      isRunning = false;
+      saveTicketState();
+      showToast("Agent stopped", "info");
+      render();
+    } catch (e) { showToast("Stop failed: " + e.message, "error"); setButtonLoading(btnSt, false, "Stop"); }
+  });
 }
 
 async function reset() {
-  const ticket = document.getElementById("ticket").value.trim() || "";
-  if (!confirm("Reset state for " + ticket + "? This clears all progress.")) return;
-  try {
+  const ticket = selectedTicket || document.getElementById("ticket").value.trim() || "";
+  showConfirmDialog("Reset Agent?", "This clears all progress for " + (ticket || "the current ticket") + ". This cannot be undone.", "Reset", async function() { try {
     await authPost("/api/reset", { ticket });
     currentStage = null;
     activeStep = 0;
@@ -2384,25 +3802,33 @@ async function reset() {
     reviewData = null;
     renderReviewPanel();
     lastStateData = null;
+    saveTicketState();
     showToast("State reset for " + ticket, "info");
     render();
   } catch (e) { showToast("Reset failed: " + e.message, "error"); }
+  });
 }
 
 // O7: Skip current stage (manual advance)
 async function skipStage() {
-  var ticket = document.getElementById("ticket").value.trim() || "";
+  var ticket = selectedTicket || document.getElementById("ticket").value.trim() || "";
   var stage = currentStage || "unknown";
-  if (!confirm("Skip stage '" + stage + "' for " + ticket + "?\\n\\nThis sets _force_advance=true, which the agent checks to advance past the current gate.\\n\\nRequires ALLOW_STAGE_SKIP=true on server.")) return;
-  try {
-    var btnSkip = document.getElementById("btnSkipStage");
-    setButtonLoading(btnSkip, true, "Skipping...");
-    var res = await authPost("/api/skip-stage", { ticket: ticket, confirm: true });
-    var data = await res.json();
-    setButtonLoading(btnSkip, false, "Skip Stage");
-    if (!data.ok) showToast("Skip failed: " + data.error, "error");
-    else { showToast("Stage skip requested. Agent will advance on next poll.", "success"); pollState(); }
-  } catch (e) { showToast("Skip failed: " + e.message, "error"); }
+  showConfirmDialog(
+    "Skip Stage?",
+    "Skip stage '" + stage + "' for " + escHtml(ticket) + "? This sets _force_advance=true, which the agent checks to advance past the current gate. Requires ALLOW_STAGE_SKIP=true on server.",
+    "Skip Stage",
+    async function() {
+      try {
+        var btnSkip = document.getElementById("btnSkipStage");
+        setButtonLoading(btnSkip, true, "Skipping...");
+        var res = await authPost("/api/skip-stage", { ticket: ticket, confirm: true });
+        var data = await res.json();
+        setButtonLoading(btnSkip, false, "Skip Stage");
+        if (!data.ok) showToast("Skip failed: " + data.error, "error");
+        else { saveTicketState(); showToast("Stage skip requested. Agent will advance on next poll.", "success"); pollState(); }
+      } catch (e) { showToast("Skip failed: " + e.message, "error"); }
+    }
+  );
 }
 
 // ── LCS Diff Algorithm ──────────────────────────────────────────
@@ -2531,6 +3957,7 @@ function expandCollapse(key) {
 }
 
 function escHtml(s) {
+  if (typeof s !== "string") s = s == null ? "" : String(s);
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
@@ -2821,9 +4248,15 @@ function collectAllComments() {
 function renderDiffTable(oldContent, newContent, isCreate) {
   var table = document.getElementById("diffTable");
   table.className = "diff-table";
+  // Smart Render: Save scroll position before innerHTML rebuild
+  var _savedScrollTop = table.parentElement ? table.parentElement.scrollTop : 0;
+  var _scrollParent = table.parentElement;
   // Split mode delegation
   if (diffMode === "split") {
-    return renderSplitDiffTable(oldContent, newContent, isCreate);
+    var _splitResult = renderSplitDiffTable(oldContent, newContent, isCreate);
+    // Restore scroll position after split diff render
+    if (_scrollParent) requestAnimationFrame(function() { _scrollParent.scrollTop = _savedScrollTop; });
+    return _splitResult;
   }
   var fp = getCurrentFilePath();
   if (isCreate) {
@@ -2840,6 +4273,8 @@ function renderDiffTable(oldContent, newContent, isCreate) {
         '<td class="line-content">' + escHtml(line) + '</td>' +
       '</tr>' + commentHtml + formHtml;
     }).join("");
+    // Smart Render: Restore scroll after create-file diff innerHTML
+    if (_scrollParent) requestAnimationFrame(function() { _scrollParent.scrollTop = _savedScrollTop; });
     return;
   }
   var oldLines = (oldContent || "").replace(/\\r\\n/g, "\\n").replace(/\\r/g, "\\n").split("\\n");
@@ -2893,6 +4328,8 @@ function renderDiffTable(oldContent, newContent, isCreate) {
       '<td class="line-content">' + contentHtml + '</td>' +
     '</tr>' + commentHtml + formHtml;
   }).join("");
+  // Smart Render: Restore scroll after unified diff innerHTML rebuild
+  if (_scrollParent) requestAnimationFrame(function() { _scrollParent.scrollTop = _savedScrollTop; });
 }
 
 function formatPlan(text) {
@@ -2900,7 +4337,7 @@ function formatPlan(text) {
   // Y1: Escape capture groups before insertion to prevent XSS
   s = s.replace(/^## (.+)$/gm, function(m, g1) { return '<div style="font-size:14px;font-weight:700;color:var(--blue);margin:14px 0 6px">' + escHtml(g1) + '</div>'; });
   s = s.replace(/^### (.+)$/gm, function(m, g1) { return '<div style="font-size:13px;font-weight:600;color:var(--text);margin:10px 0 4px">' + escHtml(g1) + '</div>'; });
-  s = s.replace(/\*\*(.+?)\*\*/g, function(m, g1) { return '<strong style="color:var(--text)">' + escHtml(g1) + '</strong>'; });
+  s = s.replace(/\\*\\*(.+?)\\*\\*/g, function(m, g1) { return '<strong style="color:var(--text)">' + escHtml(g1) + '</strong>'; });
   var tick = String.fromCharCode(96);
   var codeRe = new RegExp(tick + '([^' + tick + ']+)' + tick, 'g');
   s = s.replace(codeRe, function(m, g1) { return '<code style="background:var(--bg);padding:1px 5px;border-radius:3px;color:var(--green)">' + escHtml(g1) + '</code>'; });
@@ -2993,7 +4430,7 @@ function showRefineForm() {
 
 async function submitRefine() {
   if (!reviewData || !reviewData.gate) return;
-  var ticket = document.getElementById("ticket").value.trim() || "";
+  var ticket = selectedTicket || document.getElementById("ticket").value.trim() || "";
   var gate = GATE_STAGES[reviewData.gate] || reviewData.gate;
   var instructions = document.getElementById("refineText").value.trim();
   if (!instructions) return showToast("Please provide refinement instructions", "error");
@@ -3005,6 +4442,7 @@ async function submitRefine() {
   btnRej.disabled = true;
   try {
     await authPost("/api/refine", { ticket: ticket, gate: gate, instructions: instructions });
+    saveTicketState();
     document.getElementById("reviewStatus").textContent = "Refining plan...";
     document.getElementById("reviewStatus").style.color = "var(--purple)";
     document.getElementById("refineFeedback").className = "";
@@ -3056,6 +4494,14 @@ function renderReviewPanel() {
   if (!reviewData || !reviewData.gate) return;
 
   panel.className = "visible review-panel-enter";
+  // Smart Render: Only scroll to review panel on NEW gate arrival, not every render
+  if (_lastScrolledGate !== reviewData.gate) {
+    _lastScrolledGate = reviewData.gate;
+    setTimeout(function() { panel.scrollIntoView({ behavior: "smooth", block: "nearest" }); }, 100);
+  }
+  // Desktop notification for gate arrival
+  var ticket = document.getElementById("ticket").value.trim() || "";
+  notifyGateArrival(reviewData.gate.replace(/_/g, " "), ticket);
 
   if (reviewData.gate === "explore_plan") {
     badge.textContent = "Plan Review";
@@ -3292,9 +4738,10 @@ function selectDiffFile(idx) {
 var _fetchReviewInProgress = false;
 async function fetchReview() {
   if (_fetchReviewInProgress) return; // Prevent concurrent fetches
+  const ticket = selectedTicket || document.getElementById("ticket").value.trim() || "";
+  if (!ticket) return; // No ticket — skip API call
   _fetchReviewInProgress = true;
   try {
-    const ticket = document.getElementById("ticket").value.trim() || "";
     // Show loading state if no review data yet
     if (!reviewData || !reviewData.gate) {
       var panel = document.getElementById("reviewPanel");
@@ -3306,10 +4753,16 @@ async function fetchReview() {
     const res = await fetchWithTimeout("/api/review?ticket=" + encodeURIComponent(ticket));
     const data = await res.json();
     const hadGate = reviewData && reviewData.gate;
-    reviewData = data;
-    // Reset file index when gate changes
-    if (!hadGate || hadGate !== data.gate) reviewFileIdx = 0;
-    renderReviewPanel();
+    // Smart Render: Only re-render review if data actually changed
+    var _revJSON = JSON.stringify(data);
+    if (_revJSON !== _previousReviewJSON) {
+      _previousReviewJSON = _revJSON;
+      reviewData = data;
+      // Reset file index when gate changes
+      if (!hadGate || hadGate !== data.gate) reviewFileIdx = 0;
+      saveTicketState();
+      renderReviewPanel();
+    }
     onFetchSuccess();
   } catch { onFetchError(); }
   _fetchReviewInProgress = false;
@@ -3331,7 +4784,7 @@ function showRejectForm() {
 // U9: Double-submit prevention
 async function approveGate() {
   if (!reviewData || !reviewData.gate) return;
-  const ticket = document.getElementById("ticket").value.trim() || "";
+  const ticket = selectedTicket || document.getElementById("ticket").value.trim() || "";
   const gate = GATE_STAGES[reviewData.gate] || reviewData.gate;
   const btnA = document.getElementById("btnApprove");
   const btnR = document.getElementById("btnReject");
@@ -3418,7 +4871,7 @@ function closeRejectPreview() {
 async function confirmReject() {
   closeRejectPreview();
   if (!reviewData || !reviewData.gate) return;
-  const ticket = document.getElementById("ticket").value.trim() || "";
+  const ticket = selectedTicket || document.getElementById("ticket").value.trim() || "";
   const gate = GATE_STAGES[reviewData.gate] || reviewData.gate;
   var typedFeedback = document.getElementById("rejectText").value.trim();
   var inlineText = collectAllComments();
@@ -3471,7 +4924,8 @@ async function persistComments() {
 // U1: Load comments from server on page load
 async function loadPersistedComments() {
   try {
-    var ticket = document.getElementById("ticket").value.trim() || "";
+    var ticket = selectedTicket || document.getElementById("ticket").value.trim() || "";
+    if (!ticket) return;
     var res = await fetchWithTimeout("/api/comments?ticket=" + encodeURIComponent(ticket));
     var data = await res.json();
     if (data.comments && Object.keys(data.comments).length > 0) {
@@ -3483,7 +4937,7 @@ async function loadPersistedComments() {
 // ── O9: Context injection ───────────────────────────────────────
 
 async function injectContext() {
-  var ticket = document.getElementById("ticket").value.trim() || "";
+  var ticket = selectedTicket || document.getElementById("ticket").value.trim() || "";
   var textarea = document.getElementById("contextInjectText");
   var context = textarea.value.trim();
   var statusEl = document.getElementById("injectStatus");
@@ -3495,6 +4949,7 @@ async function injectContext() {
     var res = await authPost("/api/inject-context", { ticket: ticket, context: context });
     var data = await res.json();
     if (data.ok) {
+      saveTicketState();
       statusEl.textContent = "Context injected at " + new Date().toLocaleTimeString();
       statusEl.style.color = "var(--green)";
       textarea.value = "";
@@ -3556,17 +5011,16 @@ async function fetchLogFile() {
 }
 
 // ── Poll state for step progress ─────────────────────────────────
-
-// W1/W2: Completed gates tracking (from server)
 var completedGates = null;
-// O12: Last health check result
 var lastHealth = null;
 
 async function pollState() {
   try {
-    const ticket = document.getElementById("ticket").value.trim() || "";
+    var ticket = selectedTicket || document.getElementById("ticket").value.trim() || "";
+    if (!ticket) return;
     const res = await fetchWithTimeout("/api/state?ticket=" + encodeURIComponent(ticket));
     const data = await res.json();
+    // Write results to per-ticket state via the shims
     if (data.state) {
       const prev = currentStage;
       currentStage = data.state.stage;
@@ -3602,12 +5056,21 @@ async function pollState() {
       isRunning = false;
     }
     lastPollTime = Date.now();
-    render();
+    // Persist updated globals back to per-ticket state map
+    saveTicketState();
+    // Smart Render: Only schedule render if data actually changed
+    var _pollJSON = JSON.stringify(data);
+    if (_pollJSON !== _previousPollJSON) {
+      _previousPollJSON = _pollJSON;
+      renderAgentActivity();
+      scheduleRender();
+    }
     onFetchSuccess();
 
     // Broadcast state to other tabs for sync
     if (typeof crossTab !== "undefined" && crossTab.isLeader) {
       crossTab.send("state:sync", {
+        ticket: selectedTicket,
         currentStage: currentStage,
         isRunning: isRunning,
         lastStateData: lastStateData,
@@ -3741,12 +5204,33 @@ var crossTab = (function() {
 
   // Listen for SSE data from leader tab
   on("sse:log", function(data) {
-    if (!_isLeader) appendLog(data);
+    if (!_isLeader) {
+      // Store in per-ticket buffer
+      var logTicket = data.ticket || null;
+      if (logTicket) {
+        if (!ticketLogBuffers[logTicket]) ticketLogBuffers[logTicket] = [];
+        ticketLogBuffers[logTicket].push(data);
+        if (ticketLogBuffers[logTicket].length > 500) ticketLogBuffers[logTicket].shift();
+      }
+      // Only display if for selected ticket or system message
+      if (logTicket === selectedTicket || logTicket === null) {
+        appendLog(data);
+      }
+    }
   });
   on("sse:status", function(data) {
     if (!_isLeader) {
-      isRunning = data.running;
-      render();
+      // Always update per-ticket state
+      if (data.ticket) {
+        ensureTicketState(data.ticket);
+        ticketStates[data.ticket].isRunning = data.running;
+      }
+      // Only update globals if matching selected ticket
+      if (!data.ticket || data.ticket === selectedTicket) {
+        isRunning = data.running;
+        scheduleRender();
+      }
+      renderTicketTabs();
       showSyncedToast("status update");
     }
   });
@@ -3760,36 +5244,48 @@ var crossTab = (function() {
 
   // Broadcast gate actions to prevent double-approve
   on("gate:approved", function(data) {
-    showSyncedToast("Gate " + (data.gate || "") + " approved");
-    // Disable approve/reject buttons immediately to prevent double-submit
-    var btnA = document.getElementById("btnApprove");
-    var btnR = document.getElementById("btnReject");
-    if (btnA) btnA.disabled = true;
-    if (btnR) btnR.disabled = true;
-    fetchReview();
-    announceToScreenReader("Gate approved from another tab");
+    // Only disable buttons if matching selected ticket
+    if (!data.ticket || data.ticket === selectedTicket) {
+      showSyncedToast("Gate " + (data.gate || "") + " approved");
+      var btnA = document.getElementById("btnApprove");
+      var btnR = document.getElementById("btnReject");
+      if (btnA) btnA.disabled = true;
+      if (btnR) btnR.disabled = true;
+      fetchReview();
+      announceToScreenReader("Gate approved from another tab");
+    }
   });
   on("gate:rejected", function(data) {
-    showSyncedToast("Gate " + (data.gate || "") + " rejected");
-    fetchReview();
-    announceToScreenReader("Gate rejected from another tab");
+    if (!data.ticket || data.ticket === selectedTicket) {
+      showSyncedToast("Gate " + (data.gate || "") + " rejected");
+      fetchReview();
+      announceToScreenReader("Gate rejected from another tab");
+    }
   });
 
-  // Broadcast state sync for multi-tab consistency
+  // Broadcast state sync for multi-tab consistency — filter by ticket
   on("state:sync", function(data) {
-    if (data && data.currentStage && data.currentStage !== currentStage) {
+    if (data && data.ticket && data.ticket === selectedTicket && data.currentStage && data.currentStage !== currentStage) {
       currentStage = data.currentStage;
       lastStateData = data.lastStateData || null;
       isRunning = data.isRunning || false;
       var idx = findActiveStepForStage(currentStage);
       if (idx >= 0) activeStep = idx;
-      render();
+      scheduleRender();
       showSyncedToast("state update");
     }
   });
 
   // Cleanup on unload
   window.addEventListener("beforeunload", function() {
+    // E3: Clean up SSE listeners explicitly
+    if (evtSource) {
+      try { evtSource.onopen = null; evtSource.onerror = null; evtSource.close(); } catch {}
+      evtSource = null;
+    }
+    if (pollId) { clearInterval(pollId); pollId = null; }
+    if (reviewId) { clearInterval(reviewId); reviewId = null; }
+    if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
     if (_isLeader) {
       try {
         localStorage.removeItem(LEADER_KEY);
@@ -4344,12 +5840,17 @@ var OFFLINE_QUEUE_MAX = 100;
 function cacheCurrentState() {
   try {
     lastCacheTime = Date.now();
+    // Save current globals to per-ticket state before caching
+    saveTicketState();
     var cacheData = {
       ts: lastCacheTime,
       isRunning: isRunning,
       currentStage: currentStage,
       lastStateData: lastStateData,
       reviewData: reviewData,
+      selectedTicket: selectedTicket,
+      ticketList: ticketList,
+      ticketStates: ticketStates,
     };
     localStorage.setItem("mi-dev-agent-cache", JSON.stringify(cacheData));
   } catch {}
@@ -4367,6 +5868,21 @@ function loadCachedState() {
     currentStage = cache.currentStage || null;
     lastStateData = cache.lastStateData || null;
     reviewData = cache.reviewData || null;
+
+    // Restore per-ticket state from cache
+    if (cache.ticketList && cache.ticketList.length > 0) {
+      ticketList = cache.ticketList;
+    }
+    if (cache.ticketStates) {
+      for (var k in cache.ticketStates) {
+        if (cache.ticketStates.hasOwnProperty(k)) ticketStates[k] = cache.ticketStates[k];
+      }
+    }
+    if (cache.selectedTicket) {
+      selectedTicket = cache.selectedTicket;
+      var inp = document.getElementById("ticket");
+      if (inp && !inp.value) inp.value = selectedTicket;
+    }
 
     if (currentStage) {
       var idx = findActiveStepForStage(currentStage);
@@ -4431,27 +5947,191 @@ function restoreTheme() {
 }
 
 
+// ── Multi-Ticket: Tab Bar, Polling, Switching ───────────────────
+
+function renderTicketTabs() {
+  var container = document.getElementById("ticketTabs");
+  if (!container) return;
+  if (ticketList.length === 0) { container.innerHTML = ""; return; }
+  var html = "";
+  for (var i = 0; i < ticketList.length; i++) {
+    var t = ticketList[i];
+    var ts = ticketStates[t] || {};
+    var isActive = t === selectedTicket;
+    var dotClass = "stopped";
+    if (ts.isRunning && ts.needsApproval) dotClass = "gate";
+    else if (ts.isRunning) dotClass = "running";
+    else if (ts.currentStage === "done") dotClass = "done";
+    var badge = "";
+    if (ts.needsApproval && !isActive) badge = '<span class="ticket-tab-badge"></span>';
+    html += '<div class="ticket-tab' + (isActive ? " active" : "") + '" onclick="switchTicket(\\'' + escHtml(t) + '\\')" title="' + escHtml(t) + '">' +
+      badge +
+      '<span class="ticket-tab-dot ' + dotClass + '"></span>' +
+      '<span>' + escHtml(t) + '</span>' +
+      '<button class="ticket-tab-close" onclick="event.stopPropagation();closeTicketTab(\\'' + escHtml(t) + '\\')" title="Close">&times;</button>' +
+    '</div>';
+  }
+  html += '<button class="ticket-tab-add" onclick="addTicketTab()" title="Start new ticket">+ Add</button>';
+  container.innerHTML = html;
+}
+
+function switchTicket(ticket) {
+  if (ticket === selectedTicket) return;
+  // Save current ticket's global state before switching
+  saveTicketState();
+  selectedTicket = ticket;
+  ensureTicketState(ticket);
+  // Restore the new ticket's state into globals
+  restoreTicketState(ticket);
+  // Update ticket input
+  var inp = document.getElementById("ticket");
+  if (inp) inp.value = ticket;
+  // Clear log terminal and replay from per-ticket buffer
+  var logEl = document.getElementById("logTerminal");
+  if (logEl) {
+    logEl.innerHTML = "";
+    logLines = 0;
+    var buf = ticketLogBuffers[ticket] || [];
+    for (var i = 0; i < buf.length; i++) appendLog(buf[i]);
+  }
+  // Re-derive activeStep from currentStage
+  if (currentStage) {
+    var idx = findActiveStepForStage(currentStage);
+    if (idx >= 0) activeStep = idx;
+  }
+  userSelectedStep = false;
+  // Smart Render: Invalidate all dirty-flag keys on ticket switch to force full re-render
+  _invalidateAll();
+  render();
+  fetchReview();
+  renderTicketTabs();
+  renderAgentActivity();
+}
+
+function addTicketTab() {
+  var inp = document.getElementById("ticket");
+  if (inp) { inp.value = ""; inp.focus(); }
+}
+
+function closeTicketTab(ticket) {
+  var ts = ticketStates[ticket] || {};
+  if (ts.isRunning) {
+    showConfirmDialog("Stop Agent?", "Stop agent for " + escHtml(ticket) + "?", "Stop Agent", function() {
+      authPost("/api/stop", { ticket: ticket }).then(function() {
+        _removeTicketTab(ticket);
+      }).catch(function() { _removeTicketTab(ticket); });
+    });
+  } else {
+    _removeTicketTab(ticket);
+  }
+}
+
+function _removeTicketTab(ticket) {
+  ticketList = ticketList.filter(function(t) { return t !== ticket; });
+  delete ticketStates[ticket];
+  delete ticketLogBuffers[ticket];
+  if (selectedTicket === ticket) {
+    selectedTicket = ticketList.length > 0 ? ticketList[0] : null;
+    if (selectedTicket) {
+      ensureTicketState(selectedTicket);
+      switchTicket(selectedTicket);
+    } else {
+      var logEl = document.getElementById("logTerminal");
+      if (logEl) { logEl.innerHTML = ""; logLines = 0; }
+      render();
+    }
+  }
+  renderTicketTabs();
+}
+
+// Poll all tickets for tab bar overview
+async function pollAllTickets() {
+  try {
+    var res = await fetchWithTimeout("/api/tickets");
+    var data = await res.json();
+    if (!data.ok || !data.tickets) return;
+
+    var serverTickets = data.tickets;
+    var serverTicketIds = serverTickets.map(function(t) { return t.ticket; });
+
+    // Add new tickets to list
+    for (var i = 0; i < serverTickets.length; i++) {
+      var st = serverTickets[i];
+      ensureTicketState(st.ticket);
+      ticketStates[st.ticket].isRunning = st.running;
+      ticketStates[st.ticket].currentStage = st.stage;
+      ticketStates[st.ticket].needsApproval = st.needsApproval;
+      if (ticketList.indexOf(st.ticket) === -1) {
+        ticketList.push(st.ticket);
+      }
+    }
+
+    // Update status of tickets no longer running
+    for (var j = 0; j < ticketList.length; j++) {
+      var tid = ticketList[j];
+      if (serverTicketIds.indexOf(tid) === -1 && ticketStates[tid]) {
+        ticketStates[tid].isRunning = false;
+      }
+    }
+
+    // Auto-switch to ticket needing approval
+    var userInteracting = document.querySelector("textarea:focus, input:focus, .reject-form.visible, .refine-form.visible");
+    if (!userInteracting) {
+      for (var k = 0; k < serverTickets.length; k++) {
+        var at = serverTickets[k];
+        if (at.needsApproval && at.ticket !== selectedTicket) {
+          var prevState = ticketStates[at.ticket] || {};
+          // Only auto-switch if this is newly gated
+          if (!prevState._wasNeedsApproval) {
+            switchTicket(at.ticket);
+            showToast(at.ticket + " needs your approval", "info", 5000);
+          }
+        }
+        if (ticketStates[at.ticket]) ticketStates[at.ticket]._wasNeedsApproval = at.needsApproval;
+      }
+    }
+
+    renderTicketTabs();
+  } catch {}
+}
+
+// Agent activity indicator
+function renderAgentActivity() {
+  var bar = document.getElementById("agentActivityBar");
+  if (!bar) return;
+  var agents = (lastStateData && lastStateData._active_agents) || [];
+  if (agents.length === 0) { bar.style.display = "none"; return; }
+  bar.style.display = "flex";
+  bar.innerHTML = agents.map(function(a) {
+    return '<span class="agent-pill running">' + escHtml(a) + '</span>';
+  }).join("");
+}
+
 // ── Init ────────────────────────────────────────────────────────
 
 var pollId = null;
 var reviewId = null;
+var ticketPollId = null;
 
 // V7: Pause/resume polling when tab is hidden, with leader election
 document.addEventListener("visibilitychange", function() {
   if (document.hidden) {
     if (pollId) { clearInterval(pollId); pollId = null; }
     if (reviewId) { clearInterval(reviewId); reviewId = null; }
+    if (ticketPollId) { clearInterval(ticketPollId); ticketPollId = null; }
     // O4: Pause log viewer polling
     if (logViewerInterval) { clearInterval(logViewerInterval); logViewerInterval = null; }
   } else {
     if (!pollId) pollId = setInterval(pollState, 5000);
     if (!reviewId) reviewId = setInterval(fetchReview, 10000);
+    if (!ticketPollId) ticketPollId = setInterval(pollAllTickets, 5000);
     // O4: Resume log viewer polling if open
     if (logViewerOpen && !logViewerInterval) {
       logViewerInterval = setInterval(fetchLogFile, 15000);
       fetchLogFile();
     }
     // Immediately fetch when becoming visible again
+    pollAllTickets();
     pollState();
     fetchReview();
   }
@@ -4494,13 +6174,27 @@ document.addEventListener("visibilitychange", function() {
   // Load persisted comments
   await loadPersistedComments();
 
-  // Initial data fetch
+  // Poll all tickets first, then set selectedTicket
+  try {
+    await pollAllTickets();
+    // Set selectedTicket to first available ticket, or null
+    if (ticketList.length > 0 && !selectedTicket) {
+      selectedTicket = ticketList[0];
+      ensureTicketState(selectedTicket);
+      var inp = document.getElementById("ticket");
+      if (inp && !inp.value) inp.value = selectedTicket;
+    }
+  } catch {}
+
+  // Initial data fetch for selected ticket
   try {
     await pollState();
     await fetchReview();
   } catch {}
 
   hideSkeletons();
+  renderTicketTabs();
+  renderAgentActivity();
   render();
 
   // Handle initial route
@@ -4509,6 +6203,7 @@ document.addEventListener("visibilitychange", function() {
   // Start polling intervals
   pollId = setInterval(pollState, 5000);
   reviewId = setInterval(fetchReview, 10000);
+  ticketPollId = setInterval(pollAllTickets, 5000);
 
   // Enhancement 10: Heartbeat timer + stale age
   heartbeatTimer = setInterval(function() {
@@ -4517,7 +6212,8 @@ document.addEventListener("visibilitychange", function() {
   }, 5000);
 })();
 </script>
-</body>`;
+</body>
+</html>`;
 }
 
 module.exports = { getHTML };

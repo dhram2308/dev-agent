@@ -266,11 +266,19 @@ async function main() {
   }
 
   // Clone/update local repo cache for fast file reads
+  // If WORKTREE_PATH is set (spawned by server with per-ticket worktree), use it directly
   try {
-    cfg.localRepo = await ensureLocalRepo();
-    if (cfg.localRepo) {
+    if (process.env.WORKTREE_PATH) {
+      cfg.localRepo = process.env.WORKTREE_PATH;
+      logInfo(`Using worktree path: ${cfg.localRepo}`);
       const tree = localGetTree(cfg.localRepo);
       logOk(`Local tree: ${tree.length} entries`);
+    } else {
+      cfg.localRepo = await ensureLocalRepo();
+      if (cfg.localRepo) {
+        const tree = localGetTree(cfg.localRepo);
+        logOk(`Local tree: ${tree.length} entries`);
+      }
     }
   } catch (e) {
     logWarn(`Local repo setup failed: ${e.message} — using GitLab API`);

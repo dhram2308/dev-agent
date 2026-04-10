@@ -56,6 +56,20 @@ async function pushCodeToGitLab(state, changes) {
   }
 
   if (!state.data.code_committed) {
+    // Verify branch exists before committing (may be corrupt from prior failed attempt)
+    const branchInfo = await gl.getBranch(branch);
+    if (!branchInfo) {
+      logWarn(`Branch ${branch} not found on remote — recreating...`);
+      state.data.code_branch = null;
+      save(state);
+      const sourceBranch = state.data.parentBranch || cfg.branch.ts;
+      await gl.createBranch(branch, sourceBranch);
+      state.data.code_branch = branch;
+      state.data.code_source_branch = sourceBranch;
+      save(state);
+      logOk(`Branch recreated: ${branch}`);
+    }
+
     // M5: Validate summary non-empty before building commit message
     const commitSummary = (state.data.ticket.summary || "").trim();
     if (!commitSummary) {
@@ -99,11 +113,43 @@ async function pushCodeToGitLab(state, changes) {
       if (c.action !== "delete") entry.content = c.content;
       return entry;
     });
-    await gl.commit(branch, commitMsg, actions,
-      cfg.git.authorName, cfg.git.authorEmail);
+
+    // Attempt commit with inline recovery for known GL errors
+    let commitResult;
+    try {
+      commitResult = await gl.commit(branch, commitMsg, actions,
+        cfg.git.authorName, cfg.git.authorEmail);
+    } catch (commitErr) {
+      const errStr = commitErr.message || "";
+      // Handle "file already exists" — switch create→update and retry
+      if (/already exists/i.test(errStr) && actions.some(a => a.action === "create")) {
+        logWarn("Some files already exist on branch — switching create → update and retrying commit");
+        for (const a of actions) {
+          if (a.action === "create") a.action = "update";
+        }
+        commitResult = await gl.commit(branch, commitMsg, actions,
+          cfg.git.authorName, cfg.git.authorEmail);
+      }
+      // Handle "not on a branch" — branch is corrupt, delete and recreate
+      else if (/only create or edit files when you are on a branch/i.test(errStr)) {
+        logWarn("Branch appears corrupt — deleting and recreating...");
+        try { await gl.deleteBranch(branch); } catch (e) {
+          logWarn(`deleteBranch failed: ${e.message}`);
+        }
+        const sourceBranch = state.data.parentBranch || cfg.branch.ts;
+        await gl.createBranch(branch, sourceBranch);
+        logOk(`Branch recreated: ${branch}`);
+        commitResult = await gl.commit(branch, commitMsg, actions,
+          cfg.git.authorName, cfg.git.authorEmail);
+      }
+      else {
+        throw commitErr;
+      }
+    }
     state.data.code_committed = true;
+    state.data._last_commit_sha = commitResult.id || null;
     save(state);
-    logOk(`Committed as ${cfg.git.authorName} <${cfg.git.authorEmail}>`);
+    logOk(`Committed ${commitResult.id ? commitResult.id.substring(0, 8) + " " : ""}as ${cfg.git.authorName} <${cfg.git.authorEmail}>`);
   }
 
   // GQ4: Merge conflict detection before MR creation
