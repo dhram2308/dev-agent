@@ -1,0 +1,19 @@
+{
+  "name": "@mi/backend",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/server/http-server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@mi/shared": "*"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0",
+    "@types/node": "^20.0.0"
+  }
+}

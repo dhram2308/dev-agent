@@ -1,0 +1,26 @@
+# Build configuration for napi-rs native addons
+# These settings apply to all crates in the workspace
+
+[build]
+# Use all available CPUs for parallel compilation
+jobs = 0
+
+[profile.release]
+# Optimize for size + speed balance (good for native addons)
+opt-level = 2
+# Enable LTO for smaller binaries and better cross-crate inlining
+lto = "thin"
+# Single codegen unit for better optimization (slower compile, faster runtime)
+codegen-units = 1
+# Strip debug symbols in release (napi-rs handles debug separately)
+strip = "symbols"
+
+[profile.dev]
+# Faster dev builds
+opt-level = 0
+debug = true
+
+[target.x86_64-unknown-linux-gnu]
+# Use mold linker if available for faster linking (falls back to default)
+# Uncomment if mold is installed:
+# rustflags = ["-C", "link-arg=-fuse-ld=mold"]

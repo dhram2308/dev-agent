@@ -6,6 +6,7 @@ const { save } = require("../lib/state");
 const { jira, jiraUrl } = require("../lib/jira");
 const { slack } = require("../lib/slack");
 const { waitForApproval } = require("../lib/approval");
+const { isChannelEnabled } = require("../lib/notification-config");
 
 async function stageGatePreprodApproval(state) {
   logStep(7, "GATE 2a — Pre-Prod Approval");
@@ -15,19 +16,23 @@ async function stageGatePreprodApproval(state) {
       .map((r) => `${r.ok ? "✅" : "❌"} ${r.name}`)
       .join("\n");
 
-    await jira.addComment(TICKET,
-      `QA Verified\n\n` +
-      `Module status:\n${summary}\n\n` +
-      `QA: ${cfg.urls.qa}\n\n` +
-      `✅ Comment "approved" to promote to Pre-Prod.`,
-    );
+    if (isChannelEnabled("gate_preprod_approval", "jira")) {
+      await jira.addComment(TICKET,
+        `QA Verified\n\n` +
+        `Module status:\n${summary}\n\n` +
+        `QA: ${cfg.urls.qa}\n\n` +
+        `✅ Comment "approved" to promote to Pre-Prod.`,
+      );
+    }
 
-    await slack(
-      `🔔 *Pre-Prod Approval — ${TICKET}*\n` +
-      `QA verified for: *${state.data.ticket.summary}*\n` +
-      `📋 Approve: ${jiraUrl(TICKET)}`,
-      [cfg.slack.ownerId],
-    );
+    if (isChannelEnabled("gate_preprod_approval", "slack")) {
+      await slack(
+        `🔔 *Pre-Prod Approval — ${TICKET}*\n` +
+        `QA verified for: *${state.data.ticket.summary}*\n` +
+        `📋 Approve: ${jiraUrl(TICKET)}`,
+        [cfg.slack.ownerId],
+      );
+    }
 
     state.data.gate2a_posted = true;
     state.data.gate2a_at = new Date().toISOString();

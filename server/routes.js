@@ -49,6 +49,17 @@ try {
   getSlackHealth = require("../lib/slack").getSlackHealth;
 } catch { getSlackHealth = null; }
 
+// Config schema: for /api/config endpoints
+const { CONFIG_SCHEMA } = require("../lib/config-schema");
+
+// Notification config: for /api/notification-config endpoints
+let loadNotificationConfig, saveNotificationConfig;
+try {
+  const nc = require("../lib/notification-config");
+  loadNotificationConfig = nc.loadNotificationConfig;
+  saveNotificationConfig = nc.saveNotificationConfig;
+} catch { loadNotificationConfig = () => ({}); saveNotificationConfig = () => {}; }
+
 const BASE_DIR = path.join(__dirname, "..");
 
 // O7: Stage skip requires env var opt-in
@@ -215,7 +226,7 @@ async function handleRequest(url, request, res, apiToken, html) {
   }
 
   // ── GET /api/logs (SSE) — Robust connection with auth, replay, backpressure ──
-  if (url.pathname === "/api/logs") {
+  if (url.pathname === "/api/logs" || url.pathname === "/events") {
     // registerClient handles: auth, limits, LRU eviction, headers,
     // replay from Last-Event-ID, keepalive, backpressure, cleanup
     registerClient(res, request, url, apiToken);
@@ -688,6 +699,241 @@ async function handleRequest(url, request, res, apiToken, html) {
 
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: true, tickets }));
+    return true;
+  }
+
+  // ── GET /api/config — Return all config vars with values (secrets masked) ──
+  if (url.pathname === "/api/config" && request.method === "GET") {
+    const items = [];
+    for (const [key, schema] of Object.entries(CONFIG_SCHEMA)) {
+      const rawValue = process.env[schema.env];
+      let value = rawValue !== undefined ? rawValue : (schema.default !== undefined ? String(schema.default) : "");
+      // Mask sensitive values — show last 4 chars for identification
+      if (schema.sensitive && rawValue) {
+        value = rawValue.length > 4 ? "****" + rawValue.slice(-4) : "****";
+      }
+      items.push({
+        key,
+        env: schema.env,
+        type: schema.type,
+        value,
+        default: schema.default !== undefined ? String(schema.default) : "",
+        required: !!schema.required,
+        sensitive: !!schema.sensitive,
+        group: schema.group || "",
+        description: schema.description || "",
+        hotReload: !!schema.hotReload,
+        allowed: schema.allowed || null,
+      });
+    }
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, items }));
+    return true;
+  }
+
+  // ── POST /api/config/save — Save env var changes to .env file atomically ──
+  if (url.pathname === "/api/config/save" && request.method === "POST") {
+    try {
+      const raw = await parseBody(request, getBodySizeLimit("/api/config/save"));
+      const { values } = sanitizeBody("/api/config/save", raw);
+      if (!values || typeof values !== "object") {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "values object is required" }));
+        return true;
+      }
+
+      // Read current .env file
+      const envPath = path.join(BASE_DIR, ".env");
+      let envContent = "";
+      try { envContent = fs.readFileSync(envPath, "utf8"); } catch { /* no .env yet */ }
+
+      // Parse existing .env into ordered lines
+      const lines = envContent.split("\n");
+      const existingKeys = new Set();
+      const updatedLines = [];
+
+      for (const line of lines) {
+        const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)/);
+        if (match) {
+          const envKey = match[1];
+          existingKeys.add(envKey);
+          if (envKey in values && !values[envKey].startsWith("****")) {
+            // Replace with new value
+            updatedLines.push(`${envKey}=${values[envKey]}`);
+            // Also update process.env for immediate effect
+            process.env[envKey] = values[envKey];
+          } else {
+            // Keep existing line unchanged
+            updatedLines.push(line);
+          }
+        } else {
+          // Comments, blank lines — keep as-is
+          updatedLines.push(line);
+        }
+      }
+
+      // Append new keys that were not in the original .env
+      for (const [envKey, envVal] of Object.entries(values)) {
+        if (envVal.startsWith("****")) continue; // Skip masked (unchanged) secrets
+        if (!existingKeys.has(envKey)) {
+          updatedLines.push(`${envKey}=${envVal}`);
+          process.env[envKey] = envVal;
+        }
+      }
+
+      // Atomic write: write to tmp file, then rename
+      const tmpPath = envPath + "." + Date.now() + ".tmp";
+      fs.writeFileSync(tmpPath, updatedLines.join("\n"), "utf8");
+      fs.renameSync(tmpPath, envPath);
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, saved: Object.keys(values).filter((k) => values[k] !== "****").length }));
+    } catch (e) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: e.message }));
+    }
+    return true;
+  }
+
+  // ── POST /api/config/test — Test service connectivity (Jira, GitLab, Slack) ──
+  if (url.pathname === "/api/config/test" && request.method === "POST") {
+    try {
+      const raw = await parseBody(request, getBodySizeLimit("/api/config/test"));
+      const { service } = sanitizeBody("/api/config/test", raw);
+      if (!service || !["jira", "gitlab", "slack"].includes(service)) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "service must be one of: jira, gitlab, slack" }));
+        return true;
+      }
+
+      const https = require("https");
+      const http = require("http");
+
+      if (service === "jira") {
+        const jiraBase = (process.env.JIRA_BASE_URL || "https://mastersindia-sols.atlassian.net").replace(/\/+$/, "");
+        const jiraEmail = process.env.JIRA_EMAIL;
+        const jiraToken = process.env.JIRA_TOKEN;
+        if (!jiraEmail || !jiraToken) {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "JIRA_EMAIL and JIRA_TOKEN must be set" }));
+          return true;
+        }
+        const testUrl = new URL(jiraBase + "/rest/api/3/myself");
+        const proto = testUrl.protocol === "https:" ? https : http;
+        const authHeader = "Basic " + Buffer.from(`${jiraEmail}:${jiraToken}`).toString("base64");
+        const result = await new Promise((resolve) => {
+          const req = proto.get(testUrl.href, { headers: { Authorization: authHeader, Accept: "application/json" }, timeout: 10000 }, (resp) => {
+            let body = "";
+            resp.on("data", (c) => { body += c; });
+            resp.on("end", () => {
+              if (resp.statusCode >= 200 && resp.statusCode < 300) {
+                try { const j = JSON.parse(body); resolve({ ok: true, message: `Connected as ${j.displayName || j.emailAddress || "OK"}` }); }
+                catch { resolve({ ok: true, message: "Connected (status " + resp.statusCode + ")" }); }
+              } else {
+                resolve({ ok: false, error: `HTTP ${resp.statusCode}: ${body.slice(0, 200)}` });
+              }
+            });
+          });
+          req.on("error", (e) => resolve({ ok: false, error: e.message }));
+          req.on("timeout", () => { req.destroy(); resolve({ ok: false, error: "Connection timed out" }); });
+        });
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(result));
+
+      } else if (service === "gitlab") {
+        const gitlabUrl = (process.env.GITLAB_URL || "http://10.200.11.32").replace(/\/+$/, "");
+        const gitlabToken = process.env.GITLAB_TOKEN;
+        const gitlabProjectId = process.env.GITLAB_PROJECT_ID;
+        if (!gitlabToken || !gitlabProjectId) {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "GITLAB_TOKEN and GITLAB_PROJECT_ID must be set" }));
+          return true;
+        }
+        const testUrl = new URL(`${gitlabUrl}/api/v4/projects/${gitlabProjectId}`);
+        const proto = testUrl.protocol === "https:" ? https : http;
+        const result = await new Promise((resolve) => {
+          const req = proto.get(testUrl.href, { headers: { "PRIVATE-TOKEN": gitlabToken, Accept: "application/json" }, timeout: 10000 }, (resp) => {
+            let body = "";
+            resp.on("data", (c) => { body += c; });
+            resp.on("end", () => {
+              if (resp.statusCode >= 200 && resp.statusCode < 300) {
+                try { const j = JSON.parse(body); resolve({ ok: true, message: `Connected to project: ${j.name_with_namespace || j.name || "OK"}` }); }
+                catch { resolve({ ok: true, message: "Connected (status " + resp.statusCode + ")" }); }
+              } else {
+                resolve({ ok: false, error: `HTTP ${resp.statusCode}: ${body.slice(0, 200)}` });
+              }
+            });
+          });
+          req.on("error", (e) => resolve({ ok: false, error: e.message }));
+          req.on("timeout", () => { req.destroy(); resolve({ ok: false, error: "Connection timed out" }); });
+        });
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(result));
+
+      } else if (service === "slack") {
+        const webhookUrl = process.env.SLACK_WEBHOOK;
+        if (!webhookUrl) {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "SLACK_WEBHOOK must be set" }));
+          return true;
+        }
+        const payload = JSON.stringify({ text: "[MI Dev Agent] Connectivity test — this message confirms Slack integration is working." });
+        const testUrl = new URL(webhookUrl);
+        const proto = testUrl.protocol === "https:" ? https : http;
+        const result = await new Promise((resolve) => {
+          const req = proto.request(testUrl.href, { method: "POST", headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) }, timeout: 10000 }, (resp) => {
+            let body = "";
+            resp.on("data", (c) => { body += c; });
+            resp.on("end", () => {
+              if (resp.statusCode >= 200 && resp.statusCode < 300) {
+                resolve({ ok: true, message: "Slack webhook responded OK — test message sent" });
+              } else if (resp.statusCode === 302 || resp.statusCode === 301) {
+                resolve({ ok: false, error: "Webhook returned redirect — the URL is likely expired or revoked. Generate a new webhook in Slack." });
+              } else {
+                resolve({ ok: false, error: `HTTP ${resp.statusCode}: ${body.slice(0, 200)}` });
+              }
+            });
+          });
+          req.on("error", (e) => resolve({ ok: false, error: e.message }));
+          req.on("timeout", () => { req.destroy(); resolve({ ok: false, error: "Connection timed out" }); });
+          req.write(payload);
+          req.end();
+        });
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(result));
+      }
+    } catch (e) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: e.message }));
+    }
+    return true;
+  }
+
+  // ── GET /api/notification-config — Return current notification config ──
+  if (url.pathname === "/api/notification-config" && request.method === "GET") {
+    const config = loadNotificationConfig();
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, config }));
+    return true;
+  }
+
+  // ── POST /api/notification-config — Save notification config ──
+  if (url.pathname === "/api/notification-config" && request.method === "POST") {
+    try {
+      const raw = await parseBody(request, getBodySizeLimit("/api/notification-config"));
+      const { config } = sanitizeBody("/api/notification-config", raw);
+      if (!config || typeof config !== "object") {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "config object is required" }));
+        return true;
+      }
+      saveNotificationConfig(config);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+    } catch (e) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: e.message }));
+    }
     return true;
   }
 

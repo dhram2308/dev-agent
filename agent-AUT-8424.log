@@ -1,0 +1,819 @@
+{"ts":"2026-04-14T13:19:28.518Z","level":"info","cid":"11a1b3981fde","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-14T13:19:29.492Z","level":"info","cid":"b8b23b1bce27","msg":"Claude Code CLI found at /usr/local/bin/claude (2.1.52 (Claude Code))"}
+{"ts":"2026-04-14T13:19:29.502Z","level":"info","cid":"b8b23b1bce27","msg":"Git CLI found"}
+{"ts":"2026-04-14T13:19:29.504Z","level":"warn","cid":"b8b23b1bce27","msg":"GitLab URL uses HTTP — API tokens transmitted unencrypted. Use HTTPS for production."}
+{"ts":"2026-04-14T13:19:29.505Z","level":"warn","cid":"b8b23b1bce27","msg":"QA main credentials not configured — QA testing stage will fail. Set QA_MAIN_USER and QA_MAIN_PASS."}
+{"ts":"2026-04-14T13:19:29.506Z","level":"warn","cid":"b8b23b1bce27","msg":"QA1 credentials not configured — QA1 testing will fail. Set QA1_USER and QA1_PASS."}
+{"ts":"2026-04-14T13:19:29.506Z","level":"warn","cid":"b8b23b1bce27","msg":"S2: .env file is readable by other users! Run: chmod 600 .env"}
+{"ts":"2026-04-14T13:19:29.507Z","level":"info","cid":"b8b23b1bce27","msg":"Validating Jira token..."}
+{"ts":"2026-04-14T13:19:29.927Z","level":"info","cid":"b8b23b1bce27","msg":"Jira auth OK (user: Yogendra Singh)"}
+{"ts":"2026-04-14T13:19:29.928Z","level":"info","cid":"b8b23b1bce27","msg":"Validating GitLab token..."}
+{"ts":"2026-04-14T13:19:59.944Z","level":"warn","cid":"b8b23b1bce27","msg":"SOCKET_TIMEOUT GET http://10.200.11.32/api/v4/projects/100 — retry 1/3 in 1281ms (elapsed 30016ms)"}
+{"ts":"2026-04-14T13:20:31.231Z","level":"warn","cid":"b8b23b1bce27","msg":"SOCKET_TIMEOUT GET http://10.200.11.32/api/v4/projects/100 — retry 2/3 in 2212ms (elapsed 61303ms)"}
+{"ts":"2026-04-14T13:21:03.451Z","level":"warn","cid":"b8b23b1bce27","msg":"SOCKET_TIMEOUT GET http://10.200.11.32/api/v4/projects/100 — retry 3/3 in 4179ms (elapsed 93523ms)"}
+{"ts":"2026-04-14T13:21:37.645Z","level":"warn","cid":"b8b23b1bce27","msg":"GitLab token validation failed: Socket timeout — proceeding anyway"}
+{"ts":"2026-04-14T13:21:37.645Z","level":"warn","cid":"b8b23b1bce27","msg":"S10: GitLab URL uses HTTP — API tokens transmitted unencrypted. Use HTTPS for production deployments."}
+{"ts":"2026-04-14T13:21:37.645Z","level":"info","cid":"b8b23b1bce27","msg":"Testing Slack webhook connectivity..."}
+{"ts":"2026-04-14T13:21:38.068Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T13:21:38.470Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T13:21:39.389Z","level":"warn","cid":"b8b23b1bce27","msg":"Slack webhook ping failed: Startup ping returned HTTP 404"}
+{"ts":"2026-04-14T13:21:39.390Z","level":"warn","cid":"b8b23b1bce27","msg":"Slack initialization: Startup ping returned HTTP 404 -- fallback to log + Jira comments"}
+{"ts":"2026-04-14T13:21:40.074Z","level":"info","cid":"b8b23b1bce27","msg":"Using worktree path: /home/yogendra/WebstormProjects/mi-dev-agent/.repo-cache/.worktrees/AUT-8424"}
+{"ts":"2026-04-14T13:21:40.156Z","level":"info","cid":"b8b23b1bce27","msg":"Local tree: 8101 entries"}
+{"ts":"2026-04-14T13:21:40.157Z","level":"warn","cid":"b8b23b1bce27","msg":"[Restart] Backoff delay: 5.0s (1 recent restarts)"}
+{"ts":"2026-04-14T13:21:45.162Z","level":"info","cid":"b8b23b1bce27","msg":"[Restart] Backoff complete — proceeding"}
+{"ts":"2026-04-14T13:21:45.163Z","level":"info","cid":"b8b23b1bce27","msg":"[Checkpoint] No checkpoint found — this is likely a first run or pre-checkpoint state"}
+{"ts":"2026-04-14T13:21:45.164Z","level":"info","cid":"b8b23b1bce27","msg":"Stage: fetch_ticket"}
+{"ts":"2026-04-14T13:21:45.164Z","level":"info","cid":"b8b23b1bce27","msg":"State: /home/yogendra/WebstormProjects/mi-dev-agent/state-AUT-8424.json"}
+{"ts":"2026-04-14T13:21:45.164Z","level":"info","cid":"b8b23b1bce27","msg":"Correlation ID: b8b23b1bce27"}
+{"ts":"2026-04-14T13:21:45.164Z","level":"info","cid":"b8b23b1bce27","msg":"[Config] Capturing initial config snapshot"}
+{"ts":"2026-04-14T13:21:45.170Z","level":"info","cid":"b8b23b1bce27","msg":"[Health] Starting pipeline health monitor (interval: 60s)"}
+{"ts":"2026-04-14T13:21:45.171Z","level":"info","cid":"b8b23b1bce27","msg":"Escalation monitoring started (check every 60s)"}
+{"ts":"2026-04-14T13:21:45.172Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 2, found 3 — merging"}
+{"ts":"2026-04-14T13:21:45.177Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"fetch_ticket\" timeout: 5.0m (stage limit: 5.0m, pipeline remaining: 24.0h)"}
+{"ts":"2026-04-14T13:21:45.179Z","level":"info","cid":"b8b23b1bce27","msg":"Step 1 -- Fetch Jira ticket + full context","type":"stage_header"}
+{"ts":"2026-04-14T13:21:45.179Z","level":"info","cid":"b8b23b1bce27","msg":"Q3: Running pre-flight validation…"}
+{"ts":"2026-04-14T13:22:15.566Z","level":"warn","cid":"b8b23b1bce27","msg":"SOCKET_TIMEOUT GET http://10.200.11.32/api/v4/projects/100/repository/branches/enterprise-ts-AUT-8424 — retry 1/3 in 1147ms (elapsed 30022ms)"}
+{"ts":"2026-04-14T13:22:46.718Z","level":"warn","cid":"b8b23b1bce27","msg":"SOCKET_TIMEOUT GET http://10.200.11.32/api/v4/projects/100/repository/branches/enterprise-ts-AUT-8424 — retry 2/3 in 2281ms (elapsed 61174ms)"}
+{"ts":"2026-04-14T13:23:19.011Z","level":"warn","cid":"b8b23b1bce27","msg":"SOCKET_TIMEOUT GET http://10.200.11.32/api/v4/projects/100/repository/branches/enterprise-ts-AUT-8424 — retry 3/3 in 4029ms (elapsed 93467ms)"}
+{"ts":"2026-04-14T13:24:23.084Z","level":"warn","cid":"b8b23b1bce27","msg":"SOCKET_TIMEOUT GET http://10.200.11.32/api/v4/projects/100/merge_requests?source_branch=enterprise-ts-AUT-8424&state=opened&per_page=1 — retry 1/3 in 1276ms (elapsed 30031ms)"}
+{"ts":"2026-04-14T13:24:54.372Z","level":"warn","cid":"b8b23b1bce27","msg":"SOCKET_TIMEOUT GET http://10.200.11.32/api/v4/projects/100/merge_requests?source_branch=enterprise-ts-AUT-8424&state=opened&per_page=1 — retry 2/3 in 2160ms (elapsed 61319ms)"}
+{"ts":"2026-04-14T13:25:26.565Z","level":"warn","cid":"b8b23b1bce27","msg":"SOCKET_TIMEOUT GET http://10.200.11.32/api/v4/projects/100/merge_requests?source_branch=enterprise-ts-AUT-8424&state=opened&per_page=1 — retry 3/3 in 4254ms (elapsed 93512ms)"}
+{"ts":"2026-04-14T13:26:00.836Z","level":"warn","cid":"b8b23b1bce27","msg":"Q3: Could not check for existing MR: Socket timeout"}
+{"ts":"2026-04-14T13:26:01.305Z","level":"info","cid":"b8b23b1bce27","msg":"X3: 25 Jira transitions available: Unit Testing local, Code Review, Unit Testing-QA, Testing-Cycle 1, Bug Fixing, Staging-Testing, Staging-Dev, Production, Devops/Prepro, To Do, Ready to Start, Ready For Pre-pro, Devops Prod, Production Fixes, Duplicate, Analysis, Done, Testing In Progress, Dev In Progress, Hold, Blocker, Completed/ready for prod, Verification (UAT)/Sales-qa, Assigned For Testing, Partially done"}
+{"ts":"2026-04-14T13:26:01.305Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 4, found 5 — merging"}
+{"ts":"2026-04-14T13:26:01.319Z","level":"info","cid":"b8b23b1bce27","msg":"Q3: Pre-flight validation passed"}
+{"ts":"2026-04-14T13:26:01.631Z","level":"info","cid":"b8b23b1bce27","msg":"Ticket : [Defect/High] B2CSA summary UI incorrect - original month displayed after action button delete"}
+{"ts":"2026-04-14T13:26:01.631Z","level":"info","cid":"b8b23b1bce27","msg":"Desc   : B2CSA summary UI is incorrect , original month displayed after action button delete …"}
+{"ts":"2026-04-14T13:26:01.631Z","level":"info","cid":"b8b23b1bce27","msg":"Reading all Jira comments…"}
+{"ts":"2026-04-14T13:26:02.549Z","level":"info","cid":"b8b23b1bce27","msg":"Linked : AUT-7382 (relates to [outward]) — Pan-level Filing"}
+{"ts":"2026-04-14T13:26:02.549Z","level":"info","cid":"b8b23b1bce27","msg":"Context gathered: Description: 85 chars (markdown) | AC: 85 chars | Linked issues: 1"}
+{"ts":"2026-04-14T13:26:02.550Z","level":"info","cid":"b8b23b1bce27","msg":"X7: Complexity: LOW (score: 1, timeout multiplier: 1x)"}
+{"ts":"2026-04-14T13:26:02.550Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 6, found 7 — merging"}
+{"ts":"2026-04-14T13:26:02.566Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 8, found 9 — merging"}
+{"ts":"2026-04-14T13:26:02.572Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 10, found 11 — merging"}
+{"ts":"2026-04-14T13:26:02.576Z","level":"info","cid":"b8b23b1bce27","msg":"[Config] Refreshing config snapshot after fetch_ticket"}
+{"ts":"2026-04-14T13:26:02.578Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 12, found 13 — merging"}
+{"ts":"2026-04-14T13:26:02.584Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 14, found 15 — merging"}
+{"ts":"2026-04-14T13:26:02.591Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\" timeout: 30.0m (stage limit: 30.0m, pipeline remaining: 23.9h)"}
+{"ts":"2026-04-14T13:26:02.593Z","level":"info","cid":"b8b23b1bce27","msg":"Step 1b -- Explore & Plan — analyzing ticket with agents team","type":"stage_header"}
+{"ts":"2026-04-14T13:26:02.594Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 16, found 17 — merging"}
+{"ts":"2026-04-14T13:26:02.600Z","level":"info","cid":"b8b23b1bce27","msg":"Agents Team — launching exploration…"}
+{"ts":"2026-04-14T13:26:02.821Z","level":"info","cid":"b8b23b1bce27","msg":"Repo: 8101 total, 4367 source files, 1930 relevant"}
+{"ts":"2026-04-14T13:26:02.822Z","level":"info","cid":"b8b23b1bce27","msg":"  → Analysis Team: launching 3 parallel sub-agents…"}
+{"ts":"2026-04-14T13:26:02.822Z","level":"info","cid":"b8b23b1bce27","msg":"[Analysis Team] Starting 3 parallel agent(s)…"}
+{"ts":"2026-04-14T13:26:02.822Z","level":"info","cid":"b8b23b1bce27","msg":"  Running 3 agent(s) in parallel (0 cached)…"}
+{"ts":"2026-04-14T13:26:02.824Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 18, found 19 — merging"}
+{"ts":"2026-04-14T13:26:02.838Z","level":"info","cid":"b8b23b1bce27","msg":"  [Requirements Agent] Starting… (timeout: 360s)"}
+{"ts":"2026-04-14T13:26:02.838Z","level":"info","cid":"b8b23b1bce27","msg":"[Requirements Agent] Prompt: 2867 chars (~717 tokens) | Timeout: 360s | MaxTurns: 4"}
+{"ts":"2026-04-14T13:26:02.843Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 20, found 21 — merging"}
+{"ts":"2026-04-14T13:26:02.849Z","level":"info","cid":"b8b23b1bce27","msg":"  [Code Explorer Agent] Starting… (timeout: 420s)"}
+{"ts":"2026-04-14T13:26:02.849Z","level":"info","cid":"b8b23b1bce27","msg":"[Code Explorer Agent] Prompt: 8702 chars (~2176 tokens) | Timeout: 420s | MaxTurns: 20"}
+{"ts":"2026-04-14T13:26:02.852Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 22, found 23 — merging"}
+{"ts":"2026-04-14T13:26:02.858Z","level":"info","cid":"b8b23b1bce27","msg":"  [Risk Analyst Agent] Starting… (timeout: 300s)"}
+{"ts":"2026-04-14T13:26:02.858Z","level":"info","cid":"b8b23b1bce27","msg":"[Risk Analyst Agent] Prompt: 9096 chars (~2274 tokens) | Timeout: 300s | MaxTurns: 4"}
+{"ts":"2026-04-14T13:26:02.862Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 24, found 25 — merging"}
+{"ts":"2026-04-14T13:26:32.852Z","level":"info","cid":"b8b23b1bce27","msg":"[Requirements Agent] Working… 30s elapsed"}
+{"ts":"2026-04-14T13:26:32.853Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 26, found 27 — merging"}
+{"ts":"2026-04-14T13:26:32.868Z","level":"info","cid":"b8b23b1bce27","msg":"[Code Explorer Agent] Working… 30s elapsed"}
+{"ts":"2026-04-14T13:26:32.868Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 28, found 29 — merging"}
+{"ts":"2026-04-14T13:26:32.873Z","level":"info","cid":"b8b23b1bce27","msg":"[Risk Analyst Agent] Working… 30s elapsed"}
+{"ts":"2026-04-14T13:26:32.873Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 30, found 31 — merging"}
+{"ts":"2026-04-14T13:26:38.176Z","level":"info","cid":"b8b23b1bce27","msg":"[Requirements Agent] Complete in 35.3s"}
+{"ts":"2026-04-14T13:26:38.176Z","level":"info","cid":"b8b23b1bce27","msg":"  [Requirements Agent] Complete (35.3s, 28 chars)"}
+{"ts":"2026-04-14T13:26:38.180Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 32, found 33 — merging"}
+{"ts":"2026-04-14T13:27:02.867Z","level":"info","cid":"b8b23b1bce27","msg":"[Code Explorer Agent] Working… 1m 0s elapsed"}
+{"ts":"2026-04-14T13:27:02.868Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 34, found 35 — merging"}
+{"ts":"2026-04-14T13:27:02.894Z","level":"info","cid":"b8b23b1bce27","msg":"[Risk Analyst Agent] Working… 1m 0s elapsed"}
+{"ts":"2026-04-14T13:27:02.895Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 36, found 37 — merging"}
+{"ts":"2026-04-14T13:27:32.869Z","level":"info","cid":"b8b23b1bce27","msg":"[Code Explorer Agent] Working… 1m 30s elapsed"}
+{"ts":"2026-04-14T13:27:32.870Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 38, found 39 — merging"}
+{"ts":"2026-04-14T13:27:32.893Z","level":"info","cid":"b8b23b1bce27","msg":"[Risk Analyst Agent] Working… 1m 30s elapsed"}
+{"ts":"2026-04-14T13:27:32.894Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 40, found 41 — merging"}
+{"ts":"2026-04-14T13:28:02.887Z","level":"info","cid":"b8b23b1bce27","msg":"[Code Explorer Agent] Working… 2m 0s elapsed"}
+{"ts":"2026-04-14T13:28:02.888Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 42, found 43 — merging"}
+{"ts":"2026-04-14T13:28:02.914Z","level":"info","cid":"b8b23b1bce27","msg":"[Risk Analyst Agent] Working… 2m 0s elapsed"}
+{"ts":"2026-04-14T13:28:02.914Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 44, found 45 — merging"}
+{"ts":"2026-04-14T13:28:32.888Z","level":"info","cid":"b8b23b1bce27","msg":"[Code Explorer Agent] Working… 2m 30s elapsed"}
+{"ts":"2026-04-14T13:28:32.890Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 46, found 47 — merging"}
+{"ts":"2026-04-14T13:28:32.914Z","level":"info","cid":"b8b23b1bce27","msg":"[Risk Analyst Agent] Working… 2m 30s elapsed"}
+{"ts":"2026-04-14T13:28:32.915Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 48, found 49 — merging"}
+{"ts":"2026-04-14T13:28:59.945Z","level":"info","cid":"b8b23b1bce27","msg":"[Risk Analyst Agent] Complete in 177.1s"}
+{"ts":"2026-04-14T13:28:59.945Z","level":"info","cid":"b8b23b1bce27","msg":"  [Risk Analyst Agent] Complete (177.1s, 6066 chars)"}
+{"ts":"2026-04-14T13:28:59.948Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 50, found 51 — merging"}
+{"ts":"2026-04-14T13:29:02.891Z","level":"info","cid":"b8b23b1bce27","msg":"[Code Explorer Agent] Working… 3m 0s elapsed"}
+{"ts":"2026-04-14T13:29:02.892Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 52, found 53 — merging"}
+{"ts":"2026-04-14T13:29:32.895Z","level":"info","cid":"b8b23b1bce27","msg":"[Code Explorer Agent] Working… 3m 30s elapsed"}
+{"ts":"2026-04-14T13:29:32.897Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 54, found 55 — merging"}
+{"ts":"2026-04-14T13:29:55.569Z","level":"info","cid":"b8b23b1bce27","msg":"[Code Explorer Agent] Complete in 232.7s"}
+{"ts":"2026-04-14T13:29:55.569Z","level":"info","cid":"b8b23b1bce27","msg":"  [Code Explorer Agent] Complete (232.7s, 29 chars)"}
+{"ts":"2026-04-14T13:29:55.571Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 56, found 57 — merging"}
+{"ts":"2026-04-14T13:29:55.585Z","level":"info","cid":"b8b23b1bce27","msg":"[Analysis Team] Done in 232.8s — 3 succeeded, 0 optional failed"}
+{"ts":"2026-04-14T13:29:55.586Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 58, found 59 — merging"}
+{"ts":"2026-04-14T13:29:55.591Z","level":"info","cid":"b8b23b1bce27","msg":"  Analysis Team complete"}
+{"ts":"2026-04-14T13:29:55.591Z","level":"info","cid":"b8b23b1bce27","msg":"Analysis complete"}
+{"ts":"2026-04-14T13:29:55.591Z","level":"info","cid":"b8b23b1bce27","msg":"  → OpenSpec: scaffolding change…"}
+{"ts":"2026-04-14T13:29:55.592Z","level":"info","cid":"b8b23b1bce27","msg":"OpenSpec: creating change 'aut-8424'…"}
+{"ts":"2026-04-14T13:30:05.438Z","level":"info","cid":"b8b23b1bce27","msg":"OpenSpec: scaffolded 'aut-8424' with 4 artifact templates"}
+{"ts":"2026-04-14T13:30:05.438Z","level":"info","cid":"b8b23b1bce27","msg":"  → OpenSpec Architect Agent: producing structured plan artifacts…"}
+{"ts":"2026-04-14T13:30:05.439Z","level":"info","cid":"b8b23b1bce27","msg":"[OpenSpec Architect Agent] Starting 1 parallel agent(s)…"}
+{"ts":"2026-04-14T13:30:05.439Z","level":"info","cid":"b8b23b1bce27","msg":"  Running 1 agent(s) in parallel (0 cached)…"}
+{"ts":"2026-04-14T13:30:05.440Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 60, found 61 — merging"}
+{"ts":"2026-04-14T13:30:05.448Z","level":"info","cid":"b8b23b1bce27","msg":"  [OpenSpec Architect Agent] Starting… (timeout: 900s)"}
+{"ts":"2026-04-14T13:30:05.449Z","level":"info","cid":"b8b23b1bce27","msg":"[OpenSpec Architect Agent] Prompt: 15180 chars (~3795 tokens) | Timeout: 900s | MaxTurns: 25"}
+{"ts":"2026-04-14T13:30:05.453Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 62, found 63 — merging"}
+{"ts":"2026-04-14T13:30:35.463Z","level":"info","cid":"b8b23b1bce27","msg":"[OpenSpec Architect Agent] Working… 30s elapsed"}
+{"ts":"2026-04-14T13:30:35.464Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 64, found 65 — merging"}
+{"ts":"2026-04-14T13:31:02.609Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\": 5.0m elapsed, 25.0m remaining"}
+{"ts":"2026-04-14T13:31:05.466Z","level":"info","cid":"b8b23b1bce27","msg":"[OpenSpec Architect Agent] Working… 1m 0s elapsed"}
+{"ts":"2026-04-14T13:31:05.468Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 66, found 67 — merging"}
+{"ts":"2026-04-14T13:31:35.474Z","level":"info","cid":"b8b23b1bce27","msg":"[OpenSpec Architect Agent] Working… 1m 30s elapsed"}
+{"ts":"2026-04-14T13:31:35.475Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 68, found 69 — merging"}
+{"ts":"2026-04-14T13:31:45.180Z","level":"info","cid":"b8b23b1bce27","msg":"[Restart] Agent marked as stable (10 minutes without crash)"}
+{"ts":"2026-04-14T13:31:45.181Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 70, found 71 — merging"}
+{"ts":"2026-04-14T13:32:05.493Z","level":"info","cid":"b8b23b1bce27","msg":"[OpenSpec Architect Agent] Working… 2m 0s elapsed"}
+{"ts":"2026-04-14T13:32:05.495Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 72, found 73 — merging"}
+{"ts":"2026-04-14T13:32:35.500Z","level":"info","cid":"b8b23b1bce27","msg":"[OpenSpec Architect Agent] Working… 2m 30s elapsed"}
+{"ts":"2026-04-14T13:32:35.502Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 74, found 75 — merging"}
+{"ts":"2026-04-14T13:33:03.966Z","level":"info","cid":"b8b23b1bce27","msg":"[OpenSpec Architect Agent] Complete in 178.5s"}
+{"ts":"2026-04-14T13:33:03.966Z","level":"info","cid":"b8b23b1bce27","msg":"  [OpenSpec Architect Agent] Complete (178.5s, 741 chars)"}
+{"ts":"2026-04-14T13:33:03.967Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 76, found 77 — merging"}
+{"ts":"2026-04-14T13:33:03.982Z","level":"info","cid":"b8b23b1bce27","msg":"[OpenSpec Architect Agent] Done in 178.5s — 1 succeeded, 0 optional failed"}
+{"ts":"2026-04-14T13:33:03.982Z","level":"warn","cid":"b8b23b1bce27","msg":"OpenSpec: could not parse markers from architect output — using raw output"}
+{"ts":"2026-04-14T13:33:03.982Z","level":"warn","cid":"b8b23b1bce27","msg":"OpenSpec artifact parsing failed — using raw architect output"}
+{"ts":"2026-04-14T13:33:03.983Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 78, found 79 — merging"}
+{"ts":"2026-04-14T13:33:03.989Z","level":"info","cid":"b8b23b1bce27","msg":"Implementation plan ready (2 agents completed)"}
+{"ts":"2026-04-14T13:33:04.404Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T13:33:05.000Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T13:33:07.421Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T13:33:07.731Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T13:33:11.250Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T13:33:11.514Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T13:33:22.027Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T13:33:22.337Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T13:33:22.681Z","level":"warn","cid":"b8b23b1bce27","msg":"Slack notification failed: Slack webhook returned HTTP 404: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot POST /</pre>\n</body>\n</html>\n — executing fallback chain"}
+{"ts":"2026-04-14T13:33:23.396Z","level":"info","cid":"b8b23b1bce27","msg":"Notification fallback: sent via Jira comment for AUT-8424"}
+{"ts":"2026-04-14T13:33:23.397Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 80, found 81 — merging"}
+{"ts":"2026-04-14T13:33:23.412Z","level":"info","cid":"b8b23b1bce27","msg":"Plan ready on Web UI — waiting for your approval"}
+{"ts":"2026-04-14T13:33:23.412Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval (Web UI)…"}
+{"ts":"2026-04-14T13:35:55.051Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 2m elapsed"}
+{"ts":"2026-04-14T13:36:02.612Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\": 10.0m elapsed, 20.0m remaining"}
+{"ts":"2026-04-14T13:38:56.913Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 5m elapsed"}
+{"ts":"2026-04-14T13:41:02.617Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\": 15.0m elapsed, 15.0m remaining"}
+{"ts":"2026-04-14T13:41:59.085Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 8m elapsed"}
+{"ts":"2026-04-14T13:45:00.844Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 11m elapsed"}
+{"ts":"2026-04-14T13:46:02.618Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\": 20.0m elapsed, 10.0m remaining"}
+{"ts":"2026-04-14T13:48:02.674Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 14m elapsed"}
+{"ts":"2026-04-14T13:51:02.632Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\": 25.0m elapsed, 5.0m remaining"}
+{"ts":"2026-04-14T13:51:04.571Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 17m elapsed"}
+{"ts":"2026-04-14T13:54:06.538Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 20m elapsed"}
+{"ts":"2026-04-14T13:56:02.602Z","level":"warn","cid":"b8b23b1bce27","msg":"[Recovery] Stage \"explore_plan\" attempt 0 failed: [TIMEOUT] Stage \"explore_plan\" timed out after 30.0m (limit: 30.0m)"}
+{"ts":"2026-04-14T13:56:02.603Z","level":"info","cid":"b8b23b1bce27","msg":"[Recovery] Timeout in \"explore_plan\" — retrying in 9.1s"}
+{"ts":"2026-04-14T13:56:11.755Z","level":"info","cid":"b8b23b1bce27","msg":"[Recovery] Retry 1/2 for stage \"explore_plan\""}
+{"ts":"2026-04-14T13:56:11.758Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 82, found 83 — merging"}
+{"ts":"2026-04-14T13:56:11.774Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\" timeout: 30.0m (stage limit: 30.0m, pipeline remaining: 23.4h)"}
+{"ts":"2026-04-14T13:56:11.775Z","level":"info","cid":"b8b23b1bce27","msg":"Step 1b -- Explore & Plan — analyzing ticket with agents team","type":"stage_header"}
+{"ts":"2026-04-14T13:56:11.775Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval (Web UI)…"}
+{"ts":"2026-04-14T13:56:45.416Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 30 minutes without progress"}
+{"ts":"2026-04-14T13:56:45.419Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 84, found 85 — merging"}
+{"ts":"2026-04-14T13:57:08.334Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 23m elapsed"}
+{"ts":"2026-04-14T13:57:45.418Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 31 minutes without progress"}
+{"ts":"2026-04-14T13:57:45.420Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 86, found 87 — merging"}
+{"ts":"2026-04-14T13:58:43.383Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 2m elapsed"}
+{"ts":"2026-04-14T13:58:45.422Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 32 minutes without progress"}
+{"ts":"2026-04-14T13:58:45.424Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 88, found 89 — merging"}
+{"ts":"2026-04-14T13:59:45.424Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 33 minutes without progress"}
+{"ts":"2026-04-14T13:59:45.426Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 90, found 91 — merging"}
+{"ts":"2026-04-14T14:00:10.030Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 26m elapsed"}
+{"ts":"2026-04-14T14:00:45.424Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 34 minutes without progress"}
+{"ts":"2026-04-14T14:00:45.426Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 92, found 93 — merging"}
+{"ts":"2026-04-14T14:01:11.775Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\": 5.0m elapsed, 25.0m remaining"}
+{"ts":"2026-04-14T14:01:45.424Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 35 minutes without progress"}
+{"ts":"2026-04-14T14:01:45.426Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 94, found 95 — merging"}
+{"ts":"2026-04-14T14:01:45.558Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 5m elapsed"}
+{"ts":"2026-04-14T14:02:45.427Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 36 minutes without progress"}
+{"ts":"2026-04-14T14:02:45.429Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 96, found 97 — merging"}
+{"ts":"2026-04-14T14:03:12.077Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 29m elapsed"}
+{"ts":"2026-04-14T14:03:45.430Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 37 minutes without progress"}
+{"ts":"2026-04-14T14:03:45.432Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 98, found 99 — merging"}
+{"ts":"2026-04-14T14:04:45.433Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 38 minutes without progress"}
+{"ts":"2026-04-14T14:04:45.435Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 100, found 101 — merging"}
+{"ts":"2026-04-14T14:04:47.217Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 8m elapsed"}
+{"ts":"2026-04-14T14:05:45.436Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 39 minutes without progress"}
+{"ts":"2026-04-14T14:05:45.437Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 102, found 103 — merging"}
+{"ts":"2026-04-14T14:06:11.785Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\": 10.0m elapsed, 20.0m remaining"}
+{"ts":"2026-04-14T14:06:13.896Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 32m elapsed"}
+{"ts":"2026-04-14T14:06:45.438Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 40 minutes without progress"}
+{"ts":"2026-04-14T14:06:45.439Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 104, found 105 — merging"}
+{"ts":"2026-04-14T14:07:45.439Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 41 minutes without progress"}
+{"ts":"2026-04-14T14:07:45.440Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 106, found 107 — merging"}
+{"ts":"2026-04-14T14:07:49.213Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 11m elapsed"}
+{"ts":"2026-04-14T14:08:45.439Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 42 minutes without progress"}
+{"ts":"2026-04-14T14:08:45.441Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 108, found 109 — merging"}
+{"ts":"2026-04-14T14:09:15.849Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 35m elapsed"}
+{"ts":"2026-04-14T14:09:45.440Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 43 minutes without progress"}
+{"ts":"2026-04-14T14:09:45.442Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 110, found 111 — merging"}
+{"ts":"2026-04-14T14:10:45.454Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 44 minutes without progress"}
+{"ts":"2026-04-14T14:10:45.455Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 112, found 113 — merging"}
+{"ts":"2026-04-14T14:10:51.097Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 14m elapsed"}
+{"ts":"2026-04-14T14:11:11.794Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\": 15.0m elapsed, 15.0m remaining"}
+{"ts":"2026-04-14T14:11:45.461Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 45 minutes without progress"}
+{"ts":"2026-04-14T14:11:45.463Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 114, found 115 — merging"}
+{"ts":"2026-04-14T14:12:17.727Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 38m elapsed"}
+{"ts":"2026-04-14T14:12:45.474Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 46 minutes without progress"}
+{"ts":"2026-04-14T14:12:45.477Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 116, found 117 — merging"}
+{"ts":"2026-04-14T14:13:45.486Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 47 minutes without progress"}
+{"ts":"2026-04-14T14:13:45.488Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 118, found 119 — merging"}
+{"ts":"2026-04-14T14:13:52.858Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 17m elapsed"}
+{"ts":"2026-04-14T14:14:45.497Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 48 minutes without progress"}
+{"ts":"2026-04-14T14:14:45.499Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 120, found 121 — merging"}
+{"ts":"2026-04-14T14:15:19.755Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 41m elapsed"}
+{"ts":"2026-04-14T14:15:45.503Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 49 minutes without progress"}
+{"ts":"2026-04-14T14:15:45.505Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 122, found 123 — merging"}
+{"ts":"2026-04-14T14:16:11.796Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\": 20.0m elapsed, 10.0m remaining"}
+{"ts":"2026-04-14T14:16:45.514Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 50 minutes without progress"}
+{"ts":"2026-04-14T14:16:45.516Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 124, found 125 — merging"}
+{"ts":"2026-04-14T14:16:54.722Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 20m elapsed"}
+{"ts":"2026-04-14T14:17:45.523Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 51 minutes without progress"}
+{"ts":"2026-04-14T14:17:45.525Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 126, found 127 — merging"}
+{"ts":"2026-04-14T14:18:21.661Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 44m elapsed"}
+{"ts":"2026-04-14T14:18:45.531Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 52 minutes without progress"}
+{"ts":"2026-04-14T14:18:45.533Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 128, found 129 — merging"}
+{"ts":"2026-04-14T14:19:45.540Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 53 minutes without progress"}
+{"ts":"2026-04-14T14:19:45.542Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 130, found 131 — merging"}
+{"ts":"2026-04-14T14:19:56.794Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 23m elapsed"}
+{"ts":"2026-04-14T14:20:45.548Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 54 minutes without progress"}
+{"ts":"2026-04-14T14:20:45.554Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 132, found 133 — merging"}
+{"ts":"2026-04-14T14:21:11.799Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\": 25.0m elapsed, 5.0m remaining"}
+{"ts":"2026-04-14T14:21:23.859Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 48m elapsed"}
+{"ts":"2026-04-14T14:21:45.553Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 55 minutes without progress"}
+{"ts":"2026-04-14T14:21:45.555Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 134, found 135 — merging"}
+{"ts":"2026-04-14T14:22:45.559Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 56 minutes without progress"}
+{"ts":"2026-04-14T14:22:45.561Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 136, found 137 — merging"}
+{"ts":"2026-04-14T14:22:58.658Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 26m elapsed"}
+{"ts":"2026-04-14T14:23:45.564Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 57 minutes without progress"}
+{"ts":"2026-04-14T14:23:45.566Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 138, found 139 — merging"}
+{"ts":"2026-04-14T14:24:26.373Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 51m elapsed"}
+{"ts":"2026-04-14T14:24:45.569Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 58 minutes without progress"}
+{"ts":"2026-04-14T14:24:45.570Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 140, found 141 — merging"}
+{"ts":"2026-04-14T14:25:45.571Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 59 minutes without progress"}
+{"ts":"2026-04-14T14:25:45.573Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 142, found 143 — merging"}
+{"ts":"2026-04-14T14:26:00.556Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 29m elapsed"}
+{"ts":"2026-04-14T14:26:11.787Z","level":"warn","cid":"b8b23b1bce27","msg":"[Recovery] Stage \"explore_plan\" attempt 1 failed: [TIMEOUT] Stage \"explore_plan\" timed out after 30.0m (limit: 30.0m)"}
+{"ts":"2026-04-14T14:26:11.787Z","level":"info","cid":"b8b23b1bce27","msg":"[Recovery] Timeout in \"explore_plan\" — retrying in 17.0s"}
+{"ts":"2026-04-14T14:26:28.759Z","level":"info","cid":"b8b23b1bce27","msg":"[Recovery] Retry 2/2 for stage \"explore_plan\""}
+{"ts":"2026-04-14T14:26:28.761Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 144, found 145 — merging"}
+{"ts":"2026-04-14T14:26:28.775Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\" timeout: 30.0m (stage limit: 30.0m, pipeline remaining: 22.9h)"}
+{"ts":"2026-04-14T14:26:28.775Z","level":"info","cid":"b8b23b1bce27","msg":"Step 1b -- Explore & Plan — analyzing ticket with agents team","type":"stage_header"}
+{"ts":"2026-04-14T14:26:28.775Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval (Web UI)…"}
+{"ts":"2026-04-14T14:26:45.574Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 60 minutes without progress"}
+{"ts":"2026-04-14T14:26:45.576Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 146, found 147 — merging"}
+{"ts":"2026-04-14T14:27:28.540Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 54m elapsed"}
+{"ts":"2026-04-14T14:27:45.578Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 61 minutes without progress"}
+{"ts":"2026-04-14T14:27:45.579Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 148, found 149 — merging"}
+{"ts":"2026-04-14T14:28:45.578Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 62 minutes without progress"}
+{"ts":"2026-04-14T14:28:45.580Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 150, found 151 — merging"}
+{"ts":"2026-04-14T14:29:00.555Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 2m elapsed"}
+{"ts":"2026-04-14T14:29:02.381Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 32m elapsed"}
+{"ts":"2026-04-14T14:29:45.580Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 63 minutes without progress"}
+{"ts":"2026-04-14T14:29:45.581Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 152, found 153 — merging"}
+{"ts":"2026-04-14T14:30:30.720Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 57m elapsed"}
+{"ts":"2026-04-14T14:30:45.580Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 64 minutes without progress"}
+{"ts":"2026-04-14T14:30:45.581Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 154, found 155 — merging"}
+{"ts":"2026-04-14T14:31:28.787Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\": 5.0m elapsed, 25.0m remaining"}
+{"ts":"2026-04-14T14:31:45.591Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 65 minutes without progress"}
+{"ts":"2026-04-14T14:31:45.593Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 156, found 157 — merging"}
+{"ts":"2026-04-14T14:32:02.364Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 5m elapsed"}
+{"ts":"2026-04-14T14:32:04.447Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 35m elapsed"}
+{"ts":"2026-04-14T14:32:45.602Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 66 minutes without progress"}
+{"ts":"2026-04-14T14:32:45.603Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 158, found 159 — merging"}
+{"ts":"2026-04-14T14:33:32.819Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 60m elapsed"}
+{"ts":"2026-04-14T14:33:45.613Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 67 minutes without progress"}
+{"ts":"2026-04-14T14:33:45.615Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 160, found 161 — merging"}
+{"ts":"2026-04-14T14:34:45.621Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 68 minutes without progress"}
+{"ts":"2026-04-14T14:34:45.623Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 162, found 163 — merging"}
+{"ts":"2026-04-14T14:35:04.261Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 8m elapsed"}
+{"ts":"2026-04-14T14:35:06.345Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 38m elapsed"}
+{"ts":"2026-04-14T14:35:45.631Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 69 minutes without progress"}
+{"ts":"2026-04-14T14:35:45.632Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 164, found 165 — merging"}
+{"ts":"2026-04-14T14:36:28.797Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\": 10.0m elapsed, 20.0m remaining"}
+{"ts":"2026-04-14T14:36:35.249Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 63m elapsed"}
+{"ts":"2026-04-14T14:36:45.639Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 70 minutes without progress"}
+{"ts":"2026-04-14T14:36:45.641Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 166, found 167 — merging"}
+{"ts":"2026-04-14T14:37:45.646Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 71 minutes without progress"}
+{"ts":"2026-04-14T14:37:45.648Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 168, found 169 — merging"}
+{"ts":"2026-04-14T14:38:06.225Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 11m elapsed"}
+{"ts":"2026-04-14T14:38:08.323Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 41m elapsed"}
+{"ts":"2026-04-14T14:38:45.654Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 72 minutes without progress"}
+{"ts":"2026-04-14T14:38:45.656Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 170, found 171 — merging"}
+{"ts":"2026-04-14T14:39:37.092Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 66m elapsed"}
+{"ts":"2026-04-14T14:39:45.660Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 73 minutes without progress"}
+{"ts":"2026-04-14T14:39:45.662Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 172, found 173 — merging"}
+{"ts":"2026-04-14T14:40:45.666Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 74 minutes without progress"}
+{"ts":"2026-04-14T14:40:45.668Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 174, found 175 — merging"}
+{"ts":"2026-04-14T14:41:08.292Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 14m elapsed"}
+{"ts":"2026-04-14T14:41:10.313Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 44m elapsed"}
+{"ts":"2026-04-14T14:41:28.804Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\": 15.0m elapsed, 15.0m remaining"}
+{"ts":"2026-04-14T14:41:45.672Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 75 minutes without progress"}
+{"ts":"2026-04-14T14:41:45.674Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 176, found 177 — merging"}
+{"ts":"2026-04-14T14:42:39.531Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 69m elapsed"}
+{"ts":"2026-04-14T14:42:45.677Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 76 minutes without progress"}
+{"ts":"2026-04-14T14:42:45.679Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 178, found 179 — merging"}
+{"ts":"2026-04-14T14:43:45.681Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 77 minutes without progress"}
+{"ts":"2026-04-14T14:43:45.683Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 180, found 181 — merging"}
+{"ts":"2026-04-14T14:44:10.564Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 17m elapsed"}
+{"ts":"2026-04-14T14:44:12.099Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 48m elapsed"}
+{"ts":"2026-04-14T14:44:45.683Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 78 minutes without progress"}
+{"ts":"2026-04-14T14:44:45.684Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 182, found 183 — merging"}
+{"ts":"2026-04-14T14:45:41.594Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 72m elapsed"}
+{"ts":"2026-04-14T14:45:45.686Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 79 minutes without progress"}
+{"ts":"2026-04-14T14:45:45.687Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 184, found 185 — merging"}
+{"ts":"2026-04-14T14:46:28.806Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\": 20.0m elapsed, 10.0m remaining"}
+{"ts":"2026-04-14T14:46:45.687Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 80 minutes without progress"}
+{"ts":"2026-04-14T14:46:45.688Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 186, found 187 — merging"}
+{"ts":"2026-04-14T14:47:12.631Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 20m elapsed"}
+{"ts":"2026-04-14T14:47:13.911Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 51m elapsed"}
+{"ts":"2026-04-14T14:47:45.690Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 81 minutes without progress"}
+{"ts":"2026-04-14T14:47:45.691Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 188, found 189 — merging"}
+{"ts":"2026-04-14T14:48:44.201Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 75m elapsed"}
+{"ts":"2026-04-14T14:48:45.691Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 82 minutes without progress"}
+{"ts":"2026-04-14T14:48:45.692Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 190, found 191 — merging"}
+{"ts":"2026-04-14T14:49:45.691Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 83 minutes without progress"}
+{"ts":"2026-04-14T14:49:45.692Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 192, found 193 — merging"}
+{"ts":"2026-04-14T14:50:15.415Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 23m elapsed"}
+{"ts":"2026-04-14T14:50:15.929Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 54m elapsed"}
+{"ts":"2026-04-14T14:50:45.691Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 84 minutes without progress"}
+{"ts":"2026-04-14T14:50:45.693Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 194, found 195 — merging"}
+{"ts":"2026-04-14T14:51:28.819Z","level":"info","cid":"b8b23b1bce27","msg":"[Timeout] Stage \"explore_plan\": 25.0m elapsed, 5.0m remaining"}
+{"ts":"2026-04-14T14:51:45.691Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 85 minutes without progress"}
+{"ts":"2026-04-14T14:51:45.693Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 196, found 197 — merging"}
+{"ts":"2026-04-14T14:51:46.655Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 78m elapsed"}
+{"ts":"2026-04-14T14:52:45.705Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 86 minutes without progress"}
+{"ts":"2026-04-14T14:52:45.707Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 198, found 199 — merging"}
+{"ts":"2026-04-14T14:53:17.689Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 26m elapsed"}
+{"ts":"2026-04-14T14:53:17.689Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 57m elapsed"}
+{"ts":"2026-04-14T14:53:45.717Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 87 minutes without progress"}
+{"ts":"2026-04-14T14:53:45.719Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 200, found 201 — merging"}
+{"ts":"2026-04-14T14:54:45.729Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 88 minutes without progress"}
+{"ts":"2026-04-14T14:54:45.731Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 202, found 203 — merging"}
+{"ts":"2026-04-14T14:54:48.927Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 81m elapsed"}
+{"ts":"2026-04-14T14:55:45.735Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 89 minutes without progress"}
+{"ts":"2026-04-14T14:55:45.737Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 204, found 205 — merging"}
+{"ts":"2026-04-14T14:56:20.231Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 29m elapsed"}
+{"ts":"2026-04-14T14:56:20.231Z","level":"info","cid":"b8b23b1bce27","msg":"Waiting for plan approval… 60m elapsed"}
+{"ts":"2026-04-14T14:56:28.781Z","level":"warn","cid":"b8b23b1bce27","msg":"[Recovery] Stage \"explore_plan\" attempt 2 failed: [TIMEOUT] Stage \"explore_plan\" timed out after 30.0m (limit: 30.0m)"}
+{"ts":"2026-04-14T14:56:28.782Z","level":"error","cid":"b8b23b1bce27","msg":"Stage \"explore_plan\" failed after 2 retries: Stage \"explore_plan\" timed out after 30.0m (limit: 30.0m)"}
+{"ts":"2026-04-14T14:56:29.526Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T14:56:30.030Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T14:56:32.747Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T14:56:33.068Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T14:56:36.654Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T14:56:36.928Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T14:56:45.742Z","level":"warn","cid":"b8b23b1bce27","msg":"[Health] Pipeline appears stuck on \"explore_plan\" — 90 minutes without progress"}
+{"ts":"2026-04-14T14:56:45.743Z","level":"warn","cid":"b8b23b1bce27","msg":"[State CAS] CAS conflict: expected seq 206, found 207 — merging"}
+{"ts":"2026-04-14T14:56:47.447Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T14:56:48.008Z","level":"info","cid":"b8b23b1bce27","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T14:56:48.262Z","level":"warn","cid":"b8b23b1bce27","msg":"Slack notification failed: Slack webhook returned HTTP 404: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot POST /</pre>\n</body>\n</html>\n — executing fallback chain"}
+{"ts":"2026-04-14T14:56:48.940Z","level":"info","cid":"b8b23b1bce27","msg":"Notification fallback: sent via Jira comment for AUT-8424"}
+{"ts":"2026-04-14T15:17:17.027Z","level":"info","cid":"5a2403b5d4ce","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-14T15:17:17.613Z","level":"info","cid":"3dfa316945fe","msg":"Claude Code CLI found at /usr/local/bin/claude (2.1.52 (Claude Code))"}
+{"ts":"2026-04-14T15:17:17.619Z","level":"info","cid":"3dfa316945fe","msg":"Git CLI found"}
+{"ts":"2026-04-14T15:17:17.620Z","level":"warn","cid":"3dfa316945fe","msg":"GitLab URL uses HTTP — API tokens transmitted unencrypted. Use HTTPS for production."}
+{"ts":"2026-04-14T15:17:17.621Z","level":"warn","cid":"3dfa316945fe","msg":"QA main credentials not configured — QA testing stage will fail. Set QA_MAIN_USER and QA_MAIN_PASS."}
+{"ts":"2026-04-14T15:17:17.621Z","level":"warn","cid":"3dfa316945fe","msg":"QA1 credentials not configured — QA1 testing will fail. Set QA1_USER and QA1_PASS."}
+{"ts":"2026-04-14T15:17:17.621Z","level":"warn","cid":"3dfa316945fe","msg":"S2: .env file is readable by other users! Run: chmod 600 .env"}
+{"ts":"2026-04-14T15:17:17.622Z","level":"info","cid":"3dfa316945fe","msg":"Validating Jira token..."}
+{"ts":"2026-04-14T15:17:18.324Z","level":"info","cid":"3dfa316945fe","msg":"Jira auth OK (user: Yogendra Singh)"}
+{"ts":"2026-04-14T15:17:18.324Z","level":"info","cid":"3dfa316945fe","msg":"Validating GitLab token..."}
+{"ts":"2026-04-14T15:17:48.341Z","level":"warn","cid":"3dfa316945fe","msg":"SOCKET_TIMEOUT GET http://10.200.11.32/api/v4/projects/100 — retry 1/3 in 1134ms (elapsed 30017ms)"}
+{"ts":"2026-04-14T15:18:19.481Z","level":"warn","cid":"3dfa316945fe","msg":"SOCKET_TIMEOUT GET http://10.200.11.32/api/v4/projects/100 — retry 2/3 in 2022ms (elapsed 61157ms)"}
+{"ts":"2026-04-14T15:18:51.511Z","level":"warn","cid":"3dfa316945fe","msg":"SOCKET_TIMEOUT GET http://10.200.11.32/api/v4/projects/100 — retry 3/3 in 4124ms (elapsed 93187ms)"}
+{"ts":"2026-04-14T15:19:25.649Z","level":"warn","cid":"3dfa316945fe","msg":"GitLab token validation failed: Socket timeout — proceeding anyway"}
+{"ts":"2026-04-14T15:19:25.649Z","level":"warn","cid":"3dfa316945fe","msg":"S10: GitLab URL uses HTTP — API tokens transmitted unencrypted. Use HTTPS for production deployments."}
+{"ts":"2026-04-14T15:19:25.650Z","level":"info","cid":"3dfa316945fe","msg":"Testing Slack webhook connectivity..."}
+{"ts":"2026-04-14T15:19:26.151Z","level":"info","cid":"3dfa316945fe","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T15:19:26.667Z","level":"info","cid":"3dfa316945fe","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T15:19:27.656Z","level":"warn","cid":"3dfa316945fe","msg":"Slack webhook ping failed: Startup ping returned HTTP 404"}
+{"ts":"2026-04-14T15:19:27.657Z","level":"warn","cid":"3dfa316945fe","msg":"Slack initialization: Startup ping returned HTTP 404 -- fallback to log + Jira comments"}
+{"ts":"2026-04-14T15:19:28.512Z","level":"info","cid":"3dfa316945fe","msg":"Using worktree path: /home/yogendra/WebstormProjects/mi-dev-agent/.repo-cache/.worktrees/AUT-8424"}
+{"ts":"2026-04-14T15:19:28.619Z","level":"info","cid":"3dfa316945fe","msg":"Local tree: 8101 entries"}
+{"ts":"2026-04-14T15:19:28.619Z","level":"warn","cid":"3dfa316945fe","msg":"Stale lock file found (PID 256712 not running) — removing"}
+{"ts":"2026-04-14T15:19:28.624Z","level":"info","cid":"3dfa316945fe","msg":"[Checkpoint] Verifying checkpoint for stage \"explore_plan\" (from 2026-04-14T13:26:02.583Z)"}
+{"ts":"2026-04-14T15:19:28.625Z","level":"info","cid":"3dfa316945fe","msg":"[Checkpoint] Checkpoint verification passed"}
+{"ts":"2026-04-14T15:19:28.625Z","level":"info","cid":"3dfa316945fe","msg":"Stage: explore_plan"}
+{"ts":"2026-04-14T15:19:28.626Z","level":"info","cid":"3dfa316945fe","msg":"State: /home/yogendra/WebstormProjects/mi-dev-agent/state-AUT-8424.json"}
+{"ts":"2026-04-14T15:19:28.626Z","level":"info","cid":"3dfa316945fe","msg":"Correlation ID: 3dfa316945fe"}
+{"ts":"2026-04-14T15:19:28.626Z","level":"info","cid":"3dfa316945fe","msg":"[Health] Starting pipeline health monitor (interval: 60s)"}
+{"ts":"2026-04-14T15:19:28.626Z","level":"info","cid":"3dfa316945fe","msg":"Escalation monitoring started (check every 60s)"}
+{"ts":"2026-04-14T15:19:28.633Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 211, found 212 — merging"}
+{"ts":"2026-04-14T15:19:28.655Z","level":"info","cid":"3dfa316945fe","msg":"[Timeout] Stage \"explore_plan\" timeout: 30.0m (stage limit: 30.0m, pipeline remaining: 22.0h)"}
+{"ts":"2026-04-14T15:19:28.658Z","level":"info","cid":"3dfa316945fe","msg":"Step 1b -- Explore & Plan — analyzing ticket with agents team","type":"stage_header"}
+{"ts":"2026-04-14T15:19:28.658Z","level":"info","cid":"3dfa316945fe","msg":"Waiting for plan approval (Web UI)…"}
+{"ts":"2026-04-14T15:22:01.294Z","level":"info","cid":"3dfa316945fe","msg":"Waiting for plan approval… 2m elapsed"}
+{"ts":"2026-04-14T15:24:28.666Z","level":"info","cid":"3dfa316945fe","msg":"[Timeout] Stage \"explore_plan\": 5.0m elapsed, 25.0m remaining"}
+{"ts":"2026-04-14T15:25:03.769Z","level":"info","cid":"3dfa316945fe","msg":"Waiting for plan approval… 5m elapsed"}
+{"ts":"2026-04-14T15:28:05.921Z","level":"info","cid":"3dfa316945fe","msg":"Waiting for plan approval… 8m elapsed"}
+{"ts":"2026-04-14T15:29:28.634Z","level":"info","cid":"3dfa316945fe","msg":"[Restart] Agent marked as stable (10 minutes without crash)"}
+{"ts":"2026-04-14T15:29:28.635Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 213, found 214 — merging"}
+{"ts":"2026-04-14T15:29:28.667Z","level":"info","cid":"3dfa316945fe","msg":"[Timeout] Stage \"explore_plan\": 10.0m elapsed, 20.0m remaining"}
+{"ts":"2026-04-14T15:31:08.529Z","level":"info","cid":"3dfa316945fe","msg":"Waiting for plan approval… 11m elapsed"}
+{"ts":"2026-04-14T15:34:10.882Z","level":"info","cid":"3dfa316945fe","msg":"Waiting for plan approval… 14m elapsed"}
+{"ts":"2026-04-14T15:34:28.669Z","level":"info","cid":"3dfa316945fe","msg":"[Timeout] Stage \"explore_plan\": 15.0m elapsed, 15.0m remaining"}
+{"ts":"2026-04-14T15:35:11.353Z","level":"info","cid":"3dfa316945fe","msg":"Plan approved via Web UI — proceeding to code generation"}
+{"ts":"2026-04-14T15:35:11.355Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 215, found 217 — merging"}
+{"ts":"2026-04-14T15:35:11.362Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 218, found 219 — merging"}
+{"ts":"2026-04-14T15:35:11.368Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 220, found 221 — merging"}
+{"ts":"2026-04-14T15:35:11.374Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 222, found 223 — merging"}
+{"ts":"2026-04-14T15:35:11.379Z","level":"info","cid":"3dfa316945fe","msg":"[Timeout] Stage \"generate_code\" timeout: 1.0h (stage limit: 1.0h, pipeline remaining: 21.8h)"}
+{"ts":"2026-04-14T15:35:11.380Z","level":"info","cid":"3dfa316945fe","msg":"Step 2–3 -- Generate code with Claude AI","type":"stage_header"}
+{"ts":"2026-04-14T15:35:11.380Z","level":"info","cid":"3dfa316945fe","msg":"Using local repo for code generation (file-based approach)"}
+{"ts":"2026-04-14T15:35:11.380Z","level":"info","cid":"3dfa316945fe","msg":"Phase 0: Setting up browser verification environment…"}
+{"ts":"2026-04-14T15:35:11.380Z","level":"info","cid":"3dfa316945fe","msg":"Phase 0: .env written with 12 VITE_* variables"}
+{"ts":"2026-04-14T15:35:11.381Z","level":"info","cid":"3dfa316945fe","msg":"Phase 0: node_modules needs install (.bin/nx missing) — running npm install…"}
+{"ts":"2026-04-14T15:38:11.483Z","level":"error","cid":"3dfa316945fe","msg":"Phase 0: npm install failed: "}
+{"ts":"2026-04-14T15:38:11.483Z","level":"warn","cid":"3dfa316945fe","msg":"Phase 0: node_modules verification failed — skipping browser verification"}
+{"ts":"2026-04-14T15:38:11.484Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 224, found 225 — merging"}
+{"ts":"2026-04-14T15:38:11.492Z","level":"info","cid":"3dfa316945fe","msg":"Resetting local repo to clean state…"}
+{"ts":"2026-04-14T15:38:12.647Z","level":"info","cid":"3dfa316945fe","msg":"Local repo reset to clean state"}
+{"ts":"2026-04-14T15:38:12.648Z","level":"info","cid":"3dfa316945fe","msg":"Agents Team — Developer Agent: writing code directly…"}
+{"ts":"2026-04-14T15:38:12.648Z","level":"info","cid":"3dfa316945fe","msg":"  cwd: /home/yogendra/WebstormProjects/mi-dev-agent/.repo-cache/.worktrees/AUT-8424 | maxTurns: 25 | timeout: 900s"}
+{"ts":"2026-04-14T15:38:12.649Z","level":"info","cid":"3dfa316945fe","msg":"[Developer Agent] Starting 1 parallel agent(s)…"}
+{"ts":"2026-04-14T15:38:12.649Z","level":"info","cid":"3dfa316945fe","msg":"  Running 1 agent(s) in parallel (0 cached)…"}
+{"ts":"2026-04-14T15:38:12.651Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 226, found 227 — merging"}
+{"ts":"2026-04-14T15:38:12.658Z","level":"info","cid":"3dfa316945fe","msg":"  [Developer Agent] Starting… (timeout: 900s)"}
+{"ts":"2026-04-14T15:38:12.658Z","level":"info","cid":"3dfa316945fe","msg":"[Developer Agent] Prompt: 3188 chars (~797 tokens) | Timeout: 900s | MaxTurns: 25"}
+{"ts":"2026-04-14T15:38:12.662Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 228, found 229 — merging"}
+{"ts":"2026-04-14T15:38:42.670Z","level":"info","cid":"3dfa316945fe","msg":"[Developer Agent] Working… 30s elapsed"}
+{"ts":"2026-04-14T15:38:42.671Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 230, found 231 — merging"}
+{"ts":"2026-04-14T15:39:12.700Z","level":"info","cid":"3dfa316945fe","msg":"[Developer Agent] Working… 1m 0s elapsed"}
+{"ts":"2026-04-14T15:39:12.702Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 232, found 233 — merging"}
+{"ts":"2026-04-14T15:39:42.714Z","level":"info","cid":"3dfa316945fe","msg":"[Developer Agent] Working… 1m 30s elapsed"}
+{"ts":"2026-04-14T15:39:42.715Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 234, found 235 — merging"}
+{"ts":"2026-04-14T15:40:11.406Z","level":"info","cid":"3dfa316945fe","msg":"[Timeout] Stage \"generate_code\": 5.0m elapsed, 55.0m remaining"}
+{"ts":"2026-04-14T15:40:12.715Z","level":"info","cid":"3dfa316945fe","msg":"[Developer Agent] Working… 2m 0s elapsed"}
+{"ts":"2026-04-14T15:40:12.716Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 236, found 237 — merging"}
+{"ts":"2026-04-14T15:40:42.744Z","level":"info","cid":"3dfa316945fe","msg":"[Developer Agent] Working… 2m 30s elapsed"}
+{"ts":"2026-04-14T15:40:42.746Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 238, found 239 — merging"}
+{"ts":"2026-04-14T15:41:12.745Z","level":"info","cid":"3dfa316945fe","msg":"[Developer Agent] Working… 3m 0s elapsed"}
+{"ts":"2026-04-14T15:41:12.746Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 240, found 241 — merging"}
+{"ts":"2026-04-14T15:41:42.775Z","level":"info","cid":"3dfa316945fe","msg":"[Developer Agent] Working… 3m 30s elapsed"}
+{"ts":"2026-04-14T15:41:42.777Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 242, found 243 — merging"}
+{"ts":"2026-04-14T15:42:12.775Z","level":"info","cid":"3dfa316945fe","msg":"[Developer Agent] Working… 4m 0s elapsed"}
+{"ts":"2026-04-14T15:42:12.777Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 244, found 245 — merging"}
+{"ts":"2026-04-14T15:42:42.784Z","level":"info","cid":"3dfa316945fe","msg":"[Developer Agent] Working… 4m 30s elapsed"}
+{"ts":"2026-04-14T15:42:42.786Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 246, found 247 — merging"}
+{"ts":"2026-04-14T15:42:48.510Z","level":"info","cid":"3dfa316945fe","msg":"[Developer Agent] Complete in 275.9s"}
+{"ts":"2026-04-14T15:42:48.510Z","level":"info","cid":"3dfa316945fe","msg":"  [Developer Agent] Complete (275.9s, 1789 chars)"}
+{"ts":"2026-04-14T15:42:48.514Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 248, found 249 — merging"}
+{"ts":"2026-04-14T15:42:48.540Z","level":"info","cid":"3dfa316945fe","msg":"[Developer Agent] Done in 275.9s — 1 succeeded, 0 optional failed"}
+{"ts":"2026-04-14T15:42:48.540Z","level":"info","cid":"3dfa316945fe","msg":"Developer Agent complete"}
+{"ts":"2026-04-14T15:42:48.721Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 250, found 251 — merging"}
+{"ts":"2026-04-14T15:42:48.737Z","level":"info","cid":"3dfa316945fe","msg":"Extracting file changes from local repo…"}
+{"ts":"2026-04-14T15:42:48.827Z","level":"info","cid":"3dfa316945fe","msg":"10 file(s) changed"}
+{"ts":"2026-04-14T15:42:48.993Z","level":"info","cid":"3dfa316945fe","msg":"Agents Team — Reviewer + Security Agents (parallel)…"}
+{"ts":"2026-04-14T15:42:48.993Z","level":"info","cid":"3dfa316945fe","msg":"[Review Team] Starting 2 parallel agent(s)…"}
+{"ts":"2026-04-14T15:42:48.993Z","level":"info","cid":"3dfa316945fe","msg":"  Running 2 agent(s) in parallel (0 cached)…"}
+{"ts":"2026-04-14T15:42:48.994Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 252, found 253 — merging"}
+{"ts":"2026-04-14T15:42:49.010Z","level":"info","cid":"3dfa316945fe","msg":"  [Reviewer Agent] Starting… (timeout: 600s)"}
+{"ts":"2026-04-14T15:42:49.010Z","level":"info","cid":"3dfa316945fe","msg":"[Reviewer Agent] Prompt: 2967 chars (~742 tokens) | Timeout: 600s | MaxTurns: 15"}
+{"ts":"2026-04-14T15:42:49.014Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 254, found 255 — merging"}
+{"ts":"2026-04-14T15:42:49.020Z","level":"info","cid":"3dfa316945fe","msg":"  [Security Agent] Starting… (timeout: 600s)"}
+{"ts":"2026-04-14T15:42:49.020Z","level":"info","cid":"3dfa316945fe","msg":"[Security Agent] Prompt: 1999 chars (~500 tokens) | Timeout: 600s | MaxTurns: 10"}
+{"ts":"2026-04-14T15:42:49.024Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 256, found 257 — merging"}
+{"ts":"2026-04-14T15:43:19.025Z","level":"info","cid":"3dfa316945fe","msg":"[Reviewer Agent] Working… 30s elapsed"}
+{"ts":"2026-04-14T15:43:19.027Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 258, found 259 — merging"}
+{"ts":"2026-04-14T15:43:19.042Z","level":"info","cid":"3dfa316945fe","msg":"[Security Agent] Working… 30s elapsed"}
+{"ts":"2026-04-14T15:43:19.043Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 260, found 261 — merging"}
+{"ts":"2026-04-14T15:43:49.038Z","level":"info","cid":"3dfa316945fe","msg":"[Reviewer Agent] Working… 1m 0s elapsed"}
+{"ts":"2026-04-14T15:43:49.039Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 262, found 263 — merging"}
+{"ts":"2026-04-14T15:43:49.045Z","level":"info","cid":"3dfa316945fe","msg":"[Security Agent] Working… 1m 0s elapsed"}
+{"ts":"2026-04-14T15:43:49.046Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 264, found 265 — merging"}
+{"ts":"2026-04-14T15:43:52.029Z","level":"info","cid":"3dfa316945fe","msg":"[Security Agent] Complete in 63.0s"}
+{"ts":"2026-04-14T15:43:52.029Z","level":"info","cid":"3dfa316945fe","msg":"  [Security Agent] Complete (63.0s, 1990 chars)"}
+{"ts":"2026-04-14T15:43:52.030Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 266, found 267 — merging"}
+{"ts":"2026-04-14T15:44:19.044Z","level":"info","cid":"3dfa316945fe","msg":"[Reviewer Agent] Working… 1m 30s elapsed"}
+{"ts":"2026-04-14T15:44:19.046Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 268, found 269 — merging"}
+{"ts":"2026-04-14T15:44:23.897Z","level":"info","cid":"3dfa316945fe","msg":"[Reviewer Agent] Complete in 94.9s"}
+{"ts":"2026-04-14T15:44:23.897Z","level":"info","cid":"3dfa316945fe","msg":"  [Reviewer Agent] Complete (94.9s, 2574 chars)"}
+{"ts":"2026-04-14T15:44:23.898Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 270, found 271 — merging"}
+{"ts":"2026-04-14T15:44:23.914Z","level":"info","cid":"3dfa316945fe","msg":"[Review Team] Done in 94.9s — 2 succeeded, 0 optional failed"}
+{"ts":"2026-04-14T15:44:23.914Z","level":"info","cid":"3dfa316945fe","msg":"Review Team complete"}
+{"ts":"2026-04-14T15:44:23.915Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 272, found 273 — merging"}
+{"ts":"2026-04-14T15:44:23.921Z","level":"info","cid":"3dfa316945fe","msg":"Review: LGTM · Security: SECURE"}
+{"ts":"2026-04-14T15:44:23.922Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 274, found 275 — merging"}
+{"ts":"2026-04-14T15:44:23.927Z","level":"info","cid":"3dfa316945fe","msg":"10 file(s) ready"}
+{"ts":"2026-04-14T15:44:23.928Z","level":"info","cid":"3dfa316945fe","msg":"Q5: Running build verification (tsc + eslint)…"}
+{"ts":"2026-04-14T15:44:23.928Z","level":"info","cid":"3dfa316945fe","msg":"  Running TypeScript check…"}
+{"ts":"2026-04-14T15:44:29.570Z","level":"info","cid":"3dfa316945fe","msg":"  TypeScript: No errors"}
+{"ts":"2026-04-14T15:44:29.570Z","level":"info","cid":"3dfa316945fe","msg":"  Running ESLint on 10 file(s)…"}
+{"ts":"2026-04-14T15:44:32.419Z","level":"warn","cid":"3dfa316945fe","msg":"  ESLint errors found"}
+{"ts":"2026-04-14T15:44:32.420Z","level":"info","cid":"3dfa316945fe","msg":"Q5: Build errors found — sending to Fixer Agent…"}
+{"ts":"2026-04-14T15:44:32.422Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 276, found 277 — merging"}
+{"ts":"2026-04-14T15:44:32.429Z","level":"info","cid":"3dfa316945fe","msg":"[Build Fixer Agent] Starting 1 parallel agent(s)…"}
+{"ts":"2026-04-14T15:44:32.430Z","level":"info","cid":"3dfa316945fe","msg":"  Running 1 agent(s) in parallel (0 cached)…"}
+{"ts":"2026-04-14T15:44:32.431Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 278, found 279 — merging"}
+{"ts":"2026-04-14T15:44:32.437Z","level":"info","cid":"3dfa316945fe","msg":"  [Build Fixer Agent] Starting… (timeout: 900s)"}
+{"ts":"2026-04-14T15:44:32.437Z","level":"info","cid":"3dfa316945fe","msg":"[Build Fixer Agent] Prompt: 1945 chars (~486 tokens) | Timeout: 900s | MaxTurns: 15"}
+{"ts":"2026-04-14T15:44:32.441Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 280, found 281 — merging"}
+{"ts":"2026-04-14T15:45:02.460Z","level":"info","cid":"3dfa316945fe","msg":"[Build Fixer Agent] Working… 30s elapsed"}
+{"ts":"2026-04-14T15:45:02.461Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 282, found 283 — merging"}
+{"ts":"2026-04-14T15:45:11.412Z","level":"info","cid":"3dfa316945fe","msg":"[Timeout] Stage \"generate_code\": 10.0m elapsed, 50.0m remaining"}
+{"ts":"2026-04-14T15:45:32.467Z","level":"info","cid":"3dfa316945fe","msg":"[Build Fixer Agent] Working… 1m 0s elapsed"}
+{"ts":"2026-04-14T15:45:32.468Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 284, found 285 — merging"}
+{"ts":"2026-04-14T15:46:02.496Z","level":"info","cid":"3dfa316945fe","msg":"[Build Fixer Agent] Working… 1m 30s elapsed"}
+{"ts":"2026-04-14T15:46:02.498Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 286, found 287 — merging"}
+{"ts":"2026-04-14T15:46:32.516Z","level":"info","cid":"3dfa316945fe","msg":"[Build Fixer Agent] Working… 2m 0s elapsed"}
+{"ts":"2026-04-14T15:46:32.518Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 288, found 289 — merging"}
+{"ts":"2026-04-14T15:47:02.518Z","level":"info","cid":"3dfa316945fe","msg":"[Build Fixer Agent] Working… 2m 30s elapsed"}
+{"ts":"2026-04-14T15:47:02.520Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 290, found 291 — merging"}
+{"ts":"2026-04-14T15:47:02.796Z","level":"info","cid":"3dfa316945fe","msg":"[Build Fixer Agent] Complete in 150.4s"}
+{"ts":"2026-04-14T15:47:02.796Z","level":"info","cid":"3dfa316945fe","msg":"  [Build Fixer Agent] Complete (150.4s, 29 chars)"}
+{"ts":"2026-04-14T15:47:02.799Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 292, found 293 — merging"}
+{"ts":"2026-04-14T15:47:02.813Z","level":"info","cid":"3dfa316945fe","msg":"[Build Fixer Agent] Done in 150.4s — 1 succeeded, 0 optional failed"}
+{"ts":"2026-04-14T15:47:02.814Z","level":"info","cid":"3dfa316945fe","msg":"Build Fixer Agent complete — re-extracting changes"}
+{"ts":"2026-04-14T15:47:02.892Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 294, found 295 — merging"}
+{"ts":"2026-04-14T15:47:02.899Z","level":"info","cid":"3dfa316945fe","msg":"Runtime tests: Change type = COMPONENT"}
+{"ts":"2026-04-14T15:47:02.899Z","level":"info","cid":"3dfa316945fe","msg":"Step RT-0 -- Environment Bootstrap","type":"stage_header"}
+{"ts":"2026-04-14T15:47:02.899Z","level":"info","cid":"3dfa316945fe","msg":"  Installing jest-environment-jsdom…"}
+{"ts":"2026-04-14T15:48:02.960Z","level":"warn","cid":"3dfa316945fe","msg":"  Failed to install jest-environment-jsdom: spawnSync /bin/sh ETIMEDOUT"}
+{"ts":"2026-04-14T15:48:02.960Z","level":"info","cid":"3dfa316945fe","msg":"  Installing jest-canvas-mock…"}
+{"ts":"2026-04-14T15:49:03.022Z","level":"warn","cid":"3dfa316945fe","msg":"  Failed to install jest-canvas-mock: spawnSync /bin/sh ETIMEDOUT"}
+{"ts":"2026-04-14T15:49:03.022Z","level":"info","cid":"3dfa316945fe","msg":"  Installing @playwright/test…"}
+{"ts":"2026-04-14T15:51:03.063Z","level":"warn","cid":"3dfa316945fe","msg":"  Playwright install failed: spawnSync /bin/sh ETIMEDOUT — Phase 3 will be skipped"}
+{"ts":"2026-04-14T15:51:03.064Z","level":"info","cid":"3dfa316945fe","msg":"  Generating jest.config.override.js…"}
+{"ts":"2026-04-14T15:51:03.065Z","level":"warn","cid":"3dfa316945fe","msg":"  jest.config.override generation failed: Bad control character in string literal in JSON at position 5430 (line 123 column 29)"}
+{"ts":"2026-04-14T15:51:03.066Z","level":"info","cid":"3dfa316945fe","msg":"  Generating setupTests.runtime.ts…"}
+{"ts":"2026-04-14T15:51:03.066Z","level":"info","cid":"3dfa316945fe","msg":"  setupTests.runtime.ts generated"}
+{"ts":"2026-04-14T15:51:03.067Z","level":"info","cid":"3dfa316945fe","msg":"  Generating test-providers.tsx…"}
+{"ts":"2026-04-14T15:51:03.067Z","level":"info","cid":"3dfa316945fe","msg":"  test-providers.tsx generated"}
+{"ts":"2026-04-14T15:51:03.067Z","level":"info","cid":"3dfa316945fe","msg":"  Generating @mi/core shim…"}
+{"ts":"2026-04-14T15:51:03.068Z","level":"info","cid":"3dfa316945fe","msg":"  @mi/core shim generated"}
+{"ts":"2026-04-14T15:51:03.068Z","level":"info","cid":"3dfa316945fe","msg":"  Writing .env.local with VITE_* mock values…"}
+{"ts":"2026-04-14T15:51:03.068Z","level":"info","cid":"3dfa316945fe","msg":"  .env.local written"}
+{"ts":"2026-04-14T15:51:03.069Z","level":"info","cid":"3dfa316945fe","msg":"  Validating test setup…"}
+{"ts":"2026-04-14T15:51:03.070Z","level":"info","cid":"3dfa316945fe","msg":"  Running validation test: app.spec.tsx"}
+{"ts":"2026-04-14T15:51:09.629Z","level":"info","cid":"3dfa316945fe","msg":"  Validation test passed"}
+{"ts":"2026-04-14T15:51:09.633Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 296, found 297 — merging"}
+{"ts":"2026-04-14T15:51:09.664Z","level":"info","cid":"3dfa316945fe","msg":"Phase 0: Environment bootstrap complete"}
+{"ts":"2026-04-14T15:51:09.664Z","level":"info","cid":"3dfa316945fe","msg":"Step RT-1 -- Vite Build Verification","type":"stage_header"}
+{"ts":"2026-04-14T15:51:09.664Z","level":"info","cid":"3dfa316945fe","msg":"  Running full Vite build…"}
+{"ts":"2026-04-14T15:51:09.671Z","level":"info","cid":"3dfa316945fe","msg":"[Timeout] Stage \"generate_code\": 16.0m elapsed, 44.0m remaining"}
+{"ts":"2026-04-14T15:51:16.772Z","level":"info","cid":"3dfa316945fe","msg":"  [Vite build] Done in 7.1s (exit 127)"}
+{"ts":"2026-04-14T15:51:16.773Z","level":"warn","cid":"3dfa316945fe","msg":"  Vite build failed: sh: 1: nx: not found\n"}
+{"ts":"2026-04-14T15:51:16.776Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 298, found 299 — merging"}
+{"ts":"2026-04-14T15:51:16.829Z","level":"info","cid":"3dfa316945fe","msg":"Step RT-2 -- Unit Test Generation & Execution","type":"stage_header"}
+{"ts":"2026-04-14T15:51:16.839Z","level":"info","cid":"3dfa316945fe","msg":"  Generating unit tests from acceptance criteria…"}
+{"ts":"2026-04-14T15:51:16.840Z","level":"info","cid":"3dfa316945fe","msg":"[QA Test Engineer Agent] Starting 1 parallel agent(s)…"}
+{"ts":"2026-04-14T15:51:16.840Z","level":"info","cid":"3dfa316945fe","msg":"  Running 1 agent(s) in parallel (0 cached)…"}
+{"ts":"2026-04-14T15:51:16.843Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 300, found 301 — merging"}
+{"ts":"2026-04-14T15:51:16.856Z","level":"info","cid":"3dfa316945fe","msg":"  [QA Test Engineer Agent] Starting… (timeout: 180s)"}
+{"ts":"2026-04-14T15:51:16.856Z","level":"info","cid":"3dfa316945fe","msg":"[QA Test Engineer Agent] Prompt: 14891 chars (~3723 tokens) | Timeout: 180s | MaxTurns: 15"}
+{"ts":"2026-04-14T15:51:16.864Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 302, found 303 — merging"}
+{"ts":"2026-04-14T15:51:46.896Z","level":"info","cid":"3dfa316945fe","msg":"[QA Test Engineer Agent] Working… 30s elapsed"}
+{"ts":"2026-04-14T15:51:46.899Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 304, found 305 — merging"}
+{"ts":"2026-04-14T15:52:16.903Z","level":"info","cid":"3dfa316945fe","msg":"[QA Test Engineer Agent] Working… 1m 0s elapsed"}
+{"ts":"2026-04-14T15:52:16.907Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 306, found 307 — merging"}
+{"ts":"2026-04-14T15:52:46.933Z","level":"info","cid":"3dfa316945fe","msg":"[QA Test Engineer Agent] Working… 1m 30s elapsed"}
+{"ts":"2026-04-14T15:52:46.936Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 308, found 309 — merging"}
+{"ts":"2026-04-14T15:53:16.935Z","level":"info","cid":"3dfa316945fe","msg":"[QA Test Engineer Agent] Working… 2m 0s elapsed"}
+{"ts":"2026-04-14T15:53:16.937Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 310, found 311 — merging"}
+{"ts":"2026-04-14T15:53:46.965Z","level":"info","cid":"3dfa316945fe","msg":"[QA Test Engineer Agent] Working… 2m 30s elapsed"}
+{"ts":"2026-04-14T15:53:46.969Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 312, found 313 — merging"}
+{"ts":"2026-04-14T15:54:16.882Z","level":"warn","cid":"3dfa316945fe","msg":"[QA Test Engineer Agent] Timeout — retrying with 270s timeout, 7 maxTurns (degraded)"}
+{"ts":"2026-04-14T15:54:16.889Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 314, found 315 — merging"}
+{"ts":"2026-04-14T15:54:46.935Z","level":"info","cid":"3dfa316945fe","msg":"[QA Test Engineer Agent] Working… 30s elapsed"}
+{"ts":"2026-04-14T15:54:46.937Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 316, found 317 — merging"}
+{"ts":"2026-04-14T15:55:15.479Z","level":"info","cid":"3dfa316945fe","msg":"[QA Test Engineer Agent] Complete in 238.6s (after retry)"}
+{"ts":"2026-04-14T15:55:15.479Z","level":"info","cid":"3dfa316945fe","msg":"  [QA Test Engineer Agent] Complete (238.6s, 28 chars)"}
+{"ts":"2026-04-14T15:55:15.484Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 318, found 319 — merging"}
+{"ts":"2026-04-14T15:55:15.490Z","level":"info","cid":"3dfa316945fe","msg":"[QA Test Engineer Agent] Done in 238.7s — 1 succeeded, 0 optional failed"}
+{"ts":"2026-04-14T15:55:15.490Z","level":"info","cid":"3dfa316945fe","msg":"  Unit test files generated"}
+{"ts":"2026-04-14T15:55:15.490Z","level":"info","cid":"3dfa316945fe","msg":"  Running Jest (attempt 1/3)…"}
+{"ts":"2026-04-14T15:55:16.076Z","level":"info","cid":"3dfa316945fe","msg":"  [Jest (attempt 1)] Done in 0.6s (exit 0)"}
+{"ts":"2026-04-14T15:55:16.076Z","level":"info","cid":"3dfa316945fe","msg":"  Running Jest (attempt 2/3)…"}
+{"ts":"2026-04-14T15:55:16.665Z","level":"info","cid":"3dfa316945fe","msg":"  [Jest (attempt 2)] Done in 0.6s (exit 0)"}
+{"ts":"2026-04-14T15:55:16.666Z","level":"info","cid":"3dfa316945fe","msg":"  Running Jest (attempt 3/3)…"}
+{"ts":"2026-04-14T15:55:17.247Z","level":"info","cid":"3dfa316945fe","msg":"  [Jest (attempt 3)] Done in 0.6s (exit 0)"}
+{"ts":"2026-04-14T15:55:17.248Z","level":"info","cid":"3dfa316945fe","msg":"  Tests may have compile errors — running Test Fixer Agent…"}
+{"ts":"2026-04-14T15:55:17.248Z","level":"info","cid":"3dfa316945fe","msg":"[Test Fixer Agent] Starting 1 parallel agent(s)…"}
+{"ts":"2026-04-14T15:55:17.248Z","level":"info","cid":"3dfa316945fe","msg":"  Running 1 agent(s) in parallel (0 cached)…"}
+{"ts":"2026-04-14T15:55:17.250Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 320, found 321 — merging"}
+{"ts":"2026-04-14T15:55:17.265Z","level":"info","cid":"3dfa316945fe","msg":"  [Test Fixer Agent] Starting… (timeout: 180s)"}
+{"ts":"2026-04-14T15:55:17.265Z","level":"info","cid":"3dfa316945fe","msg":"[Test Fixer Agent] Prompt: 1105 chars (~276 tokens) | Timeout: 180s | MaxTurns: 10"}
+{"ts":"2026-04-14T15:55:17.269Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 322, found 323 — merging"}
+{"ts":"2026-04-14T15:55:47.282Z","level":"info","cid":"3dfa316945fe","msg":"[Test Fixer Agent] Working… 30s elapsed"}
+{"ts":"2026-04-14T15:55:47.293Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 324, found 325 — merging"}
+{"ts":"2026-04-14T15:56:09.675Z","level":"info","cid":"3dfa316945fe","msg":"[Timeout] Stage \"generate_code\": 21.0m elapsed, 39.0m remaining"}
+{"ts":"2026-04-14T15:56:17.288Z","level":"info","cid":"3dfa316945fe","msg":"[Test Fixer Agent] Working… 1m 0s elapsed"}
+{"ts":"2026-04-14T15:56:17.292Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 326, found 327 — merging"}
+{"ts":"2026-04-14T15:56:29.626Z","level":"info","cid":"3dfa316945fe","msg":"[Test Fixer Agent] Complete in 72.4s"}
+{"ts":"2026-04-14T15:56:29.627Z","level":"info","cid":"3dfa316945fe","msg":"  [Test Fixer Agent] Complete (72.4s, 29 chars)"}
+{"ts":"2026-04-14T15:56:29.631Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 328, found 329 — merging"}
+{"ts":"2026-04-14T15:56:29.645Z","level":"info","cid":"3dfa316945fe","msg":"[Test Fixer Agent] Done in 72.4s — 1 succeeded, 0 optional failed"}
+{"ts":"2026-04-14T15:56:30.170Z","level":"info","cid":"3dfa316945fe","msg":"  [Jest (after fix)] Done in 0.5s (exit 0)"}
+{"ts":"2026-04-14T15:56:30.171Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 330, found 331 — merging"}
+{"ts":"2026-04-14T15:56:30.186Z","level":"warn","cid":"3dfa316945fe","msg":"  Only 0 tests for ~1 acceptance criteria — coverage may be incomplete"}
+{"ts":"2026-04-14T15:56:30.186Z","level":"info","cid":"3dfa316945fe","msg":"Phase 2: Unit tests — INCONCLUSIVE (0/0 passed)"}
+{"ts":"2026-04-14T15:56:30.186Z","level":"info","cid":"3dfa316945fe","msg":"  Reverting generated test infrastructure files…"}
+{"ts":"2026-04-14T15:56:30.269Z","level":"info","cid":"3dfa316945fe","msg":"  Test infrastructure files reverted — only production code remains"}
+{"ts":"2026-04-14T15:56:30.349Z","level":"info","cid":"3dfa316945fe","msg":"Q6: Running AC Verification Agent…"}
+{"ts":"2026-04-14T15:56:30.349Z","level":"info","cid":"3dfa316945fe","msg":"[AC Verification Agent] Starting 1 parallel agent(s)…"}
+{"ts":"2026-04-14T15:56:30.349Z","level":"info","cid":"3dfa316945fe","msg":"  Running 1 agent(s) in parallel (0 cached)…"}
+{"ts":"2026-04-14T15:56:30.350Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 332, found 333 — merging"}
+{"ts":"2026-04-14T15:56:30.357Z","level":"info","cid":"3dfa316945fe","msg":"  [AC Verification Agent] Starting… (timeout: 600s)"}
+{"ts":"2026-04-14T15:56:30.357Z","level":"info","cid":"3dfa316945fe","msg":"[AC Verification Agent] Prompt: 1825 chars (~456 tokens) | Timeout: 600s | MaxTurns: 10"}
+{"ts":"2026-04-14T15:56:30.360Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 334, found 335 — merging"}
+{"ts":"2026-04-14T15:57:00.380Z","level":"info","cid":"3dfa316945fe","msg":"[AC Verification Agent] Working… 30s elapsed"}
+{"ts":"2026-04-14T15:57:00.383Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 336, found 337 — merging"}
+{"ts":"2026-04-14T15:57:14.750Z","level":"info","cid":"3dfa316945fe","msg":"[AC Verification Agent] Complete in 44.4s"}
+{"ts":"2026-04-14T15:57:14.750Z","level":"info","cid":"3dfa316945fe","msg":"  [AC Verification Agent] Complete (44.4s, 1683 chars)"}
+{"ts":"2026-04-14T15:57:14.753Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 338, found 339 — merging"}
+{"ts":"2026-04-14T15:57:14.781Z","level":"info","cid":"3dfa316945fe","msg":"[AC Verification Agent] Done in 44.4s — 1 succeeded, 0 optional failed"}
+{"ts":"2026-04-14T15:57:14.782Z","level":"info","cid":"3dfa316945fe","msg":"Q6: AC Verification: 1 PASS, 0 PARTIAL, 0 FAIL"}
+{"ts":"2026-04-14T15:57:14.783Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 340, found 341 — merging"}
+{"ts":"2026-04-14T15:57:14.867Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 342, found 343 — merging"}
+{"ts":"2026-04-14T15:57:14.875Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 344, found 345 — merging"}
+{"ts":"2026-04-14T15:57:14.885Z","level":"info","cid":"3dfa316945fe","msg":"Creating branch enterprise-ts-AUT-8424 from enterprise-ts…"}
+{"ts":"2026-04-14T15:57:44.902Z","level":"warn","cid":"3dfa316945fe","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 1/3 in 1265ms (elapsed 30017ms)"}
+{"ts":"2026-04-14T15:58:16.169Z","level":"warn","cid":"3dfa316945fe","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 2/3 in 2091ms (elapsed 61284ms)"}
+{"ts":"2026-04-14T15:58:48.289Z","level":"warn","cid":"3dfa316945fe","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 3/3 in 4127ms (elapsed 93404ms)"}
+{"ts":"2026-04-14T15:59:22.436Z","level":"warn","cid":"3dfa316945fe","msg":"[Recovery] Stage \"generate_code\" attempt 0 failed: [TRANSIENT] Socket timeout"}
+{"ts":"2026-04-14T15:59:22.436Z","level":"info","cid":"3dfa316945fe","msg":"[Recovery] Transient error in \"generate_code\" — retrying in 15.2s"}
+{"ts":"2026-04-14T15:59:37.663Z","level":"info","cid":"3dfa316945fe","msg":"[Recovery] Retry 1/2 for stage \"generate_code\""}
+{"ts":"2026-04-14T15:59:37.667Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 346, found 347 — merging"}
+{"ts":"2026-04-14T15:59:37.684Z","level":"info","cid":"3dfa316945fe","msg":"[Timeout] Stage \"generate_code\" timeout: 1.0h (stage limit: 1.0h, pipeline remaining: 21.4h)"}
+{"ts":"2026-04-14T15:59:37.684Z","level":"info","cid":"3dfa316945fe","msg":"Step 2–3 -- Generate code with Claude AI","type":"stage_header"}
+{"ts":"2026-04-14T15:59:37.684Z","level":"info","cid":"3dfa316945fe","msg":"Code already generated — skipping to branch/commit/MR"}
+{"ts":"2026-04-14T15:59:37.684Z","level":"info","cid":"3dfa316945fe","msg":"Creating branch enterprise-ts-AUT-8424 from enterprise-ts…"}
+{"ts":"2026-04-14T16:00:07.715Z","level":"warn","cid":"3dfa316945fe","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 1/3 in 1085ms (elapsed 30030ms)"}
+{"ts":"2026-04-14T16:00:38.831Z","level":"warn","cid":"3dfa316945fe","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 2/3 in 2008ms (elapsed 61146ms)"}
+{"ts":"2026-04-14T16:01:10.843Z","level":"warn","cid":"3dfa316945fe","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 3/3 in 4155ms (elapsed 93158ms)"}
+{"ts":"2026-04-14T16:01:45.030Z","level":"warn","cid":"3dfa316945fe","msg":"[Recovery] Stage \"generate_code\" attempt 1 failed: [TRANSIENT] Socket timeout"}
+{"ts":"2026-04-14T16:01:45.030Z","level":"info","cid":"3dfa316945fe","msg":"[Recovery] Transient error in \"generate_code\" — retrying in 28.4s"}
+{"ts":"2026-04-14T16:02:13.424Z","level":"info","cid":"3dfa316945fe","msg":"[Recovery] Retry 2/2 for stage \"generate_code\""}
+{"ts":"2026-04-14T16:02:13.428Z","level":"warn","cid":"3dfa316945fe","msg":"[State CAS] CAS conflict: expected seq 348, found 349 — merging"}
+{"ts":"2026-04-14T16:02:13.457Z","level":"info","cid":"3dfa316945fe","msg":"[Timeout] Stage \"generate_code\" timeout: 1.0h (stage limit: 1.0h, pipeline remaining: 21.3h)"}
+{"ts":"2026-04-14T16:02:13.457Z","level":"info","cid":"3dfa316945fe","msg":"Step 2–3 -- Generate code with Claude AI","type":"stage_header"}
+{"ts":"2026-04-14T16:02:13.457Z","level":"info","cid":"3dfa316945fe","msg":"Code already generated — skipping to branch/commit/MR"}
+{"ts":"2026-04-14T16:02:13.457Z","level":"info","cid":"3dfa316945fe","msg":"Creating branch enterprise-ts-AUT-8424 from enterprise-ts…"}
+{"ts":"2026-04-14T16:02:43.464Z","level":"warn","cid":"3dfa316945fe","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 1/3 in 1282ms (elapsed 30007ms)"}
+{"ts":"2026-04-14T16:03:14.753Z","level":"warn","cid":"3dfa316945fe","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 2/3 in 2123ms (elapsed 61296ms)"}
+{"ts":"2026-04-14T16:03:46.910Z","level":"warn","cid":"3dfa316945fe","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 3/3 in 4022ms (elapsed 93453ms)"}
+{"ts":"2026-04-14T16:04:20.949Z","level":"warn","cid":"3dfa316945fe","msg":"[Recovery] Stage \"generate_code\" attempt 2 failed: [TRANSIENT] Socket timeout"}
+{"ts":"2026-04-14T16:04:20.950Z","level":"error","cid":"3dfa316945fe","msg":"Stage \"generate_code\" failed after 2 retries: Socket timeout"}
+{"ts":"2026-04-14T16:04:21.466Z","level":"info","cid":"3dfa316945fe","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T16:04:21.872Z","level":"info","cid":"3dfa316945fe","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T16:04:24.921Z","level":"info","cid":"3dfa316945fe","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T16:04:25.189Z","level":"info","cid":"3dfa316945fe","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T16:04:28.823Z","level":"info","cid":"3dfa316945fe","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T16:04:29.095Z","level":"info","cid":"3dfa316945fe","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T16:04:39.682Z","level":"info","cid":"3dfa316945fe","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T16:04:39.958Z","level":"info","cid":"3dfa316945fe","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T16:04:40.307Z","level":"warn","cid":"3dfa316945fe","msg":"Slack notification failed: Slack webhook returned HTTP 404: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot POST /</pre>\n</body>\n</html>\n — executing fallback chain"}
+{"ts":"2026-04-14T16:04:41.529Z","level":"info","cid":"3dfa316945fe","msg":"Notification fallback: sent via Jira comment for AUT-8424"}
+{"ts":"2026-04-14T16:07:40.798Z","level":"info","cid":"784c2a067748","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-14T16:07:41.612Z","level":"info","cid":"fdcd982a7ebf","msg":"Claude Code CLI found at /usr/local/bin/claude (2.1.52 (Claude Code))"}
+{"ts":"2026-04-14T16:07:41.621Z","level":"info","cid":"fdcd982a7ebf","msg":"Git CLI found"}
+{"ts":"2026-04-14T16:07:41.623Z","level":"warn","cid":"fdcd982a7ebf","msg":"GitLab URL uses HTTP — API tokens transmitted unencrypted. Use HTTPS for production."}
+{"ts":"2026-04-14T16:07:41.624Z","level":"warn","cid":"fdcd982a7ebf","msg":"QA main credentials not configured — QA testing stage will fail. Set QA_MAIN_USER and QA_MAIN_PASS."}
+{"ts":"2026-04-14T16:07:41.625Z","level":"warn","cid":"fdcd982a7ebf","msg":"QA1 credentials not configured — QA1 testing will fail. Set QA1_USER and QA1_PASS."}
+{"ts":"2026-04-14T16:07:41.625Z","level":"warn","cid":"fdcd982a7ebf","msg":"S2: .env file is readable by other users! Run: chmod 600 .env"}
+{"ts":"2026-04-14T16:07:41.625Z","level":"info","cid":"fdcd982a7ebf","msg":"Validating Jira token..."}
+{"ts":"2026-04-14T16:07:42.372Z","level":"info","cid":"fdcd982a7ebf","msg":"Jira auth OK (user: Yogendra Singh)"}
+{"ts":"2026-04-14T16:07:42.372Z","level":"info","cid":"fdcd982a7ebf","msg":"Validating GitLab token..."}
+{"ts":"2026-04-14T16:08:12.381Z","level":"warn","cid":"fdcd982a7ebf","msg":"SOCKET_TIMEOUT GET http://10.200.11.32/api/v4/projects/100 — retry 1/3 in 1006ms (elapsed 30008ms)"}
+{"ts":"2026-04-14T16:08:43.394Z","level":"warn","cid":"fdcd982a7ebf","msg":"SOCKET_TIMEOUT GET http://10.200.11.32/api/v4/projects/100 — retry 2/3 in 2158ms (elapsed 61021ms)"}
+{"ts":"2026-04-14T16:09:15.559Z","level":"warn","cid":"fdcd982a7ebf","msg":"SOCKET_TIMEOUT GET http://10.200.11.32/api/v4/projects/100 — retry 3/3 in 4236ms (elapsed 93186ms)"}
+{"ts":"2026-04-14T16:09:49.810Z","level":"warn","cid":"fdcd982a7ebf","msg":"GitLab token validation failed: Socket timeout — proceeding anyway"}
+{"ts":"2026-04-14T16:09:49.810Z","level":"warn","cid":"fdcd982a7ebf","msg":"S10: GitLab URL uses HTTP — API tokens transmitted unencrypted. Use HTTPS for production deployments."}
+{"ts":"2026-04-14T16:09:49.811Z","level":"info","cid":"fdcd982a7ebf","msg":"Testing Slack webhook connectivity..."}
+{"ts":"2026-04-14T16:09:50.227Z","level":"info","cid":"fdcd982a7ebf","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T16:09:50.652Z","level":"info","cid":"fdcd982a7ebf","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T16:09:51.702Z","level":"warn","cid":"fdcd982a7ebf","msg":"Slack webhook ping failed: Startup ping returned HTTP 404"}
+{"ts":"2026-04-14T16:09:51.702Z","level":"warn","cid":"fdcd982a7ebf","msg":"Slack initialization: Startup ping returned HTTP 404 -- fallback to log + Jira comments"}
+{"ts":"2026-04-14T16:09:52.647Z","level":"info","cid":"fdcd982a7ebf","msg":"Using worktree path: /home/yogendra/WebstormProjects/mi-dev-agent/.repo-cache/.worktrees/AUT-8424"}
+{"ts":"2026-04-14T16:09:52.717Z","level":"info","cid":"fdcd982a7ebf","msg":"Local tree: 8101 entries"}
+{"ts":"2026-04-14T16:09:52.718Z","level":"warn","cid":"fdcd982a7ebf","msg":"Stale lock file found (PID 262770 not running) — removing"}
+{"ts":"2026-04-14T16:09:52.726Z","level":"info","cid":"fdcd982a7ebf","msg":"[Checkpoint] Verifying checkpoint for stage \"generate_code\" (from 2026-04-14T15:35:11.373Z)"}
+{"ts":"2026-04-14T16:09:52.727Z","level":"info","cid":"fdcd982a7ebf","msg":"[Checkpoint] Checkpoint verification passed"}
+{"ts":"2026-04-14T16:09:52.727Z","level":"info","cid":"fdcd982a7ebf","msg":"Stage: generate_code"}
+{"ts":"2026-04-14T16:09:52.727Z","level":"info","cid":"fdcd982a7ebf","msg":"State: /home/yogendra/WebstormProjects/mi-dev-agent/state-AUT-8424.json"}
+{"ts":"2026-04-14T16:09:52.727Z","level":"info","cid":"fdcd982a7ebf","msg":"Correlation ID: fdcd982a7ebf"}
+{"ts":"2026-04-14T16:09:52.727Z","level":"info","cid":"fdcd982a7ebf","msg":"[Health] Starting pipeline health monitor (interval: 60s)"}
+{"ts":"2026-04-14T16:09:52.727Z","level":"info","cid":"fdcd982a7ebf","msg":"Escalation monitoring started (check every 60s)"}
+{"ts":"2026-04-14T16:09:52.735Z","level":"warn","cid":"fdcd982a7ebf","msg":"[State CAS] CAS conflict: expected seq 353, found 354 — merging"}
+{"ts":"2026-04-14T16:09:52.759Z","level":"info","cid":"fdcd982a7ebf","msg":"[Timeout] Stage \"generate_code\" timeout: 1.0h (stage limit: 1.0h, pipeline remaining: 21.2h)"}
+{"ts":"2026-04-14T16:09:52.760Z","level":"info","cid":"fdcd982a7ebf","msg":"Step 2–3 -- Generate code with Claude AI","type":"stage_header"}
+{"ts":"2026-04-14T16:09:52.760Z","level":"info","cid":"fdcd982a7ebf","msg":"Code already generated — skipping to branch/commit/MR"}
+{"ts":"2026-04-14T16:09:52.761Z","level":"info","cid":"fdcd982a7ebf","msg":"Creating branch enterprise-ts-AUT-8424 from enterprise-ts…"}
+{"ts":"2026-04-14T16:10:22.779Z","level":"warn","cid":"fdcd982a7ebf","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 1/3 in 1057ms (elapsed 30017ms)"}
+{"ts":"2026-04-14T16:10:53.839Z","level":"warn","cid":"fdcd982a7ebf","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 2/3 in 2132ms (elapsed 61078ms)"}
+{"ts":"2026-04-14T16:11:25.979Z","level":"warn","cid":"fdcd982a7ebf","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 3/3 in 4034ms (elapsed 93218ms)"}
+{"ts":"2026-04-14T16:12:00.023Z","level":"warn","cid":"fdcd982a7ebf","msg":"[Recovery] Stage \"generate_code\" attempt 0 failed: [TRANSIENT] Socket timeout"}
+{"ts":"2026-04-14T16:12:00.023Z","level":"info","cid":"fdcd982a7ebf","msg":"[Recovery] Transient error in \"generate_code\" — retrying in 13.9s"}
+{"ts":"2026-04-14T16:12:13.892Z","level":"info","cid":"fdcd982a7ebf","msg":"[Recovery] Retry 1/2 for stage \"generate_code\""}
+{"ts":"2026-04-14T16:12:13.896Z","level":"warn","cid":"fdcd982a7ebf","msg":"[State CAS] CAS conflict: expected seq 355, found 356 — merging"}
+{"ts":"2026-04-14T16:12:13.905Z","level":"info","cid":"fdcd982a7ebf","msg":"[Timeout] Stage \"generate_code\" timeout: 1.0h (stage limit: 1.0h, pipeline remaining: 21.2h)"}
+{"ts":"2026-04-14T16:12:13.906Z","level":"info","cid":"fdcd982a7ebf","msg":"Step 2–3 -- Generate code with Claude AI","type":"stage_header"}
+{"ts":"2026-04-14T16:12:13.906Z","level":"info","cid":"fdcd982a7ebf","msg":"Code already generated — skipping to branch/commit/MR"}
+{"ts":"2026-04-14T16:12:13.906Z","level":"info","cid":"fdcd982a7ebf","msg":"Creating branch enterprise-ts-AUT-8424 from enterprise-ts…"}
+{"ts":"2026-04-14T16:12:43.910Z","level":"warn","cid":"fdcd982a7ebf","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 1/3 in 1178ms (elapsed 30004ms)"}
+{"ts":"2026-04-14T16:13:15.110Z","level":"warn","cid":"fdcd982a7ebf","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 2/3 in 2255ms (elapsed 61204ms)"}
+{"ts":"2026-04-14T16:13:47.372Z","level":"warn","cid":"fdcd982a7ebf","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 3/3 in 4202ms (elapsed 93466ms)"}
+{"ts":"2026-04-14T16:14:21.602Z","level":"warn","cid":"fdcd982a7ebf","msg":"[Recovery] Stage \"generate_code\" attempt 1 failed: [TRANSIENT] Socket timeout"}
+{"ts":"2026-04-14T16:14:21.602Z","level":"info","cid":"fdcd982a7ebf","msg":"[Recovery] Transient error in \"generate_code\" — retrying in 31.4s"}
+{"ts":"2026-04-14T16:14:53.052Z","level":"info","cid":"fdcd982a7ebf","msg":"[Recovery] Retry 2/2 for stage \"generate_code\""}
+{"ts":"2026-04-14T16:14:53.055Z","level":"warn","cid":"fdcd982a7ebf","msg":"[State CAS] CAS conflict: expected seq 357, found 358 — merging"}
+{"ts":"2026-04-14T16:14:53.074Z","level":"info","cid":"fdcd982a7ebf","msg":"[Timeout] Stage \"generate_code\" timeout: 1.0h (stage limit: 1.0h, pipeline remaining: 21.1h)"}
+{"ts":"2026-04-14T16:14:53.074Z","level":"info","cid":"fdcd982a7ebf","msg":"Step 2–3 -- Generate code with Claude AI","type":"stage_header"}
+{"ts":"2026-04-14T16:14:53.074Z","level":"info","cid":"fdcd982a7ebf","msg":"Code already generated — skipping to branch/commit/MR"}
+{"ts":"2026-04-14T16:14:53.074Z","level":"info","cid":"fdcd982a7ebf","msg":"Creating branch enterprise-ts-AUT-8424 from enterprise-ts…"}
+{"ts":"2026-04-14T16:15:23.084Z","level":"warn","cid":"fdcd982a7ebf","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 1/3 in 1236ms (elapsed 30010ms)"}
+{"ts":"2026-04-14T16:15:54.323Z","level":"warn","cid":"fdcd982a7ebf","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 2/3 in 2003ms (elapsed 61249ms)"}
+{"ts":"2026-04-14T16:16:26.358Z","level":"warn","cid":"fdcd982a7ebf","msg":"SOCKET_TIMEOUT POST http://10.200.11.32/api/v4/projects/100/repository/branches — retry 3/3 in 4083ms (elapsed 93284ms)"}
+{"ts":"2026-04-14T16:17:00.453Z","level":"warn","cid":"fdcd982a7ebf","msg":"[Recovery] Stage \"generate_code\" attempt 2 failed: [TRANSIENT] Socket timeout"}
+{"ts":"2026-04-14T16:17:00.453Z","level":"error","cid":"fdcd982a7ebf","msg":"Stage \"generate_code\" failed after 2 retries: Socket timeout"}
+{"ts":"2026-04-14T16:17:04.695Z","level":"info","cid":"fdcd982a7ebf","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T16:17:05.140Z","level":"info","cid":"fdcd982a7ebf","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T16:17:07.458Z","level":"info","cid":"fdcd982a7ebf","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T16:17:07.735Z","level":"info","cid":"fdcd982a7ebf","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T16:17:11.774Z","level":"info","cid":"fdcd982a7ebf","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T16:17:12.042Z","level":"info","cid":"fdcd982a7ebf","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T16:17:22.595Z","level":"info","cid":"fdcd982a7ebf","msg":"HTTP 302 redirect -> https://api.slack.com/"}
+{"ts":"2026-04-14T16:17:22.868Z","level":"info","cid":"fdcd982a7ebf","msg":"HTTP 302 redirect -> https://docs.slack.dev/"}
+{"ts":"2026-04-14T16:17:23.126Z","level":"warn","cid":"fdcd982a7ebf","msg":"Slack notification failed: Slack webhook returned HTTP 404: <!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot POST /</pre>\n</body>\n</html>\n — executing fallback chain"}
+{"ts":"2026-04-14T16:17:24.112Z","level":"info","cid":"fdcd982a7ebf","msg":"Notification fallback: sent via Jira comment for AUT-8424"}
+{"ts":"2026-04-14T20:13:46.160Z","level":"info","cid":"696b7e7a745c","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-14T20:13:46.695Z","level":"info","cid":"972b6ccf3b56","msg":"Claude Code CLI found at /usr/local/bin/claude (2.1.52 (Claude Code))"}
+{"ts":"2026-04-14T20:13:46.702Z","level":"info","cid":"972b6ccf3b56","msg":"Git CLI found"}
+{"ts":"2026-04-14T20:13:46.703Z","level":"warn","cid":"972b6ccf3b56","msg":"GitLab URL uses HTTP — API tokens transmitted unencrypted. Use HTTPS for production."}
+{"ts":"2026-04-14T20:13:46.704Z","level":"warn","cid":"972b6ccf3b56","msg":"QA main credentials not configured — QA testing stage will fail. Set QA_MAIN_USER and QA_MAIN_PASS."}
+{"ts":"2026-04-14T20:13:46.705Z","level":"warn","cid":"972b6ccf3b56","msg":"QA1 credentials not configured — QA1 testing will fail. Set QA1_USER and QA1_PASS."}
+{"ts":"2026-04-14T20:13:46.705Z","level":"warn","cid":"972b6ccf3b56","msg":"S2: .env file is readable by other users! Run: chmod 600 .env"}
+{"ts":"2026-04-14T20:13:46.705Z","level":"info","cid":"972b6ccf3b56","msg":"Validating Jira token..."}
+{"ts":"2026-04-14T20:13:47.456Z","level":"info","cid":"972b6ccf3b56","msg":"Jira auth OK (user: Yogendra Singh)"}
+{"ts":"2026-04-14T20:13:47.456Z","level":"info","cid":"972b6ccf3b56","msg":"Validating GitLab token..."}
+{"ts":"2026-04-14T20:13:47.676Z","level":"info","cid":"972b6ccf3b56","msg":"GitLab auth OK (project: mi_frontend_apps)"}
+{"ts":"2026-04-14T20:13:47.677Z","level":"warn","cid":"972b6ccf3b56","msg":"S10: GitLab URL uses HTTP — API tokens transmitted unencrypted. Use HTTPS for production deployments."}
+{"ts":"2026-04-14T20:13:47.678Z","level":"info","cid":"972b6ccf3b56","msg":"Testing Slack webhook connectivity..."}
+{"ts":"2026-04-14T20:13:48.360Z","level":"info","cid":"972b6ccf3b56","msg":"Slack webhook OK (682ms)"}
+{"ts":"2026-04-14T20:13:48.361Z","level":"info","cid":"972b6ccf3b56","msg":"Slack notification system initialized and verified"}
+{"ts":"2026-04-14T20:13:49.501Z","level":"info","cid":"972b6ccf3b56","msg":"Using worktree path: /home/yogendra/WebstormProjects/mi-dev-agent/.repo-cache/.worktrees/AUT-8424"}
+{"ts":"2026-04-14T20:13:49.554Z","level":"info","cid":"972b6ccf3b56","msg":"Local tree: 8101 entries"}
+{"ts":"2026-04-14T20:13:49.559Z","level":"info","cid":"972b6ccf3b56","msg":"[Checkpoint] Verifying checkpoint for stage \"generate_code\" (from 2026-04-14T16:09:52.729Z)"}
+{"ts":"2026-04-14T20:13:49.559Z","level":"info","cid":"972b6ccf3b56","msg":"[Checkpoint] Checkpoint verification passed"}
+{"ts":"2026-04-14T20:13:49.560Z","level":"info","cid":"972b6ccf3b56","msg":"Stage: generate_code"}
+{"ts":"2026-04-14T20:13:49.560Z","level":"info","cid":"972b6ccf3b56","msg":"State: /home/yogendra/WebstormProjects/mi-dev-agent/state-AUT-8424.json"}
+{"ts":"2026-04-14T20:13:49.560Z","level":"info","cid":"972b6ccf3b56","msg":"Correlation ID: 972b6ccf3b56"}
+{"ts":"2026-04-14T20:13:49.560Z","level":"info","cid":"972b6ccf3b56","msg":"[Health] Starting pipeline health monitor (interval: 60s)"}
+{"ts":"2026-04-14T20:13:49.560Z","level":"info","cid":"972b6ccf3b56","msg":"Escalation monitoring started (check every 60s)"}
+{"ts":"2026-04-14T20:13:49.561Z","level":"error","cid":"972b6ccf3b56","msg":"ESCALATION [pipeline_stuck]: Pipeline STUCK for 236 min (stage: generate_code). No activity since 2026-04-14T16:17:24.116Z. Check agent process health."}
+{"ts":"2026-04-14T20:13:49.566Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 361, found 362 — merging"}
+{"ts":"2026-04-14T20:13:49.588Z","level":"info","cid":"972b6ccf3b56","msg":"[Timeout] Stage \"generate_code\" timeout: 1.0h (stage limit: 1.0h, pipeline remaining: 17.1h)"}
+{"ts":"2026-04-14T20:13:49.589Z","level":"info","cid":"972b6ccf3b56","msg":"Step 2–3 -- Generate code with Claude AI","type":"stage_header"}
+{"ts":"2026-04-14T20:13:49.589Z","level":"info","cid":"972b6ccf3b56","msg":"Code already generated — skipping to branch/commit/MR"}
+{"ts":"2026-04-14T20:13:49.590Z","level":"info","cid":"972b6ccf3b56","msg":"Creating branch enterprise-ts-AUT-8424 from enterprise-ts…"}
+{"ts":"2026-04-14T20:13:50.236Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 363, found 364 — merging"}
+{"ts":"2026-04-14T20:13:50.256Z","level":"info","cid":"972b6ccf3b56","msg":"Branch: enterprise-ts-AUT-8424 (from enterprise-ts)"}
+{"ts":"2026-04-14T20:13:50.427Z","level":"info","cid":"972b6ccf3b56","msg":"Committing files…"}
+{"ts":"2026-04-14T20:13:51.900Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 365, found 366 — merging"}
+{"ts":"2026-04-14T20:13:51.917Z","level":"info","cid":"972b6ccf3b56","msg":"Committed 85656cf9 as Yogendra <yogendrasingh@mastersindia.co>"}
+{"ts":"2026-04-14T20:13:52.468Z","level":"warn","cid":"972b6ccf3b56","msg":"GQ4: 10 file(s) modified in both branches — potential merge conflicts"}
+{"ts":"2026-04-14T20:13:52.471Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 367, found 368 — merging"}
+{"ts":"2026-04-14T20:13:52.721Z","level":"info","cid":"972b6ccf3b56","msg":"GQ8: Remote branch verified — no divergence"}
+{"ts":"2026-04-14T20:13:52.725Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 369, found 370 — merging"}
+{"ts":"2026-04-14T20:13:52.744Z","level":"info","cid":"972b6ccf3b56","msg":"Creating MR: enterprise-ts-AUT-8424 → enterprise-qa (assigned to you)…"}
+{"ts":"2026-04-14T20:13:54.480Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 371, found 372 — merging"}
+{"ts":"2026-04-14T20:13:54.497Z","level":"info","cid":"972b6ccf3b56","msg":"MR !1889 created and assigned"}
+{"ts":"2026-04-14T20:13:54.848Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 373, found 374 — merging"}
+{"ts":"2026-04-14T20:13:54.867Z","level":"info","cid":"972b6ccf3b56","msg":"Slack notification sent (no Jira comment)"}
+{"ts":"2026-04-14T20:13:54.871Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 375, found 376 — merging"}
+{"ts":"2026-04-14T20:13:54.885Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 377, found 378 — merging"}
+{"ts":"2026-04-14T20:13:54.897Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 379, found 380 — merging"}
+{"ts":"2026-04-14T20:13:54.909Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 381, found 382 — merging"}
+{"ts":"2026-04-14T20:13:54.918Z","level":"info","cid":"972b6ccf3b56","msg":"[Timeout] Stage \"gate_code_review\" timeout: 8.0h (stage limit: 8.0h, pipeline remaining: 17.1h)"}
+{"ts":"2026-04-14T20:13:54.919Z","level":"info","cid":"972b6ccf3b56","msg":"Step 4 -- GATE 1 — Code Review (GitLab MR Approval)","type":"stage_header"}
+{"ts":"2026-04-14T20:13:54.922Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 383, found 384 — merging"}
+{"ts":"2026-04-14T20:13:54.931Z","level":"info","cid":"972b6ccf3b56","msg":"MR: http://10.200.11.32/mastersindia/mi_frontend_apps/-/merge_requests/1889"}
+{"ts":"2026-04-14T20:13:54.931Z","level":"info","cid":"972b6ccf3b56","msg":"Waiting for MR approval (Web UI or GitLab)…"}
+{"ts":"2026-04-14T20:13:55.321Z","level":"info","cid":"972b6ccf3b56","msg":"MR approved by: "}
+{"ts":"2026-04-14T20:13:55.325Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 385, found 386 — merging"}
+{"ts":"2026-04-14T20:13:55.347Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 387, found 388 — merging"}
+{"ts":"2026-04-14T20:13:55.357Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 389, found 390 — merging"}
+{"ts":"2026-04-14T20:13:55.370Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 391, found 392 — merging"}
+{"ts":"2026-04-14T20:13:55.379Z","level":"info","cid":"972b6ccf3b56","msg":"[Timeout] Stage \"deploy_qa\" timeout: 30.0m (stage limit: 30.0m, pipeline remaining: 17.1h)"}
+{"ts":"2026-04-14T20:13:55.380Z","level":"info","cid":"972b6ccf3b56","msg":"Step 5 -- Deploy to QA","type":"stage_header"}
+{"ts":"2026-04-14T20:13:55.383Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 393, found 394 — merging"}
+{"ts":"2026-04-14T20:13:56.295Z","level":"info","cid":"972b6ccf3b56","msg":"Waiting for user approval to merge into QA (Web UI)…"}
+{"ts":"2026-04-14T20:13:56.295Z","level":"info","cid":"972b6ccf3b56","msg":"Waiting for approval to merge MR !1889… (polling every 30s)"}
+{"ts":"2026-04-14T20:16:27.858Z","level":"info","cid":"972b6ccf3b56","msg":"Waiting for QA merge approval… 2m elapsed"}
+{"ts":"2026-04-14T20:18:55.385Z","level":"info","cid":"972b6ccf3b56","msg":"[Timeout] Stage \"deploy_qa\": 5.0m elapsed, 25.0m remaining"}
+{"ts":"2026-04-14T20:19:28.963Z","level":"info","cid":"972b6ccf3b56","msg":"Waiting for QA merge approval… 5m elapsed"}
+{"ts":"2026-04-14T20:22:30.089Z","level":"info","cid":"972b6ccf3b56","msg":"Waiting for QA merge approval… 8m elapsed"}
+{"ts":"2026-04-14T20:23:49.563Z","level":"info","cid":"972b6ccf3b56","msg":"[Restart] Agent marked as stable (10 minutes without crash)"}
+{"ts":"2026-04-14T20:23:49.567Z","level":"warn","cid":"972b6ccf3b56","msg":"[State CAS] CAS conflict: expected seq 395, found 396 — merging"}
+{"ts":"2026-04-14T20:23:55.391Z","level":"info","cid":"972b6ccf3b56","msg":"[Timeout] Stage \"deploy_qa\": 10.0m elapsed, 20.0m remaining"}
+{"ts":"2026-04-14T20:25:31.123Z","level":"info","cid":"972b6ccf3b56","msg":"Waiting for QA merge approval… 11m elapsed"}
+{"ts":"2026-04-14T20:28:32.190Z","level":"info","cid":"972b6ccf3b56","msg":"Waiting for QA merge approval… 14m elapsed"}
+{"ts":"2026-04-14T20:28:55.396Z","level":"info","cid":"972b6ccf3b56","msg":"[Timeout] Stage \"deploy_qa\": 15.0m elapsed, 15.0m remaining"}
+{"ts":"2026-04-14T20:31:33.352Z","level":"info","cid":"972b6ccf3b56","msg":"Waiting for QA merge approval… 17m elapsed"}

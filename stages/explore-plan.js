@@ -17,6 +17,7 @@ const { slack } = require("../lib/slack");
 const { localGetTree } = require("../lib/local-repo");
 const { runAgentsTeam, runSingleAgent } = require("../lib/agents-team");
 const { isShuttingDown } = require("../lib/graceful-shutdown");
+const { isChannelEnabled } = require("../lib/notification-config");
 
 const PROJECT_ROOT = path.join(__dirname, "..");
 
@@ -202,20 +203,24 @@ async function stageExplorePlan(state) {
       ).join("\n");
 
       // Ask user for help via Jira + Slack with smart instructions
-      await jira.addComment(TICKET,
-        `${hasCritical ? "CRITICAL — " : ""}Documents Needed\n\n` +
-        `I cannot access the following documents linked in this ticket:\n${docList}\n\n` +
-        `Please paste the relevant content as a comment on this ticket, then comment "continue" to proceed.` +
-        `${hasCritical ? "\n\nCRITICAL documents are essential for implementation — code quality may be significantly impacted without them." : ""}`,
-      );
+      if (isChannelEnabled("explore_plan", "jira")) {
+        await jira.addComment(TICKET,
+          `${hasCritical ? "CRITICAL — " : ""}Documents Needed\n\n` +
+          `I cannot access the following documents linked in this ticket:\n${docList}\n\n` +
+          `Please paste the relevant content as a comment on this ticket, then comment "continue" to proceed.` +
+          `${hasCritical ? "\n\nCRITICAL documents are essential for implementation — code quality may be significantly impacted without them." : ""}`,
+        );
+      }
 
-      await slack(
-        `${hasCritical ? "🚨" : "⚠️"} *Documents Needed — ${TICKET}*${hasCritical ? " (CRITICAL)" : ""}\n` +
-        `Agent cannot access:\n${docList}\n\n` +
-        `Paste the relevant content on the Jira ticket and comment "continue".\n` +
-        `📋 ${jiraUrl(TICKET)}`,
-        [cfg.slack.ownerId],
-      );
+      if (isChannelEnabled("explore_plan", "slack")) {
+        await slack(
+          `${hasCritical ? "🚨" : "⚠️"} *Documents Needed — ${TICKET}*${hasCritical ? " (CRITICAL)" : ""}\n` +
+          `Agent cannot access:\n${docList}\n\n` +
+          `Paste the relevant content on the Jira ticket and comment "continue".\n` +
+          `📋 ${jiraUrl(TICKET)}`,
+          [cfg.slack.ownerId],
+        );
+      }
 
       // Wait for user to provide docs and say "continue"
       logWait("Waiting for you to provide document content on Jira…");
@@ -227,7 +232,9 @@ async function stageExplorePlan(state) {
       while (true) {
         if (monotonicMs() - continueStart > MAX_CONTINUE_WAIT) {
           logWarn(`Document wait timed out after ${MAX_CONTINUE_WAIT / 60000} minutes — proceeding with available context`);
-          await slack(`⏰ *Document wait timed out — ${TICKET}*\nProceeding with available context.`, [cfg.slack.ownerId]);
+          if (isChannelEnabled("explore_plan", "slack")) {
+            await slack(`⏰ *Document wait timed out — ${TICKET}*\nProceeding with available context.`, [cfg.slack.ownerId]);
+          }
           break;
         }
         const comments = await jira.getComments(TICKET, state.data.explore_wait_at);
@@ -254,7 +261,9 @@ async function stageExplorePlan(state) {
           if (!extraContext) {
             logWarn("G11: 'continue' posted but no supplementary content found — re-prompting");
             try {
-              await jira.addComment(TICKET, "No supplementary content detected. Please paste the document content first, then comment 'continue'.");
+              if (isChannelEnabled("explore_plan", "jira")) {
+                await jira.addComment(TICKET, "No supplementary content detected. Please paste the document content first, then comment 'continue'.");
+              }
             } catch {}
             await sleep(POLL_INTERVAL);
             continue; // Resume waiting — don't break out of loop
@@ -711,10 +720,12 @@ async function stageExplorePlan(state) {
     logInfo(`Plan rejection iteration: ${state.data._plan_rejections}/${MAX_PLAN_REJECTIONS}`);
     if (state.data._plan_rejections >= MAX_PLAN_REJECTIONS) {
       logErr(`Plan rejected ${state.data._plan_rejections} times (max: ${MAX_PLAN_REJECTIONS}) — halting pipeline`);
-      await slack(
-        `🛑 *Plan Rejection Limit — ${TICKET}*\nPlan was rejected ${state.data._plan_rejections} times (max: ${MAX_PLAN_REJECTIONS}). Pipeline halted. Please refine the ticket requirements and restart.`,
-        [cfg.slack.ownerId],
-      );
+      if (isChannelEnabled("explore_plan", "slack")) {
+        await slack(
+          `🛑 *Plan Rejection Limit — ${TICKET}*\nPlan was rejected ${state.data._plan_rejections} times (max: ${MAX_PLAN_REJECTIONS}). Pipeline halted. Please refine the ticket requirements and restart.`,
+          [cfg.slack.ownerId],
+        );
+      }
       save(state);
       throw new Error(`Plan rejected ${state.data._plan_rejections} times — exceeded MAX_PLAN_REJECTIONS (${MAX_PLAN_REJECTIONS})`);
     }
@@ -724,15 +735,17 @@ async function stageExplorePlan(state) {
   if (!state.data.explore_plan_posted) {
     const os = state.data.explore_openspec;
 
-    await slack(
-      `📋 *Implementation Plan Ready — ${TICKET}*\n` +
-      `*${state.data.ticket.summary}*\n\n` +
-      `${os ? "Full OpenSpec plan with Proposal/Design/Specs/Tasks." : "Plan ready for review."}\n` +
-      `${(os && os.suggestions && os.suggestions.length > 0) ? `⚡ ${os.suggestions.length} suggestion(s) from the agent.\n` : ""}` +
-      `Review on the Agent Web UI → Approve, Reject, or Refine.\n` +
-      `🌐 http://localhost:3000`,
-      [cfg.slack.ownerId],
-    );
+    if (isChannelEnabled("explore_plan", "slack")) {
+      await slack(
+        `📋 *Implementation Plan Ready — ${TICKET}*\n` +
+        `*${state.data.ticket.summary}*\n\n` +
+        `${os ? "Full OpenSpec plan with Proposal/Design/Specs/Tasks." : "Plan ready for review."}\n` +
+        `${(os && os.suggestions && os.suggestions.length > 0) ? `⚡ ${os.suggestions.length} suggestion(s) from the agent.\n` : ""}` +
+        `Review on the Agent Web UI → Approve, Reject, or Refine.\n` +
+        `🌐 http://localhost:3000`,
+        [cfg.slack.ownerId],
+      );
+    }
 
     state.data.explore_plan_posted = true;
     state.data.explore_plan_at = new Date().toISOString();
@@ -753,7 +766,9 @@ async function stageExplorePlan(state) {
     }
     if (monotonicMs() - planPollStart > MAX_APPROVAL_TIMEOUT) {
       logErr(`Plan approval timeout after ${MAX_APPROVAL_TIMEOUT / 3600000}h`);
-      await slack(`⏰ *Plan Approval Timeout — ${TICKET}*\nPipeline halted.`, [cfg.slack.ownerId]);
+      if (isChannelEnabled("explore_plan", "slack")) {
+        await slack(`⏰ *Plan Approval Timeout — ${TICKET}*\nPipeline halted.`, [cfg.slack.ownerId]);
+      }
       save(state);
       throw new Error(`Plan approval timeout after ${MAX_APPROVAL_TIMEOUT / 3600000}h`);
     }

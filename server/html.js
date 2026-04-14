@@ -1981,6 +1981,197 @@ function getHTML(apiToken) {
   .app-layout .input-bar { display: none; }
   .app-layout .steps-grid { display: none; }
   .app-layout .nav { display: none; }
+
+  /* ── Settings Tabs ── */
+  .settings-tabs {
+    display: flex; gap: 0; border-bottom: 2px solid var(--border);
+    margin-bottom: 20px; overflow-x: auto;
+  }
+  .settings-tab {
+    padding: 10px 20px; font-size: 13px; font-weight: 600;
+    color: var(--text2); background: none; border: none;
+    cursor: pointer; white-space: nowrap; transition: all 0.2s;
+    border-bottom: 2px solid transparent; margin-bottom: -2px;
+    font-family: var(--sans);
+  }
+  .settings-tab:hover { color: var(--text); background: var(--bg3); }
+  .settings-tab.active {
+    color: var(--accent); border-bottom-color: var(--accent);
+  }
+  .settings-tab-content { display: none; }
+  .settings-tab-content.active { display: block; }
+
+  /* ── Config Groups (collapsible) ── */
+  .config-group {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+    margin-bottom: 12px; overflow: hidden;
+  }
+  .config-group-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px; cursor: pointer; user-select: none;
+    font-size: 13px; font-weight: 600; color: var(--text);
+    transition: background 0.15s;
+  }
+  .config-group-header:hover { background: var(--bg3); }
+  .config-group-header .config-group-chevron {
+    font-size: 10px; color: var(--text3); transition: transform 0.2s;
+  }
+  .config-group.open .config-group-chevron { transform: rotate(90deg); }
+  .config-group-body {
+    max-height: 0; overflow: hidden; transition: max-height 0.3s ease;
+  }
+  .config-group.open .config-group-body { max-height: 2000px; }
+  .config-group-body-inner { padding: 0 20px 16px 20px; }
+
+  /* ── Config Field ── */
+  .config-field {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .config-field:last-child { border-bottom: none; }
+  .config-field-label {
+    min-width: 200px; color: var(--text2); font-family: var(--mono);
+    font-size: 11px; display: flex; align-items: center; gap: 6px;
+  }
+  .config-field-label .required-star { color: var(--red); font-weight: bold; }
+  .config-field-input-wrap {
+    flex: 1; display: flex; align-items: center; gap: 6px; position: relative;
+  }
+  .config-field-input-wrap input {
+    width: 100%; padding: 7px 10px; font-size: 12px;
+    font-family: var(--mono); background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .config-field-input-wrap input:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-muted);
+    outline: none;
+  }
+  .eye-toggle {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer; color: var(--text3);
+    font-size: 14px; padding: 2px 4px; line-height: 1;
+  }
+  .eye-toggle:hover { color: var(--text); }
+  .config-field-input-wrap input[type="password"] { padding-right: 32px; }
+
+  /* ── Config Info Icon & Tooltip ── */
+  .config-info-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--bg3); color: var(--text3); font-size: 10px;
+    cursor: help; position: relative; flex-shrink: 0;
+  }
+  .config-info-tooltip {
+    visibility: hidden; opacity: 0; position: absolute;
+    bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+    background: var(--bg3); color: var(--text); font-size: 11px;
+    padding: 6px 10px; border-radius: 6px; white-space: nowrap;
+    border: 1px solid var(--border); z-index: 100;
+    transition: opacity 0.15s, visibility 0.15s;
+    max-width: 300px; white-space: normal; line-height: 1.4;
+    font-family: var(--sans); font-weight: 400;
+    pointer-events: none;
+  }
+  .config-info-icon:hover .config-info-tooltip { visibility: visible; opacity: 1; }
+
+  /* ── Config Test & Save Buttons ── */
+  .config-actions {
+    display: flex; gap: 8px; align-items: center; margin-top: 16px;
+    flex-wrap: wrap;
+  }
+  .btn-test-conn {
+    padding: 7px 16px; font-size: 12px; font-weight: 600;
+    background: var(--bg3); color: var(--text2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); cursor: pointer; transition: all 0.15s;
+  }
+  .btn-test-conn:hover { color: var(--text); border-color: var(--text3); }
+  .btn-test-conn.testing { opacity: 0.6; cursor: wait; }
+  .btn-save-config {
+    padding: 8px 24px; font-size: 13px; font-weight: 600;
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: #fff;
+    border: none; border-radius: var(--radius-sm); cursor: pointer;
+    box-shadow: 0 0 16px var(--accent-glow); transition: all 0.15s;
+  }
+  .btn-save-config:hover { background: linear-gradient(135deg, #a78bfa, #8b5cf6); box-shadow: 0 0 24px var(--accent-glow); }
+  .btn-save-config:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+
+  /* ── Notification Grid ── */
+  .notif-grid {
+    width: 100%; border-collapse: collapse; font-size: 12px;
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden;
+  }
+  .notif-grid th {
+    padding: 10px 12px; font-weight: 600; color: var(--text2);
+    background: var(--bg3); border-bottom: 1px solid var(--border);
+    text-align: center; font-size: 11px; white-space: nowrap;
+  }
+  .notif-grid th:first-child { text-align: left; min-width: 150px; }
+  .notif-grid td {
+    padding: 10px 12px; border-bottom: 1px solid var(--border);
+    text-align: center; vertical-align: middle;
+  }
+  .notif-grid td:first-child {
+    text-align: left; font-weight: 500; color: var(--text);
+    font-size: 12px;
+  }
+  .notif-grid tr:last-child td { border-bottom: none; }
+  .notif-grid tr:hover { background: var(--bg3); }
+  .notif-toggle {
+    position: relative; width: 34px; height: 18px;
+    background: var(--bg3); border-radius: 9px; cursor: pointer;
+    border: 1px solid var(--border); transition: all 0.2s;
+    display: inline-block;
+  }
+  .notif-toggle.on { background: var(--green-bg); border-color: var(--green); }
+  .notif-toggle::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--text3); transition: all 0.2s;
+  }
+  .notif-toggle.on::after { left: 18px; background: var(--green); }
+
+  /* ── Connector Cards ── */
+  .connector-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+  }
+  .connector-card {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px; display: flex; flex-direction: column; gap: 12px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .connector-card:hover { border-color: var(--text3); }
+  .connector-card.disabled { opacity: 0.55; pointer-events: none; }
+  .connector-card-header {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .connector-icon {
+    width: 40px; height: 40px; border-radius: var(--radius-md);
+    background: var(--bg3); display: flex; align-items: center;
+    justify-content: center; font-size: 20px; flex-shrink: 0;
+  }
+  .connector-name { font-size: 14px; font-weight: 600; color: var(--text); }
+  .connector-status {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 600; padding: 3px 10px;
+    border-radius: var(--radius-full);
+  }
+  .connector-status.connected {
+    background: var(--green-bg); color: var(--green);
+  }
+  .connector-status.disconnected {
+    background: var(--red-bg); color: var(--red);
+  }
+  .connector-status.coming-soon {
+    background: var(--yellow-bg); color: var(--yellow);
+  }
+  .connector-desc {
+    font-size: 12px; color: var(--text2); line-height: 1.5;
+  }
+  .connector-actions { margin-top: auto; }
 </style>
 </head>
 <body>
@@ -2334,6 +2525,13 @@ var sidebarCodeExpanded = true;
 // Layer 1: Dirty flags — snapshot each renderer's inputs, skip if unchanged
 // Layer 2: Inline DOM morph — patch existing nodes instead of innerHTML
 // Layer 3: Scroll guards — preserve scroll position across renders
+
+// ── Null-Safe Element Getter ──
+function _safeEl(id) {
+  var el = document.getElementById(id);
+  if (!el) { console.warn("[Render] Missing DOM element: #" + id); }
+  return el;
+}
 
 // ── Layer 1: Dirty Flags ──
 var _renderKeys = {};
@@ -3267,7 +3465,8 @@ function toggleCodeExpand() {
 
 function renderDetail() {
   const s = STEPS[activeStep];
-  const card = document.getElementById("detailCard");
+  const card = _safeEl("detailCard");
+  if (!card) return;
   card.innerHTML =
     '<div class="step-header">' +
       '<span class="step-icon">' + s.icon + '</span>' +
@@ -3287,7 +3486,8 @@ function renderDetail() {
 }
 
 function renderSummary() {
-  const table = document.getElementById("summaryTable");
+  const table = _safeEl("summaryTable");
+  if (!table) return;
   // Map step index to SIDEBAR_MAP icon
   function getIconForStep(idx) {
     for (var m = 0; m < SIDEBAR_MAP.length; m++) {
@@ -3464,8 +3664,9 @@ function renderSubStageProgress() {
 // O5: Error/warning banners
 var lastStateData = null;
 function renderBanners() {
-  var errEl = document.getElementById("errorBanner");
-  var warnEl = document.getElementById("warningBanner");
+  var errEl = _safeEl("errorBanner");
+  var warnEl = _safeEl("warningBanner");
+  if (!errEl || !warnEl) return;
   if (!lastStateData) { errEl.innerHTML = ""; warnEl.innerHTML = ""; return; }
   if (lastStateData._lastError) {
     var errObj = lastStateData._lastError;
@@ -3484,7 +3685,8 @@ function renderBanners() {
 
 // O2: Stuck detection banner
 function renderStuckBanner() {
-  var el = document.getElementById("stuckBanner");
+  var el = _safeEl("stuckBanner");
+  if (!el) return;
   if (!isStuck || !isRunning) { el.innerHTML = ""; return; }
   var severe = stuckMinutes >= 30;
   var cls = severe ? "banner-stuck severe" : "banner-stuck";
@@ -4422,6 +4624,9 @@ function switchPlanTab(tabId) {
   }
 }
 
+// ── Gate Action Mutual Exclusion ────────────────────────────────
+var _gateActionInFlight = false;
+
 // ── Refine Form ─────────────────────────────────────────────────
 function showRefineForm() {
   document.getElementById("refineFeedback").className = "visible";
@@ -4429,11 +4634,13 @@ function showRefineForm() {
 }
 
 async function submitRefine() {
+  if (_gateActionInFlight) return;
   if (!reviewData || !reviewData.gate) return;
   var ticket = selectedTicket || document.getElementById("ticket").value.trim() || "";
   var gate = GATE_STAGES[reviewData.gate] || reviewData.gate;
   var instructions = document.getElementById("refineText").value.trim();
   if (!instructions) return showToast("Please provide refinement instructions", "error");
+  _gateActionInFlight = true;
   var btnR = document.getElementById("btnRefine");
   var btnA = document.getElementById("btnApprove");
   var btnRej = document.getElementById("btnReject");
@@ -4456,17 +4663,20 @@ async function submitRefine() {
     setButtonLoading(btnR, false, "Refine");
     btnA.disabled = false;
     btnRej.disabled = false;
+  } finally {
+    _gateActionInFlight = false;
   }
 }
 
 function renderReviewPanel() {
-  const panel = document.getElementById("reviewPanel");
-  const planEl = document.getElementById("planViewer");
-  const diffEl = document.getElementById("diffViewer");
-  const qaEl = document.getElementById("qaViewer");
-  const mrEl = document.getElementById("mrViewer");
-  const badge = document.getElementById("gateBadge");
-  const statusEl = document.getElementById("reviewStatus");
+  const panel = _safeEl("reviewPanel");
+  const planEl = _safeEl("planViewer");
+  const diffEl = _safeEl("diffViewer");
+  const qaEl = _safeEl("qaViewer");
+  const mrEl = _safeEl("mrViewer");
+  const badge = _safeEl("gateBadge");
+  const statusEl = _safeEl("reviewStatus");
+  if (!panel || !planEl || !diffEl) return;
 
   // Hide all viewers
   planEl.className = ""; diffEl.className = ""; qaEl.className = ""; mrEl.className = "";
@@ -4783,15 +4993,19 @@ function showRejectForm() {
 
 // U9: Double-submit prevention
 async function approveGate() {
+  if (_gateActionInFlight) return;
   if (!reviewData || !reviewData.gate) return;
+  _gateActionInFlight = true;
   const ticket = selectedTicket || document.getElementById("ticket").value.trim() || "";
   const gate = GATE_STAGES[reviewData.gate] || reviewData.gate;
   const btnA = document.getElementById("btnApprove");
   const btnR = document.getElementById("btnReject");
+  const btnF = document.getElementById("btnRefine");
   const isDeployQA = reviewData.gate === "deploy_qa";
-  // U9: Disable both buttons, show processing
+  // U9: Disable all gate buttons, show processing
   setButtonLoading(btnA, true, "Approving...");
   btnR.disabled = true;
+  if (btnF) btnF.disabled = true;
   try {
     // U1: Persist comments before approve
     await persistComments();
@@ -4813,6 +5027,9 @@ async function approveGate() {
     // U9: Re-enable on error
     setButtonLoading(btnA, false, isDeployQA ? "Approve & Merge" : "Approve");
     btnR.disabled = false;
+    if (btnF) btnF.disabled = false;
+  } finally {
+    _gateActionInFlight = false;
   }
 }
 
@@ -4869,18 +5086,22 @@ function closeRejectPreview() {
 
 // U9: Double-submit prevention — actual rejection after preview confirmation
 async function confirmReject() {
+  if (_gateActionInFlight) return;
   closeRejectPreview();
   if (!reviewData || !reviewData.gate) return;
+  _gateActionInFlight = true;
   const ticket = selectedTicket || document.getElementById("ticket").value.trim() || "";
   const gate = GATE_STAGES[reviewData.gate] || reviewData.gate;
   var typedFeedback = document.getElementById("rejectText").value.trim();
   var inlineText = collectAllComments();
   var feedback = typedFeedback + inlineText;
-  if (!feedback.trim()) return showToast("Please provide feedback for the rejection", "error");
+  if (!feedback.trim()) { _gateActionInFlight = false; return showToast("Please provide feedback for the rejection", "error"); }
   const btnA = document.getElementById("btnApprove");
   const btnR = document.getElementById("btnReject");
-  // U9: Disable both buttons, show processing
+  const btnF = document.getElementById("btnRefine");
+  // U9: Disable all gate buttons, show processing
   btnA.disabled = true;
+  if (btnF) btnF.disabled = true;
   setButtonLoading(btnR, true, "Rejecting...");
   try {
     // U1: Persist comments before reject
@@ -4908,6 +5129,9 @@ async function confirmReject() {
     // U9: Re-enable on error
     setButtonLoading(btnR, false, "Reject");
     btnA.disabled = false;
+    if (btnF) btnF.disabled = false;
+  } finally {
+    _gateActionInFlight = false;
   }
 }
 
@@ -5276,21 +5500,23 @@ var crossTab = (function() {
     }
   });
 
-  // Cleanup on unload
+  // Cleanup on unload — clear ALL intervals and SSE to prevent orphaned timers
   window.addEventListener("beforeunload", function() {
     // E3: Clean up SSE listeners explicitly
     if (evtSource) {
-      try { evtSource.onopen = null; evtSource.onerror = null; evtSource.close(); } catch {}
+      try { evtSource.onopen = null; evtSource.onerror = null; evtSource.close(); } catch (e) { console.warn("[Cleanup] SSE close error:", e); }
       evtSource = null;
     }
     if (pollId) { clearInterval(pollId); pollId = null; }
     if (reviewId) { clearInterval(reviewId); reviewId = null; }
     if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+    if (typeof ticketPollId !== "undefined" && ticketPollId) { clearInterval(ticketPollId); ticketPollId = null; }
+    if (typeof logViewerInterval !== "undefined" && logViewerInterval) { clearInterval(logViewerInterval); logViewerInterval = null; }
     if (_isLeader) {
       try {
         localStorage.removeItem(LEADER_KEY);
         localStorage.removeItem(LEADER_HEARTBEAT_KEY);
-      } catch {}
+      } catch (e) { console.warn("[Cleanup] Leader cleanup error:", e); }
       send("leader:yield", { tabId: _tabId });
     }
   });
@@ -5644,6 +5870,17 @@ router.notFound(function(path) {
   renderNotFoundPage(path);
 });
 
+// Group label overrides (API group key → display name)
+var groupLabels = {
+  identity: "Identity", jira: "Jira", gitlab: "GitLab", slack: "Slack",
+  git: "Git", qa: "QA Environment", timeouts: "Timeouts", limits: "Limits",
+  build: "Build & Deploy", testing: "Testing", browser: "Browser / Playwright",
+  runtime_tests: "Runtime Tests", logging: "Logging", server: "Server",
+  claude: "Claude", vite: "Vite / Frontend", polling: "Polling"
+};
+// configFields will be built dynamically from API response
+var configFields = {};
+
 function renderSettingsPage() {
   var card = document.getElementById("detailCard");
   if (!card) return;
@@ -5653,8 +5890,153 @@ function renderSettingsPage() {
   var reviewPanel = document.getElementById("reviewPanel");
   if (reviewPanel) reviewPanel.className = "";
 
+  // ── Notification gates & channels ──
+  // key must match notification-config.js GATES, label is for display
+  var notifGates = [
+    { key: "fetch_ticket",          label: "Fetch Ticket" },
+    { key: "explore_plan",          label: "Explore & Plan" },
+    { key: "gate_code_review",      label: "Code Review" },
+    { key: "deploy_qa",             label: "Deploy QA" },
+    { key: "test_qa",               label: "QA Testing" },
+    { key: "gate_preprod_approval", label: "Pre-Prod Gate" },
+    { key: "gate_dual_approval",    label: "Dual Approval" },
+    { key: "deploy_prod",           label: "Production" },
+    { key: "done",                  label: "Done" }
+  ];
+  var notifChannels = [
+    { key: "slack",      label: "Slack" },
+    { key: "jira",       label: "Jira" },
+    { key: "ui",         label: "UI Alert" },
+    { key: "reminder1h", label: "1h Reminder" },
+    { key: "reminder4h", label: "4h Escalation" }
+  ];
+
+  // ── Connector definitions ──
+  var connectors = [
+    { id: "jira", name: "Jira", icon: "\uD83D\uDCCB", desc: "Issue tracking and project management", active: true },
+    { id: "gitlab", name: "GitLab", icon: "\uD83E\uDD8A", desc: "Source control, CI/CD, and merge requests", active: true },
+    { id: "slack", name: "Slack", icon: "\uD83D\uDCAC", desc: "Team notifications and alerts", active: true },
+    { id: "claude", name: "Claude", icon: "\uD83E\uDDE0", desc: "AI code generation via Claude CLI", active: true },
+    { id: "gdrive", name: "Google Drive", icon: "\uD83D\uDCC1", desc: "Document storage and sharing", active: false },
+    { id: "figma", name: "Figma", icon: "\uD83C\uDFA8", desc: "UI/UX design assets and specs", active: false },
+    { id: "confluence", name: "Confluence", icon: "\uD83D\uDCD6", desc: "Team wiki and documentation", active: false },
+    { id: "notion", name: "Notion", icon: "\uD83D\uDDD2", desc: "Notes, docs, and knowledge base", active: false }
+  ];
+
+  // ── Helper: build config field HTML ──
+  function buildConfigField(f, val) {
+    var v = val || "";
+    var inputType = f.sensitive ? "password" : "text";
+    var eyeBtn = f.sensitive
+      ? '<button type="button" class="eye-toggle" onclick="settingsToggleEye(this)" title="Show/hide value">\u{1F441}</button>'
+      : "";
+    var reqStar = f.required ? '<span class="required-star">*</span>' : "";
+    // data-original stores the masked value so save logic can detect unchanged fields
+    var originalAttr = f.sensitive ? ' data-original="' + escHtml(v) + '"' : '';
+    return '<div class="config-field">' +
+      '<label class="config-field-label">' + escHtml(f.key) + reqStar +
+        '<span class="config-info-icon">i<span class="config-info-tooltip">' + escHtml(f.desc) + '</span></span>' +
+      '</label>' +
+      '<div class="config-field-input-wrap">' +
+        '<input type="' + inputType + '" data-key="' + escHtml(f.key) + '"' + originalAttr + ' value="' + escHtml(v) + '" placeholder="' + escHtml(f.desc) + '" autocomplete="off" />' +
+        eyeBtn +
+      '</div>' +
+    '</div>';
+  }
+
+  // ── Helper: build config group HTML ──
+  function buildConfigGroup(catKey, cat, configData) {
+    var fieldsHtml = "";
+    cat.fields.forEach(function(f) {
+      fieldsHtml += buildConfigField(f, configData[f.key]);
+    });
+    var testBtn = "";
+    if (catKey === "jira" || catKey === "gitlab" || catKey === "slack") {
+      testBtn = '<button class="btn-test-conn" onclick="settingsTestConnection(\\'' + catKey + '\\', this)">Test ' + escHtml(cat.label) + ' Connection</button>';
+    }
+    return '<div class="config-group" id="cfgGroup_' + catKey + '">' +
+      '<div class="config-group-header" onclick="settingsToggleGroup(\\'' + catKey + '\\')">' +
+        '<span>' + escHtml(cat.label) + ' (' + cat.fields.length + ')</span>' +
+        '<span class="config-group-chevron">\u25B6</span>' +
+      '</div>' +
+      '<div class="config-group-body"><div class="config-group-body-inner">' +
+        fieldsHtml +
+        (testBtn ? '<div style="margin-top:12px">' + testBtn + '</div>' : '') +
+      '</div></div>' +
+    '</div>';
+  }
+
+  // ── Build Tab 1: API Keys & Config ──
+  function buildTab1(configData) {
+    var html = '';
+    var catKeys = Object.keys(configFields);
+    catKeys.forEach(function(catKey) {
+      html += buildConfigGroup(catKey, configFields[catKey], configData);
+    });
+    html += '<div class="config-actions">' +
+      '<button class="btn-save-config" onclick="settingsSaveConfig()">Save Configuration</button>' +
+    '</div>';
+    return html;
+  }
+
+  // ── Build Tab 2: Notifications ──
+  function buildTab2(notifData) {
+    var html = '<div class="settings-section" style="padding:0;overflow:auto">' +
+      '<table class="notif-grid"><thead><tr><th>Pipeline Gate</th>';
+    notifChannels.forEach(function(ch) {
+      html += '<th>' + escHtml(ch.label) + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+    notifGates.forEach(function(gate) {
+      html += '<tr><td>' + escHtml(gate.label) + '</td>';
+      notifChannels.forEach(function(ch) {
+        var dataKey = gate.key + "." + ch.key;
+        var isOn = notifData && notifData[dataKey];
+        html += '<td><span class="notif-toggle' + (isOn ? " on" : "") + '" data-gate="' + escHtml(gate.key) + '" data-channel="' + escHtml(ch.key) + '" onclick="settingsToggleNotif(this)" role="switch" aria-checked="' + (isOn ? "true" : "false") + '" tabindex="0"></span></td>';
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>' +
+      '<div class="config-actions">' +
+        '<button class="btn-save-config" onclick="settingsSaveNotifConfig()">Save Notification Settings</button>' +
+      '</div>';
+    return html;
+  }
+
+  // ── Build Tab 3: Connectors ──
+  function buildTab3(connectorStatuses) {
+    var html = '<div class="connector-grid">';
+    connectors.forEach(function(c) {
+      var status = connectorStatuses && connectorStatuses[c.id];
+      var isConnected = c.active && status === "connected";
+      var statusClass = !c.active ? "coming-soon" : (isConnected ? "connected" : "disconnected");
+      var statusLabel = !c.active ? "Coming Soon" : (isConnected ? "Connected" : "Disconnected");
+      var dot = !c.active ? "\u23F3" : (isConnected ? "\u2713" : "\u2717");
+      var cardClass = "connector-card" + (!c.active ? " disabled" : "");
+      var testBtn = c.active
+        ? '<button class="btn-test-conn" onclick="settingsTestConnection(\\'' + c.id + '\\', this)">Test Connection</button>'
+        : '';
+      html += '<div class="' + cardClass + '">' +
+        '<div class="connector-card-header">' +
+          '<div class="connector-icon">' + c.icon + '</div>' +
+          '<div>' +
+            '<div class="connector-name">' + escHtml(c.name) + '</div>' +
+            '<span class="connector-status ' + statusClass + '">' + dot + ' ' + statusLabel + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="connector-desc">' + escHtml(c.desc) + '</div>' +
+        '<div class="connector-actions">' + testBtn + '</div>' +
+      '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  // ── Render shell ──
   card.innerHTML = '<div class="settings-page">' +
     '<h2>Settings</h2>' +
+
+    // Existing display settings (preserved)
     '<div class="settings-section">' +
       '<h3>Display</h3>' +
       '<div class="settings-row">' +
@@ -5696,10 +6078,219 @@ function renderSettingsPage() {
         '<span class="settings-value">' + (lastPollTime ? new Date(lastPollTime).toLocaleTimeString() : "Never") + '</span>' +
       '</div>' +
     '</div>' +
+
+    // Tabbed configuration sections
+    '<div style="margin-top:24px">' +
+      '<div class="settings-tabs" role="tablist">' +
+        '<button class="settings-tab active" role="tab" aria-selected="true" data-tab="apikeys" onclick="settingsSwitchTab(\\'apikeys\\', this)">API Keys &amp; Config</button>' +
+        '<button class="settings-tab" role="tab" aria-selected="false" data-tab="notifications" onclick="settingsSwitchTab(\\'notifications\\', this)">Notifications</button>' +
+        '<button class="settings-tab" role="tab" aria-selected="false" data-tab="connectors" onclick="settingsSwitchTab(\\'connectors\\', this)">Connectors</button>' +
+      '</div>' +
+      '<div id="settingsTabApikeys" class="settings-tab-content active" role="tabpanel"><div style="padding:16px 0;color:var(--text3);font-size:13px">Loading configuration...</div></div>' +
+      '<div id="settingsTabNotifications" class="settings-tab-content" role="tabpanel"><div style="padding:16px 0;color:var(--text3);font-size:13px">Loading notifications...</div></div>' +
+      '<div id="settingsTabConnectors" class="settings-tab-content" role="tabpanel"><div style="padding:16px 0;color:var(--text3);font-size:13px">Loading connectors...</div></div>' +
+    '</div>' +
+
     '<div style="margin-top:16px">' +
       '<a href="#/dashboard" class="btn btn-start" style="text-decoration:none;display:inline-block" aria-label="Return to dashboard">Back to Dashboard</a>' +
     '</div>' +
   '</div>';
+
+  // ── Load data for all tabs ──
+  settingsLoadConfig(buildTab1, buildTab2, buildTab3);
+}
+
+// ── Settings helper: switch tabs ──
+function settingsSwitchTab(tabName, btn) {
+  // Update tab buttons
+  var tabs = document.querySelectorAll(".settings-tabs .settings-tab");
+  for (var i = 0; i < tabs.length; i++) {
+    tabs[i].classList.remove("active");
+    tabs[i].setAttribute("aria-selected", "false");
+  }
+  btn.classList.add("active");
+  btn.setAttribute("aria-selected", "true");
+  // Update tab content panels
+  var panels = document.querySelectorAll(".settings-tab-content");
+  for (var j = 0; j < panels.length; j++) {
+    panels[j].classList.remove("active");
+  }
+  var target = document.getElementById("settingsTab" + tabName.charAt(0).toUpperCase() + tabName.slice(1));
+  if (target) target.classList.add("active");
+}
+
+// ── Settings helper: load config data for all tabs ──
+function settingsLoadConfig(buildTab1, buildTab2, buildTab3) {
+  var configData = {};
+  var notifData = {};
+
+  // Fetch config in parallel
+  var p1 = fetchWithTimeout("/api/config").then(function(res) {
+    if (res.ok) return res.json();
+    return {};
+  }).catch(function() { return {}; });
+
+  var p2 = fetchWithTimeout("/api/notification-config").then(function(res) {
+    if (res.ok) return res.json();
+    return {};
+  }).catch(function() { return {}; });
+
+  Promise.all([p1, p2]).then(function(results) {
+    // Build configFields dynamically from API items + flat key→value map
+    var rawConfig = results[0] || {};
+    configData = {};
+    configFields = {};
+    if (rawConfig.items && Array.isArray(rawConfig.items)) {
+      rawConfig.items.forEach(function(item) {
+        configData[item.key] = item.value;
+        // Group items into configFields by group
+        var grp = item.group || "other";
+        if (!configFields[grp]) {
+          configFields[grp] = { label: groupLabels[grp] || grp.charAt(0).toUpperCase() + grp.slice(1), fields: [] };
+        }
+        configFields[grp].fields.push({
+          key: item.key,
+          desc: item.description || item.key,
+          sensitive: !!item.sensitive,
+          required: !!item.required
+        });
+      });
+    }
+    // Flatten nested notification config to dot-notation for UI lookup
+    var rawNotif = (results[1] && results[1].config) || results[1] || {};
+    notifData = {};
+    Object.keys(rawNotif).forEach(function(gate) {
+      if (typeof rawNotif[gate] === "object" && rawNotif[gate] !== null) {
+        Object.keys(rawNotif[gate]).forEach(function(ch) {
+          notifData[gate + "." + ch] = rawNotif[gate][ch];
+        });
+      }
+    });
+
+    // Render Tab 1: API Keys
+    var tab1 = document.getElementById("settingsTabApikeys");
+    if (tab1) tab1.innerHTML = buildTab1(configData);
+
+    // Render Tab 2: Notifications
+    var tab2 = document.getElementById("settingsTabNotifications");
+    if (tab2) tab2.innerHTML = buildTab2(notifData);
+
+    // Build connector statuses from config data
+    var connectorStatuses = {};
+    if (configData.JIRA_BASE_URL && configData.JIRA_TOKEN) connectorStatuses.jira = "connected";
+    if (configData.GITLAB_URL && configData.GITLAB_TOKEN) connectorStatuses.gitlab = "connected";
+    if (configData.SLACK_WEBHOOK) connectorStatuses.slack = "connected";
+    if (configData.CLAUDE_MODEL || configData.ANTHROPIC_API_KEY) connectorStatuses.claude = "connected";
+
+    // Render Tab 3: Connectors
+    var tab3 = document.getElementById("settingsTabConnectors");
+    if (tab3) tab3.innerHTML = buildTab3(connectorStatuses);
+  });
+}
+
+// ── Settings helper: toggle config group ──
+function settingsToggleGroup(catKey) {
+  var el = document.getElementById("cfgGroup_" + catKey);
+  if (el) el.classList.toggle("open");
+}
+
+// ── Settings helper: toggle password visibility ──
+function settingsToggleEye(btn) {
+  var input = btn.parentElement.querySelector("input");
+  if (!input) return;
+  if (input.type === "password") {
+    input.type = "text";
+    btn.textContent = "\uD83D\uDE48";
+  } else {
+    input.type = "password";
+    btn.textContent = "\uD83D\uDC41";
+  }
+}
+
+// ── Settings helper: save configuration ──
+function settingsSaveConfig() {
+  var inputs = document.querySelectorAll("#settingsTabApikeys .config-field-input-wrap input");
+  var payload = {};
+  for (var i = 0; i < inputs.length; i++) {
+    var key = inputs[i].getAttribute("data-key");
+    var val = inputs[i].value.trim();
+    if (!key || !val) continue;
+    // Skip sensitive fields that haven't been changed (still shows masked value)
+    var original = inputs[i].getAttribute("data-original");
+    if (original && val === original) continue;
+    payload[key] = val;
+  }
+  var btn = document.querySelector(".btn-save-config");
+  if (btn) { btn.disabled = true; btn.textContent = "Saving..."; }
+  authPost("/api/config/save", { values: payload }).then(function(res) {
+    return res.json().then(function(data) {
+      if (data.ok) {
+        showToast("Configuration saved" + (data.saved ? " (" + data.saved + " values updated)" : ""), "success");
+      } else {
+        showToast("Failed to save: " + (data.error || "Unknown error"), "error");
+      }
+    });
+  }).catch(function(err) {
+    showToast("Save failed: " + err.message, "error");
+  }).finally(function() {
+    if (btn) { btn.disabled = false; btn.textContent = "Save Configuration"; }
+  });
+}
+
+// ── Settings helper: test connection ──
+function settingsTestConnection(service, btn) {
+  if (btn.classList.contains("testing")) return;
+  btn.classList.add("testing");
+  var origText = btn.textContent;
+  btn.textContent = "Testing...";
+  authPost("/api/config/test", { service: service }).then(function(res) {
+    return res.json().then(function(data) {
+      if (data.ok) {
+        showToast(service.charAt(0).toUpperCase() + service.slice(1) + ": " + (data.message || "Connected"), "success");
+      } else {
+        showToast(service.charAt(0).toUpperCase() + service.slice(1) + " connection failed: " + (data.error || "Unknown error"), "error");
+      }
+    });
+  }).catch(function(err) {
+    showToast("Connection test failed: " + err.message, "error");
+  }).finally(function() {
+    btn.classList.remove("testing");
+    btn.textContent = origText;
+  });
+}
+
+// ── Settings helper: toggle notification ──
+function settingsToggleNotif(el) {
+  el.classList.toggle("on");
+  var isOn = el.classList.contains("on");
+  el.setAttribute("aria-checked", isOn ? "true" : "false");
+}
+
+// ── Settings helper: save notification config ──
+function settingsSaveNotifConfig() {
+  var toggles = document.querySelectorAll("#settingsTabNotifications .notif-toggle");
+  var nested = {};
+  for (var i = 0; i < toggles.length; i++) {
+    var gate = toggles[i].getAttribute("data-gate");
+    var channel = toggles[i].getAttribute("data-channel");
+    if (gate && channel) {
+      if (!nested[gate]) nested[gate] = {};
+      nested[gate][channel] = toggles[i].classList.contains("on");
+    }
+  }
+  var btn = document.querySelector("#settingsTabNotifications .btn-save-config");
+  if (btn) { btn.disabled = true; btn.textContent = "Saving..."; }
+  authPost("/api/notification-config", { config: nested }).then(function(res) {
+    if (res.ok) {
+      showToast("Notification settings saved", "success");
+    } else {
+      res.text().then(function(t) { showToast("Failed to save: " + t, "error"); });
+    }
+  }).catch(function(err) {
+    showToast("Save failed: " + err.message, "error");
+  }).finally(function() {
+    if (btn) { btn.disabled = false; btn.textContent = "Save Notification Settings"; }
+  });
 }
 
 function renderNotFoundPage(path) {

@@ -1,0 +1,16 @@
+[package]
+name = "http-engine"
+version = "0.1.0"
+edition = "2021"
+description = "Circuit breaker, retry, dedup, and rate limiting for MI Dev Agent HTTP client"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+napi = { version = "3", features = ["napi6"] }
+napi-derive = "3"
+
+[build-dependencies]
+napi-build = "2"

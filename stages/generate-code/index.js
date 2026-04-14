@@ -214,6 +214,12 @@ async function stageGenerateCode(state) {
       }
     }
 
+    // Zero-files guard: verify at least one file was changed before push
+    if (!fileChanges || fileChanges.length === 0) {
+      logErr("No files were changed by code generation — cannot push empty changeset");
+      throw new Error("No files were changed by code generation");
+    }
+
     // GAP-2: Mark test phase complete AFTER all testing/verification, BEFORE push
     state.data._test_phase_complete = true;
     save(state);

@@ -10,6 +10,7 @@ const { save } = require("../lib/state");
 const { jira, jiraUrl, classifyDocUrl, isImageFile, callAnthropicVision, classifyTicketComplexity } = require("../lib/jira");
 const { gl } = require("../lib/gitlab");
 const { slack } = require("../lib/slack");
+const { isChannelEnabled } = require("../lib/notification-config");
 
 async function stageFetchTicket(state) {
   logStep(1, "Fetch Jira ticket + full context");
@@ -23,7 +24,9 @@ async function stageFetchTicket(state) {
     const ticketStatus = (preflightIssue.fields?.status?.name || "").toLowerCase();
     if (ticketStatus === "done" || ticketStatus === "closed" || ticketStatus === "cancelled") {
       logErr(`Q3: Ticket ${TICKET} is "${preflightIssue.fields.status.name}" — cannot proceed`);
-      await slack(`🛑 *Pre-flight HALT — ${TICKET}*\nTicket status is "${preflightIssue.fields.status.name}". Pipeline stopped.`, [cfg.slack.ownerId]);
+      if (isChannelEnabled("fetch_ticket", "slack")) {
+        await slack(`🛑 *Pre-flight HALT — ${TICKET}*\nTicket status is "${preflightIssue.fields.status.name}". Pipeline stopped.`, [cfg.slack.ownerId]);
+      }
       throw new Error(`Ticket ${TICKET} is already "${preflightIssue.fields.status.name}" — halting pipeline`);
     }
 
@@ -85,7 +88,24 @@ async function stageFetchTicket(state) {
     logOk("Q3: Pre-flight validation passed");
   }
 
-  const issue = await jira.getIssue(TICKET);
+  // Retry jira.getIssue with exponential backoff on transient network errors
+  let issue;
+  const TRANSIENT_CODES = ["ECONNRESET", "ETIMEDOUT", "ENOTFOUND", "ECONNREFUSED", "EAI_AGAIN"];
+  for (let _retry = 0; _retry <= 3; _retry++) {
+    try {
+      issue = await jira.getIssue(TICKET);
+      break;
+    } catch (e) {
+      const isTransient = TRANSIENT_CODES.some(c => (e.code || e.message || "").includes(c));
+      if (!isTransient || _retry === 3) {
+        logErr(`Jira fetch failed after ${_retry + 1} attempt(s): ${e.message}`);
+        throw e;
+      }
+      const delay = Math.pow(2, _retry) * 1000; // 1s, 2s, 4s
+      logWarn(`Jira fetch failed (${e.code || e.message}), retrying in ${delay / 1000}s... (attempt ${_retry + 1}/3)`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
   const summary = issue.fields?.summary || "(No summary)";
   const descMarkdown = issue.fields?.description ? adfToMarkdown(issue.fields.description) : "";
   const descText = issue.fields?.description ? adfText(issue.fields.description) : "";

@@ -418,7 +418,7 @@ async function main() {
     if (syncAuditToState) syncAuditToState(state);
 
     // Evaluate escalation rules (in addition to periodic check)
-    if (evaluateRules) evaluateRules().catch((err) => logDebug(`Escalation eval: ${err.message}`));
+    if (evaluateRules) evaluateRules().catch((err) => logWarn(`Escalation eval failed: ${err.message}`));
 
     // W1: Validate stage entry requirements
     validateStageEntry(state);

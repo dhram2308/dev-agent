@@ -1,0 +1,69 @@
+## Phase 1: Foundation — Monorepo + Shared Types + Config
+
+- [x] 1.1 Create monorepo directory structure: `packages/{native,backend,frontend,shared}` with `src/` subdirs. Create root `tsconfig.json` (strict mode, ESM, path aliases). Create `packages/shared/tsconfig.json`, `packages/backend/tsconfig.json`, `packages/frontend/tsconfig.json`. Add `package.json` with workspace config.
+- [x] 1.2 Create `packages/shared/src/types/index.ts`: Port `StageName` as literal union type from STAGES array in `lib/constants.js`. Port `PipelineState` interface (ticket, stage, data, _seq, _hmac, _v). Port `StageHandler` type. Port `ErrorClass` enum (TRANSIENT, AUTH, PERMANENT, TIMEOUT). Port `ServiceName` enum.
+- [x] 1.3 Create `packages/shared/src/constants.ts`: Port all constants from `lib/constants.js` — STAGES array, STAGE_REQUIREMENTS, BINARY_EXTENSIONS, REFUSAL_PATTERNS, ALLOWED_MR_TARGETS, MAX_PIPELINE_DURATION defaults, service timeout defaults.
+- [x] 1.4 Create `packages/shared/src/schema/config.ts`: Zod schemas for all config fields. Split into `frozenConfigSchema` (TICKET, GITLAB_TOKEN, JIRA_TOKEN, BRANCH_TS, etc.) and `freshConfigSchema` (MAX_PIPELINE_DURATION, LOG_LEVEL, MAX_REJECTIONS, etc.). Export `configSchema = z.object({ frozen, fresh })`.
+- [x] 1.5 Create `packages/shared/src/schema/state.ts`: Zod schema for PipelineState — `stateSchema = z.object({ ticket: z.string().regex(/^[A-Z]+-\d+$/i), stage: stageNameSchema, data: z.record(z.unknown()), _seq: z.number(), ... })`. Export validation functions.
+- [x] 1.6 Create `packages/backend/src/lib/logger.ts`: Structured logger using console with colored prefixes (matching existing logStep, logOk, logErr, logInfo, logWarn, logDebug signatures). Keep zero-dependency — no pino yet. Export same function signatures as current `lib/logging.js`.
+- [x] 1.7 Create `packages/backend/src/lib/utils.ts`: Port utility functions from `lib/utils.js` — `sleep()`, `sanitizeForPrompt()`, `validatePromptSize()`, `isBinaryFile()`, `isBinaryContent()`, `validateClaudeNotEmpty()`, `detectClaudeRefusal()`. Add TypeScript types.
+- [x] 1.8 Create `packages/backend/src/lib/redaction.ts`: Port all 16 redaction patterns from `lib/redaction.js`. Type the pattern registry as `RedactionPattern { name, severity, regex, replacement }`. Export `redact()`, `detectSecrets()`, `redactEnvValues()`.
+- [x] 1.9 Create `packages/backend/src/config/loader.ts`: Port config loading from `lib/config.js`. Use dotenv for .env parsing (replaces lib/env-parser.js). Validate with Zod schema from shared/. Export typed `AppConfig` object. Support hot-reload for fresh fields.
+- [x] 1.10 Create `packages/backend/src/config/validator.ts`: Port validation from `lib/config-validate.js`. Cross-field checks (OWNER != ANSHIT for dual approval, numeric GITLAB_PROJECT_ID, URL format checks). Use Zod `.refine()` for complex rules.
+
+## Phase 2: Rust Native Modules + State Engine
+
+- [x] 2.1 Create Rust workspace: `packages/native/Cargo.toml` (workspace members: http-engine, state-engine, sse-engine). Each crate has `Cargo.toml` + `src/lib.rs`. Add napi-rs dependencies. Create `.cargo/config.toml` for build settings.
+- [x] 2.2 Implement `packages/native/state-engine/src/hmac.rs`: HMAC-SHA256 using ring crate. Functions: `compute_hmac(secret, data) -> Vec<u8>`, `verify_hmac(secret, data, expected) -> bool` (constant-time). Export via napi-rs: `computeHmac(secret: Buffer, data: string) -> Buffer`, `verifyHmac(secret: Buffer, data: string, expected: Buffer) -> boolean`.
+- [x] 2.3 Implement `packages/native/state-engine/src/file_lock.rs`: RAII file lock using O_EXCL. Struct `FileLock { path, fd }` with `Drop` impl that removes lock file. Functions: `acquire(path, timeout_ms) -> Result<FileLock>`, includes PID check for stale locks. Export via napi-rs.
+- [x] 2.4 Implement `packages/native/state-engine/src/atomic_write.rs`: Atomic file write (tmp → fsync → rename). Function: `atomic_write(path, data) -> Result<()>`. Handle fd cleanup via Drop. Export via napi-rs: `atomicWriteSync(path: string, data: string) -> void`.
+- [x] 2.5 Implement `packages/native/http-engine/src/circuit.rs`: CircuitBreaker as Rust enum `CircuitState { Closed { failures, window_start }, Open { opened_at, timeout }, HalfOpen { successes, test_count } }`. Methods: `record_success()`, `record_failure()`, `allow_request() -> bool`. Prune on state transitions only. Export via napi-rs.
+- [x] 2.6 Implement `packages/native/sse-engine/src/circular.rs`: Generic `CircularBuffer<T>` with fixed-size array, head/tail pointers. O(1) push (overwrites oldest), iterator for replay. Methods: `push(item)`, `iter() -> impl Iterator`, `len()`, `clear()`. Export via napi-rs with string specialization.
+- [x] 2.7 Create `packages/native/napi-bindings/src/lib.rs`: napi-rs bridge that exposes all Rust functions to Node.js. Use `#[napi]` macros. Include JS fallback loader: `try { native = require('./native') } catch { native = require('./fallback') }`.
+- [x] 2.8 Create `packages/backend/src/state/state-manager.ts`: TypeScript state manager wrapping Rust state-engine. Functions: `load(ticket)`, `save(state)`, `getCurrentState()`, `setCurrentState(state)`. HMAC envelope wrap/unwrap. CAS via _seq counter. Crash recovery (orphaned .tmp cleanup). V2/V3 backward compat.
+- [x] 2.9 Create `packages/backend/src/state/lock.ts`: TypeScript wrapper for Rust file lock. `acquireLockAsync(path, timeoutMs=30000)` with MutexTimeoutError. In-process mutex queue + OS file lock (two-layer). Falls back to JS O_EXCL if Rust addon unavailable.
+- [x] 2.10 Create `packages/backend/src/state/state-io.ts`: Async state I/O for server context. `getState(ticket)`, `writeStateAsync(ticket, state)`, `patchUIAsync(ticket, patch)`, `updateAsync(ticket, mutator)`. Thread-safe via lock.ts.
+
+## Phase 3: HTTP Client + Service Integrations
+
+- [x] 3.1 Create `packages/backend/src/http/client.ts`: TypeScript HTTP client wrapping Rust http-engine. `req(url, opts)` with retry, circuit breaker, deduplication, rate limiting, metrics. Service classifier (hostname → ServiceName enum). Keep-alive agents. Socket timeout. Response size protection (2MB). Falls back to pure-TS circuit breaker if Rust unavailable.
+- [x] 3.2 Create `packages/backend/src/services/jira.ts`: Port all Jira methods from `lib/jira.js`. Typed: `getIssue(key): Promise<JiraIssue>`, `addComment(key, body)`, `getComments(key)`, `transitionIssue(key, transitionId)`, `searchIssues(jql)`. Use typed HTTP client.
+- [x] 3.3 Create `packages/backend/src/services/gitlab.ts`: Port all GitLab methods from `lib/gitlab.js`. Typed: `getFile(path, ref)`, `getTree(path, ref)`, `getBranch(name)`, `createBranch(name, ref)`, `deleteBranch(name)`, `createMR(opts)`, `getMR(iid)`, `mergeMR(iid)`, `getMRApprovals(iid)`, `getMRNotes(iid)`, `triggerPipeline(ref)`.
+- [x] 3.4 Create `packages/backend/src/services/slack.ts`: Port from `lib/slack.js`. 6-layer resilience preserved. Typed: `slack(message, mentions?, opts?)`. Thread reply support. Fallback to Jira comment.
+- [x] 3.5 Create `packages/backend/src/services/claude.ts`: NEW — Anthropic API direct. Tool definitions (7 tools). ToolExecutor class with security sandbox. AgentLoop (multi-turn). Drop-in `callClaude(prompt, timeoutMs, opts): Promise<string>`. Heartbeat state updates. Retry on timeout.
+- [x] 3.6 Create `packages/backend/src/lib/adf-parser.ts`: Port ADF parsing from `lib/adf.js`. `adfToMarkdown(adf)`, `adfText(adf)`, `adfExtractUrls(adf)`. TypeScript types for ADF nodes.
+
+## Phase 4: Pipeline Engine + Stage Handlers
+
+- [x] 4.1 Create `packages/backend/src/pipeline/error-recovery.ts`: Port from `lib/error-recovery.js`. `classifyError(err): ErrorClassification`, `executeWithRecovery(stage, handler, state, opts)`. Per-stage retry config. Exponential backoff with jitter. State tracking (_retries, _lastError).
+- [x] 4.2 Create `packages/backend/src/pipeline/stage-timeout.ts`: Port from `lib/stage-timeout.js`. `withStageTimeout(stage, handler, opts)`. Pipeline budget tracking. StageTimeoutError. Progress logging every 5 min.
+- [x] 4.3 Create `packages/backend/src/pipeline/validation.ts`: Port from `stages/validation.js`. `validateStageEntry(state)`, `validateCompletedGates(state)`, `clearDownstreamData(state, fromStage)`. Uses StageName enum for exhaustive checks.
+- [x] 4.4 Create `packages/backend/src/state/checkpoint.ts`: Port from `lib/checkpoint.js`. `saveCheckpoint(state, cfg)`, `verifyCheckpointOnResume(state)`, `markStageCompleted(state, stage)`, `applyRollback(state, targetStage)`. 20-checkpoint history. SHA256 integrity.
+- [x] 4.5 Create `packages/backend/src/pipeline/agent-runner.ts`: Port main loop from `run-agent.js`. Typed stage machine with exhaustive switch on StageName. Stage handler registry. Error recovery integration. Graceful shutdown hooks. Multi-ticket support.
+- [x] 4.6 Create `packages/backend/src/pipeline/stages/fetch-ticket.ts`: Port from `stages/fetch-ticket.js`. All context gathering (comments, attachments, URLs, ADF). Config snapshot capture. Optional chaining for `preflightIssue.fields.status?.name`.
+- [x] 4.7 Create `packages/backend/src/pipeline/stages/generate-code.ts`: Port from `stages/generate-code/index.js`. Orchestrate: developer → reviewer → fixer → build → tests. Zero-files warning after developer completes. saveAndThrow guard at all throw sites.
+- [x] 4.8 Create `packages/backend/src/agents/developer.ts`: Port from `stages/generate-code/developer.js`. Prompt assembly (ticket, AC, context, feedback). Uses claude.ts. Refusal detection. Output validation.
+- [x] 4.9 Create `packages/backend/src/agents/reviewer.ts`: Port from `stages/generate-code/reviewer.js`. Security checklist + code review. Rejection logic.
+- [x] 4.10 Create remaining stage handlers: `gate-code-review.ts` (with GL API try-catch in poll loop), `deploy-qa.ts` (replace empty catch with warning log), `test-qa.ts`, `gate-preprod.ts`, `create-preprod-mr.ts`, `gate-dual.ts`, `deploy-prod.ts` (saveAndThrow at all throw sites, move preprod_merged after getMR verification), `done.ts`.
+- [x] 4.11 Create `packages/backend/src/lib/graceful-shutdown.ts`: Port from `lib/graceful-shutdown.js`. `installShutdownHandlers()`, `onShutdown(name, fn)`, `trackChildProcess(proc)`. 8-phase shutdown. 30s force-exit. Signal deconfliction (single handler set).
+- [x] 4.12 Create `packages/backend/src/pipeline/stages/explore-plan.ts`, `push-code.ts`, and remaining codegen sub-stages: `fixer.ts`, `build-check.ts`, `runtime-tests.ts`, `ac-verification.ts`, `browser-verify.ts`, `env-setup.ts`, `dev-server.ts`, `legacy-codegen.ts`.
+
+## Phase 5: Server + Frontend
+
+- [x] 5.1 Create `packages/backend/src/server/http-server.ts`: Port from `server.js`. HTTP server on port 3000. Register routes. SSE setup. Security middleware. `onShutdown('http-server', () => server.close())`. Serve React build from `packages/frontend/dist/`.
+- [x] 5.2 Create `packages/backend/src/server/routes.ts`: Port from `server/routes.js`. All route handlers (/api/status, /api/start, /api/stop, /api/gate, /api/logs). Input validation via Zod. safeTicket(), safeGate(), safeStage() sanitizers.
+- [x] 5.3 Create `packages/backend/src/server/sse.ts`: Port from `server/sse.js`. TypeScript wrapper around Rust sse-engine circular buffer. Client management. Backpressure handling. Fresh replay IDs. 64KB message truncation. Drain handler try-catch.
+- [x] 5.4 Create `packages/frontend/` React app: `vite.config.ts`, `index.html`, `src/main.tsx`, `src/App.tsx`. Setup Zustand store in `src/store/pipeline.ts`. Create `src/lib/api.ts` typed API client.
+- [x] 5.5 Create React components: `src/components/TicketForm.tsx` (Zod validation, draft persistence), `src/components/AgentStatus.tsx` (stage progress, timer), `src/components/LogViewer.tsx` (virtual scroll, SSE stream), `src/components/GateApproval.tsx` (confirm dialog with null safety).
+- [x] 5.6 Create React hooks: `src/hooks/useSSE.ts` (EventSource with reconnect), `src/hooks/usePolling.ts` (fallback), `src/hooks/useVisibility.ts` (single listener, pause/resume timers), `src/hooks/useTimer.ts` (cleanup on unmount), `src/hooks/useLeaderElection.ts` (BroadcastChannel).
+- [x] 5.7 Create `packages/backend/src/middleware/security.ts`: Port from `lib/security.js`. Session store, CORS, rate limiting, CSP headers, input sanitization, auth middleware.
+
+## Phase 6: Testing + Docker + Integration
+
+- [x] 6.1 Create Rust tests: `packages/native/state-engine/tests/` — HMAC roundtrip, file lock exclusion, atomic write durability, stale lock detection. `packages/native/http-engine/tests/` — circuit breaker state transitions. `packages/native/sse-engine/tests/` — circular buffer wraparound.
+- [x] 6.2 Create TypeScript unit tests: `packages/backend/tests/unit/` — error-recovery (classify + retry), checkpoint (save/verify/rollback), config (validate + snapshot), stage-timeout, state-manager (HMAC + CAS), health-monitor.
+- [x] 6.3 Create React component tests: `packages/frontend/tests/` — Timer (pause/resume/cleanup), SSE hook (connect/disconnect/reconnect), TicketForm (validation), ConfirmModal (null safety), MultiTicketTabs (isolation).
+- [x] 6.4 Create integration tests: Full pipeline mock (fetch → done), gate rejection + rollback, crash recovery from checkpoint, multi-ticket concurrency, SSE backpressure.
+- [x] 6.5 Create `Dockerfile` (multi-stage: Rust build → Node build → runtime). Create `docker-compose.yml`. Create `docker-entrypoint.sh` with SIGTERM handling. Health check endpoint.
+- [x] 6.6 Create `.github/workflows/test-and-deploy.yml`: Rust build+test, TS build+lint+test, React build+test, E2E (Playwright), Docker build+push. Coverage upload.
+- [x] 6.7 Verify full system: Start server, open Web UI, verify no errors. Test circuit breaker recovery. Test mutex timeout. Test SSE reconnect with fresh replay IDs. Test SIGTERM graceful shutdown.

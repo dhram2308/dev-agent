@@ -8,6 +8,7 @@ const { gl } = require("../lib/gitlab");
 const { slack } = require("../lib/slack");
 const { isShuttingDown } = require("../lib/graceful-shutdown");
 const { incrementRejectionCounter } = require("./gate-code-review");
+const { isChannelEnabled } = require("../lib/notification-config");
 
 async function stageDeployQA(state) {
   logStep(5, "Deploy to QA");
@@ -19,13 +20,15 @@ async function stageDeployQA(state) {
     save(state);
 
     const mrIid = state.data.code_mr_iid;
-    await slack(
-      `🔍 *Review & Approve Merge to QA — ${TICKET}*\n` +
-      `MR !${mrIid} is ready for merge into \`${cfg.branch.qa}\`.\n` +
-      `🔀 MR: ${state.data.code_mr_url}\n` +
-      `Please review the diff in the Web UI and click *Approve & Merge* or *Reject*.`,
-      [cfg.slack.ownerId],
-    );
+    if (isChannelEnabled("deploy_qa", "slack")) {
+      await slack(
+        `🔍 *Review & Approve Merge to QA — ${TICKET}*\n` +
+        `MR !${mrIid} is ready for merge into \`${cfg.branch.qa}\`.\n` +
+        `🔀 MR: ${state.data.code_mr_url}\n` +
+        `Please review the diff in the Web UI and click *Approve & Merge* or *Reject*.`,
+        [cfg.slack.ownerId],
+      );
+    }
     logWait("Waiting for user approval to merge into QA (Web UI)…");
   }
 
@@ -43,7 +46,9 @@ async function stageDeployQA(state) {
       }
       if (monotonicMs() - deployQaPollStart > MAX_APPROVAL_TIMEOUT) {
         logErr(`Deploy QA approval timeout after ${MAX_APPROVAL_TIMEOUT / 3600000}h`);
-        await slack(`⏰ *Deploy QA Timeout — ${TICKET}*\nPipeline halted.`, [cfg.slack.ownerId]);
+        if (isChannelEnabled("deploy_qa", "slack")) {
+          await slack(`⏰ *Deploy QA Timeout — ${TICKET}*\nPipeline halted.`, [cfg.slack.ownerId]);
+        }
         save(state);
         throw new Error(`Deploy QA approval timeout after ${MAX_APPROVAL_TIMEOUT / 3600000}h`);
       }
@@ -60,12 +65,14 @@ async function stageDeployQA(state) {
             logOk(`Merged into ${cfg.branch.qa}`);
           } catch (err) {
             logErr(`Merge failed after approval (${err.message}) — polling GitLab for manual merge`);
-            await slack(
-              `⚠️ *Merge Failed — ${TICKET}*\n` +
-              `API merge of MR !${mrIid} failed: ${err.message}\n` +
-              `Please merge manually on GitLab: ${state.data.code_mr_url}`,
-              [cfg.slack.ownerId],
-            );
+            if (isChannelEnabled("deploy_qa", "slack")) {
+              await slack(
+                `⚠️ *Merge Failed — ${TICKET}*\n` +
+                `API merge of MR !${mrIid} failed: ${err.message}\n` +
+                `Please merge manually on GitLab: ${state.data.code_mr_url}`,
+                [cfg.slack.ownerId],
+              );
+            }
             // E2: Start merge poll timeout tracking
             state.data._merge_poll_start = Date.now();
             save(state);
@@ -118,13 +125,15 @@ async function stageDeployQA(state) {
         // E2: Merge poll timeout after merge failure
         if (state.data._merge_poll_start && (Date.now() - state.data._merge_poll_start > MERGE_POLL_TIMEOUT)) {
           logErr(`Merge poll timeout after ${MERGE_POLL_TIMEOUT / 60000}min — MR !${mrIid} was not merged`);
-          await slack(
-            `⏰ *Merge Poll Timeout — ${TICKET}*\n` +
-            `MR !${mrIid} was not merged within ${MERGE_POLL_TIMEOUT / 60000}min after merge failure.\n` +
-            `MR: ${state.data.code_mr_url}\n` +
-            `Please merge manually and re-run the agent.`,
-            [cfg.slack.ownerId],
-          );
+          if (isChannelEnabled("deploy_qa", "slack")) {
+            await slack(
+              `⏰ *Merge Poll Timeout — ${TICKET}*\n` +
+              `MR !${mrIid} was not merged within ${MERGE_POLL_TIMEOUT / 60000}min after merge failure.\n` +
+              `MR: ${state.data.code_mr_url}\n` +
+              `Please merge manually and re-run the agent.`,
+              [cfg.slack.ownerId],
+            );
+          }
           save(state);
           throw new Error(`Merge poll timeout after ${MERGE_POLL_TIMEOUT / 60000}min — MR !${mrIid} was not merged`);
         }
@@ -137,7 +146,7 @@ async function stageDeployQA(state) {
             delete state.data._merge_poll_start;
             save(state);
           }
-        } catch {}
+        } catch (e) { logWarn(`[deploy-qa] getMR poll error: ${e.message}`); }
       }
 
       if (state.data.qa_merged) break;

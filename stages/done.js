@@ -7,6 +7,7 @@ const { logStep, logOk, logErr, logInfo, logWarn, C } = require("../lib/logging"
 const { save } = require("../lib/state");
 const { jira, jiraUrl } = require("../lib/jira");
 const { slack } = require("../lib/slack");
+const { isChannelEnabled } = require("../lib/notification-config");
 
 async function stageDone(state) {
   logStep(11, "Done");
@@ -34,42 +35,46 @@ async function stageDone(state) {
 
   if (!state.data.final_comment) {
     const elapsed = ((Date.now() - new Date(state.startedAt).getTime()) / 60000).toFixed(1);
-    await jira.addComment(TICKET,
-      `Deployment Complete ✅\n` +
-      `\n` +
-      `${TICKET}: ${state.data.ticket.summary}\n` +
-      `\n` +
-      `📊 Summary:\n` +
-      `• QA MR: ${state.data.qa_mr_url || "—"}\n` +
-      `• Pre-Prod MR: ${state.data.preprod_mr_url || "—"}\n` +
-      `• Production MR: ${state.data.prod_mr_url || "—"}\n` +
-      `\n` +
-      `🌐 Environments:\n` +
-      `• QA: ${cfg.urls.qa}\n` +
-      `• Pre-Prod: ${cfg.urls.preProd}\n` +
-      `• Production: ${cfg.urls.prod}\n` +
-      `\n` +
-      `⏱ Total time: ${elapsed} minutes\n` +
-      `All gates passed. Production is live.` +
-      ((state.data._warnings && state.data._warnings.length > 0)
-        ? `\n\nKnown Limitations:\n${state.data._warnings.map((w) => `• [${w.stage}] ${w.message}`).join("\n")}`
-        : ""),
-    );
+    if (isChannelEnabled("done", "jira")) {
+      await jira.addComment(TICKET,
+        `Deployment Complete ✅\n` +
+        `\n` +
+        `${TICKET}: ${state.data.ticket.summary}\n` +
+        `\n` +
+        `📊 Summary:\n` +
+        `• QA MR: ${state.data.qa_mr_url || "—"}\n` +
+        `• Pre-Prod MR: ${state.data.preprod_mr_url || "—"}\n` +
+        `• Production MR: ${state.data.prod_mr_url || "—"}\n` +
+        `\n` +
+        `🌐 Environments:\n` +
+        `• QA: ${cfg.urls.qa}\n` +
+        `• Pre-Prod: ${cfg.urls.preProd}\n` +
+        `• Production: ${cfg.urls.prod}\n` +
+        `\n` +
+        `⏱ Total time: ${elapsed} minutes\n` +
+        `All gates passed. Production is live.` +
+        ((state.data._warnings && state.data._warnings.length > 0)
+          ? `\n\nKnown Limitations:\n${state.data._warnings.map((w) => `• [${w.stage}] ${w.message}`).join("\n")}`
+          : ""),
+      );
+    }
     state.data.final_comment = true;
     save(state);
   }
 
   if (!state.data.final_slack) {
     const elapsed = ((Date.now() - new Date(state.startedAt).getTime()) / 60000).toFixed(1);
-    await slack(
-      `✅ *${TICKET} deployed to Production*\n` +
-      `*${state.data.ticket.summary}*\n\n` +
-      `🌐 ${cfg.urls.prod}\n` +
-      `📋 ${jiraUrl(TICKET)}\n` +
-      `🔀 ${state.data.prod_mr_url || "—"}\n` +
-      `⏱ ${elapsed} min`,
-      [cfg.slack.ownerId, cfg.slack.anshitId],
-    );
+    if (isChannelEnabled("done", "slack")) {
+      await slack(
+        `✅ *${TICKET} deployed to Production*\n` +
+        `*${state.data.ticket.summary}*\n\n` +
+        `🌐 ${cfg.urls.prod}\n` +
+        `📋 ${jiraUrl(TICKET)}\n` +
+        `🔀 ${state.data.prod_mr_url || "—"}\n` +
+        `⏱ ${elapsed} min`,
+        [cfg.slack.ownerId, cfg.slack.anshitId],
+      );
+    }
     state.data.final_slack = true;
     save(state);
   }

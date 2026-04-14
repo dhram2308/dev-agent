@@ -1,0 +1,18 @@
+[package]
+name = "state-engine"
+version = "0.1.0"
+edition = "2021"
+description = "HMAC, file locking, and atomic write for MI Dev Agent state management"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+napi = { version = "3", features = ["napi6"] }
+napi-derive = "3"
+ring = "0.17"
+libc = "0.2"
+
+[build-dependencies]
+napi-build = "2"

@@ -1,0 +1,16 @@
+[package]
+name = "sse-engine"
+version = "0.1.0"
+edition = "2021"
+description = "Circular buffer and broadcast for MI Dev Agent SSE server"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+napi = { version = "3", features = ["napi6"] }
+napi-derive = "3"
+
+[build-dependencies]
+napi-build = "2"

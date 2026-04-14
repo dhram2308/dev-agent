@@ -6,26 +6,31 @@ const { save } = require("../lib/state");
 const { jira, jiraUrl } = require("../lib/jira");
 const { slack } = require("../lib/slack");
 const { waitForApproval } = require("../lib/approval");
+const { isChannelEnabled } = require("../lib/notification-config");
 
 async function stageGateDualApproval(state) {
   logStep(9, "GATE 2b — Dual Approval (You + Anshit)");
 
   if (!state.data.gate2b_posted) {
-    await jira.addComment(TICKET,
-      `Dual Approval Required\n\n` +
-      `Pre-Prod MR: ${state.data.preprod_mr_url}\n\n` +
-      `⚠️ BOTH must approve:\n` +
-      `1. You (owner)\n` +
-      `2. Anshit Malhotra\n\n` +
-      `Both: comment "approved" on this ticket.`,
-    );
+    if (isChannelEnabled("gate_dual_approval", "jira")) {
+      await jira.addComment(TICKET,
+        `Dual Approval Required\n\n` +
+        `Pre-Prod MR: ${state.data.preprod_mr_url}\n\n` +
+        `⚠️ BOTH must approve:\n` +
+        `1. You (owner)\n` +
+        `2. Anshit Malhotra\n\n` +
+        `Both: comment "approved" on this ticket.`,
+      );
+    }
 
-    await slack(
-      `🔔 *Dual Approval Required — ${TICKET}*\n` +
-      `Pre-Prod MR ready. *BOTH* of you must approve.\n` +
-      `📋 ${jiraUrl(TICKET)}`,
-      [cfg.slack.ownerId, cfg.slack.anshitId],
-    );
+    if (isChannelEnabled("gate_dual_approval", "slack")) {
+      await slack(
+        `🔔 *Dual Approval Required — ${TICKET}*\n` +
+        `Pre-Prod MR ready. *BOTH* of you must approve.\n` +
+        `📋 ${jiraUrl(TICKET)}`,
+        [cfg.slack.ownerId, cfg.slack.anshitId],
+      );
+    }
 
     state.data.gate2b_posted = true;
     state.data.gate2b_at = new Date().toISOString();

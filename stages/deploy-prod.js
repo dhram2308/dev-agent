@@ -8,6 +8,7 @@ const { save } = require("../lib/state");
 const { gl } = require("../lib/gitlab");
 const { slack } = require("../lib/slack");
 const { validateMRTarget } = require("../lib/config");
+const { isChannelEnabled } = require("../lib/notification-config");
 
 async function stageDeployProd(state) {
   logStep(10, "Deploy Pre-Prod + Production");
@@ -35,19 +36,23 @@ async function stageDeployProd(state) {
           if (errMsg.includes("405")) detail += " (likely merge conflicts)";
           else if (errMsg.includes("406")) detail += " (pipeline failures or unresolved discussions)";
           logErr(detail);
-          await slack(
-            `🚨 *Pre-Prod Merge Failed — ${TICKET}*\n${detail}\nMR: ${state.data.preprod_mr_url}`,
-            [cfg.slack.ownerId],
-          );
+          if (isChannelEnabled("deploy_prod", "slack")) {
+            await slack(
+              `🚨 *Pre-Prod Merge Failed — ${TICKET}*\n${detail}\nMR: ${state.data.preprod_mr_url}`,
+              [cfg.slack.ownerId],
+            );
+          }
           throw new Error(detail);
         }
       } catch (checkErr) {
         if (checkErr.message.includes("Pre-Prod MR merge failed")) throw checkErr;
         logErr(`Pre-Prod merge error + could not check MR state: ${err.message}`);
-        await slack(
-          `🚨 *Pre-Prod Merge Failed — ${TICKET}*\n${err.message}\nMR: ${state.data.preprod_mr_url}`,
-          [cfg.slack.ownerId],
-        );
+        if (isChannelEnabled("deploy_prod", "slack")) {
+          await slack(
+            `🚨 *Pre-Prod Merge Failed — ${TICKET}*\n${err.message}\nMR: ${state.data.preprod_mr_url}`,
+            [cfg.slack.ownerId],
+          );
+        }
         throw err;
       }
     }
@@ -89,12 +94,14 @@ async function stageDeployProd(state) {
       }
       if (!smokeOk) {
         logErr("Pre-Prod smoke test FAILED — HALTING pipeline");
-        await slack(
-          `🚨 *Pre-Prod Smoke FAILED — ${TICKET}*\n` +
-          `Pre-Prod (${cfg.urls.preProd}) is not responding. Pipeline HALTED before production deploy.\n` +
-          `Fix the issue and re-run the agent.`,
-          [cfg.slack.ownerId],
-        );
+        if (isChannelEnabled("deploy_prod", "slack")) {
+          await slack(
+            `🚨 *Pre-Prod Smoke FAILED — ${TICKET}*\n` +
+            `Pre-Prod (${cfg.urls.preProd}) is not responding. Pipeline HALTED before production deploy.\n` +
+            `Fix the issue and re-run the agent.`,
+            [cfg.slack.ownerId],
+          );
+        }
         addWarning(state, "deploy_prod", "Pre-Prod smoke test failed — pipeline halted");
         save(state);
         throw new Error("Pre-Prod smoke test failed — cannot proceed to production");
@@ -164,19 +171,23 @@ async function stageDeployProd(state) {
           if (errMsg.includes("405")) detail += " (likely merge conflicts)";
           else if (errMsg.includes("406")) detail += " (pipeline failures or unresolved discussions)";
           logErr(detail);
-          await slack(
-            `🚨 *Production Merge Failed — ${TICKET}*\n${detail}\nMR: ${state.data.prod_mr_url}`,
-            [cfg.slack.ownerId],
-          );
+          if (isChannelEnabled("deploy_prod", "slack")) {
+            await slack(
+              `🚨 *Production Merge Failed — ${TICKET}*\n${detail}\nMR: ${state.data.prod_mr_url}`,
+              [cfg.slack.ownerId],
+            );
+          }
           throw new Error(detail);
         }
       } catch (checkErr) {
         if (checkErr.message.includes("Production MR merge failed")) throw checkErr;
         logErr(`Production merge error + could not check MR state: ${err.message}`);
-        await slack(
-          `🚨 *Production Merge Failed — ${TICKET}*\n${err.message}\nMR: ${state.data.prod_mr_url}`,
-          [cfg.slack.ownerId],
-        );
+        if (isChannelEnabled("deploy_prod", "slack")) {
+          await slack(
+            `🚨 *Production Merge Failed — ${TICKET}*\n${err.message}\nMR: ${state.data.prod_mr_url}`,
+            [cfg.slack.ownerId],
+          );
+        }
         throw err;
       }
     }
@@ -211,20 +222,24 @@ async function stageDeployProd(state) {
       if (state.data._prod_pre_merge_sha) {
         const rollbackSha = state.data._prod_pre_merge_sha.substring(0, 12);
         logErr("X8: Production smoke FAILED — sending rollback instructions");
-        await slack(
-          `🚨 *PRODUCTION SMOKE FAILED — ${TICKET}*\n` +
-          `Production (${cfg.urls.prod}) is not responding after deploy.\n\n` +
-          `*Rollback command:*\n\`\`\`\ngit checkout ${cfg.branch.prod}\ngit reset --hard ${rollbackSha}\ngit push --force origin ${cfg.branch.prod}\n\`\`\`\n` +
-          `Pre-merge SHA: \`${state.data._prod_pre_merge_sha}\``,
-          [cfg.slack.ownerId, cfg.slack.anshitId],
-        );
+        if (isChannelEnabled("deploy_prod", "slack")) {
+          await slack(
+            `🚨 *PRODUCTION SMOKE FAILED — ${TICKET}*\n` +
+            `Production (${cfg.urls.prod}) is not responding after deploy.\n\n` +
+            `*Rollback command:*\n\`\`\`\ngit checkout ${cfg.branch.prod}\ngit reset --hard ${rollbackSha}\ngit push --force origin ${cfg.branch.prod}\n\`\`\`\n` +
+            `Pre-merge SHA: \`${state.data._prod_pre_merge_sha}\``,
+            [cfg.slack.ownerId, cfg.slack.anshitId],
+          );
+        }
       } else {
-        await slack(
-          `🚨 *PRODUCTION SMOKE FAILED — ${TICKET}*\n` +
-          `Production (${cfg.urls.prod}) is not responding after deploy.\n` +
-          `No rollback SHA available — manual investigation required.`,
-          [cfg.slack.ownerId, cfg.slack.anshitId],
-        );
+        if (isChannelEnabled("deploy_prod", "slack")) {
+          await slack(
+            `🚨 *PRODUCTION SMOKE FAILED — ${TICKET}*\n` +
+            `Production (${cfg.urls.prod}) is not responding after deploy.\n` +
+            `No rollback SHA available — manual investigation required.`,
+            [cfg.slack.ownerId, cfg.slack.anshitId],
+          );
+        }
       }
       addWarning(state, "deploy_prod", `Production smoke failed — rollback SHA: ${state.data._prod_pre_merge_sha || "unavailable"}`);
       state.data._prod_smoke_checked = true;

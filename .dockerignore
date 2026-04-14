@@ -1,0 +1,43 @@
+# Dependencies — installed fresh inside the container
+node_modules
+packages/*/node_modules
+
+# Rust build artifacts — rebuilt inside the container
+packages/native/target
+
+# Build outputs — rebuilt inside the container
+packages/*/dist
+
+# Logs
+*.log
+agent-*.log
+
+# Git
+.git
+.gitignore
+
+# Environment (secrets must come from env_file or orchestrator)
+.env.local
+.env.*.local
+
+# State files (persisted via Docker volume, not baked into image)
+state-*.json
+state-*.json.bak
+*.bak
+
+# IDE / editor
+.idea
+.vscode
+*.swp
+*.swo
+
+# OpenSpec artifacts (development only)
+openspec/
+
+# CI/CD config (not needed in image)
+.github/
+
+# Docker files (prevent recursive context)
+Dockerfile
+docker-compose.yml
+.dockerignore

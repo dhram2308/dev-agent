@@ -8,6 +8,7 @@ const { gl } = require("../lib/gitlab");
 const { slack } = require("../lib/slack");
 const { isShuttingDown } = require("../lib/graceful-shutdown");
 const { STAGE_CLEARS } = require("../lib/constants");
+const { isChannelEnabled } = require("../lib/notification-config");
 
 // T1.3: Shared cleanup function for ALL rejection paths
 function clearGenerateCodeState(state) {
@@ -60,7 +61,9 @@ async function stageGateCodeReview(state) {
     }
     if (monotonicMs() - gate1PollStart > MAX_APPROVAL_TIMEOUT) {
       logErr(`Gate 1 code review timeout after ${MAX_APPROVAL_TIMEOUT / 3600000}h`);
-      await slack(`⏰ *Code Review Timeout — ${TICKET}*\nPipeline halted.`, [cfg.slack.ownerId]);
+      if (isChannelEnabled("gate_code_review", "slack")) {
+        await slack(`⏰ *Code Review Timeout — ${TICKET}*\nPipeline halted.`, [cfg.slack.ownerId]);
+      }
       save(state);
       throw new Error(`Gate 1 code review timeout after ${MAX_APPROVAL_TIMEOUT / 3600000}h`);
     }
@@ -95,8 +98,15 @@ async function stageGateCodeReview(state) {
       }
     }
 
-    // Check MR state
-    const mr = await gl.getMR(mrIid);
+    // Check MR state — wrapped in try-catch for transient GitLab errors
+    let mr, approvals, notes;
+    try {
+      mr = await gl.getMR(mrIid);
+    } catch (e) {
+      logWarn(`[gate1] getMR transient error: ${e.message} — will retry next poll`);
+      await sleep(POLL_INTERVAL);
+      continue;
+    }
 
     // If MR was merged directly → approved
     if (mr.state === "merged") {
@@ -124,8 +134,9 @@ async function stageGateCodeReview(state) {
         throw new Error(`Gate 1 rejected ${MAX_REJECTIONS} times — pipeline halted`);
       }
       // Check MR notes for feedback
-      const notes = await gl.getMRNotes(mrIid, state.data.gate1_at);
-      const feedback = notes
+      let closedNotes;
+      try { closedNotes = await gl.getMRNotes(mrIid, state.data.gate1_at); } catch { closedNotes = []; }
+      const feedback = closedNotes
         .filter((n) => !n.system)
         .map((n) => n.body)
         .join("\n") || "MR closed without feedback";
@@ -145,8 +156,14 @@ async function stageGateCodeReview(state) {
       return;
     }
 
-    // Check MR approvals
-    const approvals = await gl.getMRApprovals(mrIid);
+    // Check MR approvals — wrapped for transient errors
+    try {
+      approvals = await gl.getMRApprovals(mrIid);
+    } catch (e) {
+      logWarn(`[gate1] getMRApprovals transient error: ${e.message} — will retry next poll`);
+      await sleep(POLL_INTERVAL);
+      continue;
+    }
     if (approvals.approved) {
       logOk(`MR approved by: ${(approvals.approved_by || []).map((a) => a.user?.name || a.user?.username).join(", ")}`);
       state.stage = "deploy_qa";
@@ -154,8 +171,14 @@ async function stageGateCodeReview(state) {
       return;
     }
 
-    // Check MR notes for explicit "rejected" keyword
-    const notes = await gl.getMRNotes(mrIid, state.data.gate1_at);
+    // Check MR notes for explicit "rejected" keyword — wrapped for transient errors
+    try {
+      notes = await gl.getMRNotes(mrIid, state.data.gate1_at);
+    } catch (e) {
+      logWarn(`[gate1] getMRNotes transient error: ${e.message} — will retry next poll`);
+      await sleep(POLL_INTERVAL);
+      continue;
+    }
     // T2.11: Use word-boundary regex to avoid false positives on notes that just contain the word
     const rejectionNote = notes.find((n) =>
       !n.system && /\brejected\b/i.test(n.body) && !/\bnot\s+rejected\b/i.test(n.body),

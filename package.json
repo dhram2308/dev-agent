@@ -1,19 +1,47 @@
 
 {
   "name": "mi-dev-agent",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "version": "2.0.0",
+  "private": true,
+  "description": "AI Dev Agent for MasterIndia — Jira to Production pipeline",
+  "workspaces": [
+    "packages/shared",
+    "packages/backend",
+    "packages/frontend"
+  ],
   "scripts": {
-    "ui": "node server.js",
-    "agent": "node run-agent.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "npm run build:shared && npm run build:backend && npm run build:frontend",
+    "build:shared": "tsc -p packages/shared/tsconfig.json",
+    "build:backend": "tsc -p packages/backend/tsconfig.json",
+    "build:frontend": "cd packages/frontend && npx vite build",
+    "build:native": "cd packages/native && cargo build --release",
+    "test": "npm run test:shared && npm run test:ts && npm run test:react",
+    "test:all": "npm run test && npm run test:rust",
+    "test:shared": "cd packages/shared && npx vitest run",
+    "test:rust": "cd packages/native && cargo test --all",
+    "test:ts": "cd packages/backend && npx vitest run",
+    "test:react": "cd packages/frontend && npx vitest run",
+    "lint": "npm run lint:shared && npm run lint:backend && npm run lint:frontend",
+    "lint:shared": "cd packages/shared && npx tsc --noEmit",
+    "lint:backend": "cd packages/backend && npx tsc --noEmit",
+    "lint:frontend": "cd packages/frontend && npx tsc --noEmit",
+    "dev": "node packages/backend/boot.js",
+    "start": "NODE_ENV=production node packages/backend/boot.js",
+    "agent": "node packages/backend/boot-agent.js",
+    "dev:legacy": "node server.js",
+    "agent:legacy": "node run-agent.js",
+    "docker:build": "docker build -t mi-dev-agent .",
+    "docker:up": "docker-compose up -d"
   },
   "keywords": [],
-
-  "author": "",
+  "author": "Yogendra Singh <yogendrasingh@mastersindia.co>",
   "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0",
+    "@types/node": "^20.0.0"
   }
 }

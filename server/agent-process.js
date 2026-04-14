@@ -22,13 +22,13 @@ try {
   const rp = require("../lib/restart-protection");
   applyRestartProtection = rp.applyRestartProtection;
   checkCrashLoop = rp.checkCrashLoop;
-} catch { applyRestartProtection = null; checkCrashLoop = null; }
+} catch (e) { console.warn("[Agent] restart-protection module not available:", e.message); applyRestartProtection = null; checkCrashLoop = null; }
 
 // Escalation: alert on repeated failures
 let escalateImmediate;
 try {
   escalateImmediate = require("../lib/escalation").escalateImmediate;
-} catch { escalateImmediate = null; }
+} catch (e) { console.warn("[Agent] escalation module not available:", e.message); escalateImmediate = null; }
 
 const BASE_DIR = path.join(__dirname, "..");
 
@@ -48,9 +48,13 @@ function startAgent(ticket) {
   if (agentProcs[ticket]) return { ok: false, error: `Agent already running for ${ticket}` };
   if (agentStartingSet.has(ticket)) return { ok: false, error: `Agent already starting for ${ticket}` };
 
+  // Atomic guard: add to starting set immediately after check (same event loop tick)
+  agentStartingSet.add(ticket);
+
   // X1: Enforce concurrency limit
   const runningCount = Object.keys(agentProcs).length;
   if (runningCount >= MAX_CONCURRENT_AGENTS) {
+    agentStartingSet.delete(ticket);
     return { ok: false, error: `Max concurrent agents reached (${MAX_CONCURRENT_AGENTS}). Stop one first.` };
   }
 
@@ -67,13 +71,12 @@ function startAgent(ticket) {
           if (escalateImmediate) {
             escalateImmediate("agent_crash_loop", "critical", msg, { notifySlack: true }).catch(() => {});
           }
+          agentStartingSet.delete(ticket);
           return { ok: false, error: msg };
         }
       }
     } catch { /* state may not exist yet -- proceed */ }
   }
-
-  agentStartingSet.add(ticket);
 
   try {
     // Create per-ticket worktree (ensureLocalRepo is called by run-agent.js if no worktree)
@@ -117,9 +120,9 @@ function startAgent(ticket) {
       // [Graceful Shutdown] Untrack child process
       untrackChildProcess(proc);
 
-      // Cleanup redactor
+      // Cleanup redactor (exception-safe)
       if (agentRedactors[ticket]) {
-        agentRedactors[ticket].cleanup();
+        try { agentRedactors[ticket].cleanup(); } catch (e) { console.warn(`[Agent] redactor cleanup error: ${e.message}`); }
         delete agentRedactors[ticket];
       }
 
@@ -142,8 +145,8 @@ function startAgent(ticket) {
           escalateImmediate("agent_repeated_failure", "critical", msg, { notifySlack: true }).catch(() => {});
         }
       } else {
-        // Reset failure count on clean exit
-        _ticketFailureCounts[ticket] = 0;
+        // Clean exit — delete entry to prevent unbounded map growth
+        delete _ticketFailureCounts[ticket];
       }
     });
 
@@ -153,7 +156,7 @@ function startAgent(ticket) {
     // F11: Ensure flag is cleared on spawn failure
     delete agentProcs[ticket];
     if (agentRedactors[ticket]) {
-      try { agentRedactors[ticket].cleanup(); } catch { /* swallow */ }
+      try { agentRedactors[ticket].cleanup(); } catch (e) { console.warn("[Agent] redactor cleanup error:", e.message); }
       delete agentRedactors[ticket];
     }
     return { ok: false, error: "Failed to start agent: " + err.message };

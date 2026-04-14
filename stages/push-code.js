@@ -9,6 +9,7 @@ const { gl } = require("../lib/gitlab");
 const { slack } = require("../lib/slack");
 const { validateMRTarget } = require("../lib/config");
 const { BINARY_EXTENSIONS } = require("../lib/constants");
+const { isChannelEnabled } = require("../lib/notification-config");
 
 async function pushCodeToGitLab(state, changes) {
   if (!changes.changes || changes.changes.length === 0) {
@@ -127,8 +128,25 @@ async function pushCodeToGitLab(state, changes) {
         for (const a of actions) {
           if (a.action === "create") a.action = "update";
         }
-        commitResult = await gl.commit(branch, commitMsg, actions,
-          cfg.git.authorName, cfg.git.authorEmail);
+        try {
+          commitResult = await gl.commit(branch, commitMsg, actions,
+            cfg.git.authorName, cfg.git.authorEmail);
+        } catch (retryErr) {
+          // Retry may hit "not on a branch" — fall through to branch recovery
+          if (/only create or edit files when you are on a branch/i.test(retryErr.message || "")) {
+            logWarn("Branch appears corrupt after create→update retry — deleting and recreating...");
+            try { await gl.deleteBranch(branch); } catch (e) {
+              logWarn(`deleteBranch failed: ${e.message}`);
+            }
+            const sourceBranch = state.data.parentBranch || cfg.branch.ts;
+            await gl.createBranch(branch, sourceBranch);
+            logOk(`Branch recreated: ${branch}`);
+            commitResult = await gl.commit(branch, commitMsg, actions,
+              cfg.git.authorName, cfg.git.authorEmail);
+          } else {
+            throw retryErr;
+          }
+        }
       }
       // Handle "not on a branch" — branch is corrupt, delete and recreate
       else if (/only create or edit files when you are on a branch/i.test(errStr)) {
@@ -319,13 +337,15 @@ async function pushCodeToGitLab(state, changes) {
 
   // Slack notification only — NO Jira comment
   if (!state.data.code_slack_sent) {
-    await slack(
-      `🔔 *Code Review Required — ${TICKET}*\n` +
-      `Agent generated code for: *${state.data.ticket.summary}*\n` +
-      `🔀 MR: ${state.data.code_mr_url}\n` +
-      `Approve the MR on GitLab to proceed.`,
-      [cfg.slack.ownerId],
-    );
+    if (isChannelEnabled("gate_code_review", "slack")) {
+      await slack(
+        `🔔 *Code Review Required — ${TICKET}*\n` +
+        `Agent generated code for: *${state.data.ticket.summary}*\n` +
+        `🔀 MR: ${state.data.code_mr_url}\n` +
+        `Approve the MR on GitLab to proceed.`,
+        [cfg.slack.ownerId],
+      );
+    }
     state.data.code_slack_sent = true;
     save(state);
     logOk("Slack notification sent (no Jira comment)");

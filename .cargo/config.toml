@@ -1,0 +1,7 @@
+# Build settings for napi-rs native addons
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-Wl,--allow-multiple-definition"]
+
+[build]
+# Incremental builds for faster dev iteration
+incremental = true

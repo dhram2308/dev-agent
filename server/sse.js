@@ -45,8 +45,13 @@ let logBuffer = [];              // Backward-compat: all logs merged (deprecated
 let nextMessageId = 1;           // Monotonic message counter
 let nextClientId = 1;            // Unique client ID counter
 
-/** @type {Array<{id: number, event: string, data: string}>} */
-const replayBuffer = [];         // Ring buffer of last REPLAY_BUFFER_SIZE messages
+/** Circular replay buffer — O(1) insert, O(n) ordered iteration */
+const _replayBuf = new Array(REPLAY_BUFFER_SIZE);
+let _replayHead = 0;   // oldest entry index
+let _replayTail = 0;   // next write index
+let _replayCount = 0;  // number of entries currently stored
+
+const MAX_REPLAY_MSG_SIZE = 65536; // 64KB per message
 
 // ── Keepalive Timer ──────────────────────────────────────────────
 
@@ -60,7 +65,8 @@ const keepaliveTimer = setInterval(() => {
         client.lastActivity = now;
       }
       // If write returned false, the drain handler is already set up
-    } catch {
+    } catch (e) {
+      console.warn("[SSE] Keepalive failed for client " + clientId + ":", e.message);
       removeClient(clientId);
     }
   }
@@ -145,14 +151,16 @@ function registerClient(res, request, url, apiToken) {
   };
   clients.set(clientId, client);
 
-  // ── Replay from Last-Event-ID ──
+  // ── Replay from Last-Event-ID (fresh IDs to prevent browser dedup) ──
   const lastEventId = request.headers["last-event-id"];
   if (lastEventId) {
     const lastId = parseInt(lastEventId, 10);
     if (!isNaN(lastId)) {
-      for (const msg of replayBuffer) {
+      for (const msg of _replayIterate()) {
         if (msg.id > lastId) {
-          writeToClient(client, msg.id, msg.event, msg.data);
+          // Assign fresh ID to prevent EventSource dedup of already-seen IDs
+          const freshId = nextMessageId++;
+          writeToClient(client, freshId, msg.event, msg.data);
         }
       }
     }
@@ -189,19 +197,24 @@ function registerClient(res, request, url, apiToken) {
   writeToClient(client, statusId, "status", statusData);
   addToReplayBuffer(statusId, "status", statusData);
 
-  // ── Backpressure: drain handler ──
+  // ── Backpressure: drain handler (exception-safe) ──
   res.on("drain", () => {
-    const c = clients.get(clientId);
-    if (!c || !c.paused) return;
-    c.paused = false;
-    // Flush pending queue
-    while (c.pendingQueue.length > 0) {
-      const msg = c.pendingQueue.shift();
-      const ok = safeWrite(c, msg);
-      if (!ok) {
-        c.paused = true;
-        break;
+    try {
+      const c = clients.get(clientId);
+      if (!c || !c.paused) return;
+      c.paused = false;
+      // Flush pending queue
+      while (c.pendingQueue.length > 0) {
+        const msg = c.pendingQueue.shift();
+        const ok = safeWrite(c, msg);
+        if (!ok) {
+          c.paused = true;
+          break;
+        }
       }
+    } catch (e) {
+      console.warn("[SSE] drain handler error:", e.message);
+      try { res.resume(); } catch {}
     }
   });
 
@@ -238,8 +251,11 @@ function writeToClient(client, id, event, data) {
     // Queue while backpressured — cap at 200 to prevent unbounded growth
     if (client.pendingQueue.length < 200) {
       client.pendingQueue.push(formatted);
+    } else {
+      // Dropped messages are already in the global replay buffer (added by broadcast→addToReplayBuffer
+      // before writeToClient is called), so reconnecting clients using Last-Event-ID will recover them
+      console.warn(`[SSE] Client ${client.id}: pending queue overflow (200) — message dropped (recoverable via replay buffer)`);
     }
-    // If queue exceeds 200, we silently drop — client will catch up on reconnect via replay
     return;
   }
 
@@ -271,16 +287,38 @@ function safeWrite(client, data) {
 // ── Replay Buffer ────────────────────────────────────────────────
 
 /**
- * Add a message to the replay buffer (ring buffer).
+ * Add a message to the circular replay buffer — O(1).
  * @param {number} id
  * @param {string} event
  * @param {string} data
  */
 function addToReplayBuffer(id, event, data) {
-  replayBuffer.push({ id, event, data });
-  while (replayBuffer.length > REPLAY_BUFFER_SIZE) {
-    replayBuffer.shift();
+  // Truncate oversized messages to prevent memory bloat
+  const storedData = data.length > MAX_REPLAY_MSG_SIZE
+    ? data.substring(0, MAX_REPLAY_MSG_SIZE) + "[truncated]"
+    : data;
+
+  _replayBuf[_replayTail] = { id, event, data: storedData };
+  _replayTail = (_replayTail + 1) % REPLAY_BUFFER_SIZE;
+  if (_replayCount < REPLAY_BUFFER_SIZE) {
+    _replayCount++;
+  } else {
+    // Buffer full — overwrite oldest, advance head
+    _replayHead = (_replayHead + 1) % REPLAY_BUFFER_SIZE;
   }
+}
+
+/**
+ * Iterate replay buffer in chronological order (head → tail).
+ * @returns {Array<{id: number, event: string, data: string}>}
+ */
+function _replayIterate() {
+  const result = [];
+  for (let i = 0; i < _replayCount; i++) {
+    const idx = (_replayHead + i) % REPLAY_BUFFER_SIZE;
+    if (_replayBuf[idx]) result.push(_replayBuf[idx]);
+  }
+  return result;
 }
 
 // ── Broadcast ────────────────────────────────────────────────────
@@ -388,7 +426,7 @@ function getSSEStats() {
     maxClients: MAX_CLIENTS_TOTAL,
     maxPerSession: MAX_CLIENTS_PER_SESSION,
     totalSessions: uniqueSessions.size,
-    replayBufferSize: replayBuffer.length,
+    replayBufferSize: _replayCount,
     replayBufferMax: REPLAY_BUFFER_SIZE,
     nextMessageId,
     logBufferSize: logBuffer.length,

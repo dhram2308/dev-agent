@@ -1,0 +1,3 @@
+[workspace]
+members = ["state-engine", "http-engine", "sse-engine"]
+resolver = "2"
