@@ -49,7 +49,7 @@
     "reminder4h": true
   },
   "deploy_prod": {
-    "slack": false,
+    "slack": true,
     "jira": false,
     "ui": true,
     "reminder1h": true,

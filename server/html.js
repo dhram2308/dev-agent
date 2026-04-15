@@ -3480,9 +3480,9 @@ function renderDetail() {
     '<div class="detail-text">' + s.detail + '</div>' +
     (s.youDo ? '<div class="detail-action">What you do: ' + s.youDo + '</div>' : '');
 
-  document.getElementById("counter").textContent = (activeStep + 1) + " of " + STEPS.length;
-  document.getElementById("btnPrev").disabled = activeStep === 0;
-  document.getElementById("btnNext").disabled = activeStep === STEPS.length - 1;
+  var _ctr = document.getElementById("counter"); if (_ctr) _ctr.textContent = (activeStep + 1) + " of " + STEPS.length;
+  var _bp = document.getElementById("btnPrev"); if (_bp) _bp.disabled = activeStep === 0;
+  var _bn = document.getElementById("btnNext"); if (_bn) _bn.disabled = activeStep === STEPS.length - 1;
 }
 
 function renderSummary() {
@@ -4676,30 +4676,31 @@ function renderReviewPanel() {
   const mrEl = _safeEl("mrViewer");
   const badge = _safeEl("gateBadge");
   const statusEl = _safeEl("reviewStatus");
-  if (!panel || !planEl || !diffEl) return;
+  if (!panel || !planEl || !diffEl || !qaEl || !mrEl) return;
 
   // Hide all viewers
   planEl.className = ""; diffEl.className = ""; qaEl.className = ""; mrEl.className = "";
-  document.getElementById("planSummary").style.display = "none";
+  var _ps = document.getElementById("planSummary"); if (_ps) _ps.style.display = "none";
   panel.className = "";
-  statusEl.textContent = "";
-  document.getElementById("diffToolbar").style.display = "none";
-  document.getElementById("diffInfo").innerHTML = "";
-  document.getElementById("diffStats").innerHTML = "";
-  document.getElementById("diffFileSearch").style.display = "none";
-  document.getElementById("diffFileLabel").innerHTML = "";
+  if (statusEl) statusEl.textContent = "";
+  var _dt = document.getElementById("diffToolbar"); if (_dt) _dt.style.display = "none";
+  var _di = document.getElementById("diffInfo"); if (_di) _di.innerHTML = "";
+  var _ds = document.getElementById("diffStats"); if (_ds) _ds.innerHTML = "";
+  var _dfs = document.getElementById("diffFileSearch"); if (_dfs) _dfs.style.display = "none";
+  var _dfl = document.getElementById("diffFileLabel"); if (_dfl) _dfl.innerHTML = "";
 
   // Reset buttons to default state
   var btnApprove = document.getElementById("btnApprove");
   var btnReject = document.getElementById("btnReject");
   var btnRefine = document.getElementById("btnRefine");
+  if (!btnApprove || !btnReject || !btnRefine) return;
   btnApprove.textContent = "Approve";
   btnApprove.disabled = false;
   btnReject.style.display = "";
   btnReject.disabled = false;
   btnRefine.style.display = "none";
   btnRefine.disabled = false;
-  document.getElementById("refineFeedback").className = "";
+  var _rf = document.getElementById("refineFeedback"); if (_rf) _rf.className = "";
 
   if (!reviewData || !reviewData.gate) return;
 
