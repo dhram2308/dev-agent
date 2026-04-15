@@ -6600,8 +6600,16 @@ function switchTicket(ticket) {
 }
 
 function addTicketTab() {
+  // Save current ticket state before deselecting
+  if (selectedTicket) saveTicketState();
+  selectedTicket = null;
+  isRunning = false;
+  currentStage = null;
+  _invalidateAll();
   var inp = document.getElementById("ticket");
   if (inp) { inp.value = ""; inp.focus(); }
+  renderTicketTabs();
+  render();
 }
 
 function closeTicketTab(ticket) {

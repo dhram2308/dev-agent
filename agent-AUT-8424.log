@@ -817,3 +817,6 @@
 {"ts":"2026-04-14T20:28:32.190Z","level":"info","cid":"972b6ccf3b56","msg":"Waiting for QA merge approval… 14m elapsed"}
 {"ts":"2026-04-14T20:28:55.396Z","level":"info","cid":"972b6ccf3b56","msg":"[Timeout] Stage \"deploy_qa\": 15.0m elapsed, 15.0m remaining"}
 {"ts":"2026-04-14T20:31:33.352Z","level":"info","cid":"972b6ccf3b56","msg":"Waiting for QA merge approval… 17m elapsed"}
+{"ts":"2026-04-14T20:33:55.404Z","level":"info","cid":"972b6ccf3b56","msg":"[Timeout] Stage \"deploy_qa\": 20.0m elapsed, 10.0m remaining"}
+{"ts":"2026-04-14T20:34:34.609Z","level":"info","cid":"972b6ccf3b56","msg":"Waiting for QA merge approval… 20m elapsed"}
+{"ts":"2026-04-14T20:35:06.166Z","level":"info","cid":"972b6ccf3b56","msg":"[Shutdown] Received SIGTERM — beginning graceful shutdown"}

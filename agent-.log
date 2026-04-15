@@ -342,3 +342,19 @@
 {"ts":"2026-04-14T20:03:13.317Z","level":"info","cid":"78e116af699d","msg":"[Shutdown] Graceful shutdown handlers installed"}
 {"ts":"2026-04-14T20:13:45.403Z","level":"info","cid":"78e116af699d","msg":"Creating worktree for AUT-8424 at 416c6b14…"}
 {"ts":"2026-04-14T20:13:46.062Z","level":"info","cid":"78e116af699d","msg":"Worktree created: /home/yogendra/WebstormProjects/mi-dev-agent/.repo-cache/.worktrees/AUT-8424"}
+{"ts":"2026-04-14T20:35:06.163Z","level":"info","cid":"78e116af699d","msg":"[Shutdown] Received SIGTERM — beginning graceful shutdown"}
+{"ts":"2026-04-14T20:35:06.164Z","level":"info","cid":"78e116af699d","msg":"[Shutdown] Phase 1: Stopping HTTP server from accepting new connections"}
+{"ts":"2026-04-14T20:35:06.164Z","level":"info","cid":"78e116af699d","msg":"[Shutdown] Phase 2: Saving state checkpoint"}
+{"ts":"2026-04-14T20:35:06.165Z","level":"info","cid":"78e116af699d","msg":"[Shutdown] Phase 3: Terminating 1 child process(es)"}
+{"ts":"2026-04-14T20:35:06.165Z","level":"info","cid":"78e116af699d","msg":"[Shutdown]   Sending SIGTERM to agent-AUT-8424 (PID 279827)"}
+{"ts":"2026-04-14T20:35:06.200Z","level":"info","cid":"78e116af699d","msg":"Removing worktree for AUT-8424…"}
+{"ts":"2026-04-14T20:35:06.689Z","level":"info","cid":"78e116af699d","msg":"Worktree for AUT-8424 removed"}
+{"ts":"2026-04-14T20:35:11.165Z","level":"info","cid":"78e116af699d","msg":"[Shutdown] Phase 4: Closing SSE connections"}
+{"ts":"2026-04-14T20:35:11.166Z","level":"info","cid":"78e116af699d","msg":"[Shutdown] Phase 5: Waiting for in-flight requests"}
+{"ts":"2026-04-14T20:35:17.981Z","level":"info","cid":"13048ad15c33","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-14T20:50:48.608Z","level":"info","cid":"13048ad15c33","msg":"Creating worktree for AUT-8425 at 416c6b14…"}
+{"ts":"2026-04-14T20:50:49.212Z","level":"info","cid":"13048ad15c33","msg":"Worktree created: /home/yogendra/WebstormProjects/mi-dev-agent/.repo-cache/.worktrees/AUT-8425"}
+{"ts":"2026-04-15T04:38:32.514Z","level":"info","cid":"13048ad15c33","msg":"Removing worktree for AUT-8425…"}
+{"ts":"2026-04-15T04:38:32.908Z","level":"info","cid":"13048ad15c33","msg":"Worktree for AUT-8425 removed"}
+{"ts":"2026-04-15T05:21:31.983Z","level":"info","cid":"13048ad15c33","msg":"Creating worktree for AUT-8425 at 416c6b14…"}
+{"ts":"2026-04-15T05:21:32.520Z","level":"info","cid":"13048ad15c33","msg":"Worktree created: /home/yogendra/WebstormProjects/mi-dev-agent/.repo-cache/.worktrees/AUT-8425"}
