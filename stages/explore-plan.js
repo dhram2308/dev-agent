@@ -414,6 +414,15 @@ async function stageExplorePlan(state) {
       }
     }
 
+    // Connector documents (dedicated 15KB per-item budget)
+    const connectorContents = ticket.connectorContents;
+    if (connectorContents && connectorContents.length > 0) {
+      fullContext += "\n## Connector Documents\n";
+      for (const cd of connectorContents) {
+        fullContext += `### ${cd.title} (source: ${cd.source})\n${cd.content}\n\n`;
+      }
+    }
+
     // D1: Sanitize user-sourced content for prompt injection defense
     const ticketCtx =
       `**${TICKET}: ${summary}** [${iType || "Task"} / ${iPriority || "Medium"}]\n\n` +

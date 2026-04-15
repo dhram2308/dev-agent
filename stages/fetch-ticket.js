@@ -11,6 +11,9 @@ const { jira, jiraUrl, classifyDocUrl, isImageFile, callAnthropicVision, classif
 const { gl } = require("../lib/gitlab");
 const { slack } = require("../lib/slack");
 const { isChannelEnabled } = require("../lib/notification-config");
+const gdrive = require("../lib/gdrive");
+const figma = require("../lib/figma");
+const postman = require("../lib/postman");
 
 async function stageFetchTicket(state) {
   logStep(1, "Fetch Jira ticket + full context");
@@ -340,6 +343,126 @@ async function stageFetchTicket(state) {
     externalUrls.forEach((u) => logInfo(`  → ${u}`));
   }
 
+  // ── Layer 6b: Connector URL routing (before UNFETCHABLE filter) ──
+  const authRequiredUrls = [];
+  const MAX_CONNECTOR_ITEMS = 3;
+  const connectorContents = state.data.ticket.connectorContents || [];
+  const { parseBoolean } = require("../lib/config-schema");
+
+  if (connectorContents.length === 0) {
+    // Route connector URLs to authenticated modules
+    const connectorUrls = [];
+    const remainingUrls = [];
+
+    for (const url of externalUrls) {
+      let matched = false;
+      if (parseBoolean(process.env.GDRIVE_ENABLED) && gdrive.matchUrl(url)) {
+        connectorUrls.push({ url, connector: "gdrive", match: gdrive.matchUrl(url) });
+        matched = true;
+      } else if (parseBoolean(process.env.FIGMA_ENABLED) && figma.matchUrl(url)) {
+        connectorUrls.push({ url, connector: "figma", match: figma.matchUrl(url) });
+        matched = true;
+      } else if (parseBoolean(process.env.POSTMAN_ENABLED) && postman.matchUrl(url)) {
+        connectorUrls.push({ url, connector: "postman", match: postman.matchUrl(url) });
+        matched = true;
+      }
+      if (!matched) remainingUrls.push(url);
+    }
+
+    if (connectorUrls.length > 0) {
+      logInfo(`Connector URLs found: ${connectorUrls.length} (cap: ${MAX_CONNECTOR_ITEMS})`);
+      // Enforce 3-item cap
+      const toProcess = connectorUrls.slice(0, MAX_CONNECTOR_ITEMS);
+      const overflow = connectorUrls.slice(MAX_CONNECTOR_ITEMS);
+
+      // Fetch in parallel
+      const connResults = await Promise.allSettled(toProcess.map(async (cu) => {
+        logInfo(`  Connector fetch [${cu.connector}]: ${cu.url}`);
+        if (cu.connector === "gdrive") {
+          const m = cu.match;
+          if (m.type === "doc" || m.type === "file") return { ...(await gdrive.fetchGoogleDoc(m.fileId)), source: "gdrive", url: cu.url };
+          if (m.type === "sheet") return { ...(await gdrive.fetchGoogleSheet(m.fileId, m.gid)), source: "gdrive", url: cu.url };
+        }
+        if (cu.connector === "figma") {
+          const m = cu.match;
+          const result = await figma.fetchFigmaFile(m.fileKey, m.nodeId);
+          // Optional Vision path
+          if (result.ok && result.frameIds && result.frameIds.length > 0 &&
+              parseBoolean(process.env.FIGMA_VISION_ENABLED) && process.env.ANTHROPIC_API_KEY) {
+            const visionText = await figma.describeFramesWithVision(result.fileKey, result.frameIds, callAnthropicVision);
+            if (visionText) result.content += visionText;
+          }
+          return { ...result, source: "figma", url: cu.url };
+        }
+        if (cu.connector === "postman") {
+          const m = cu.match;
+          return { ...(await postman.fetchCollection(m.collectionId)), source: "postman", url: cu.url };
+        }
+        return { ok: false, error: "Unknown connector", source: cu.connector, url: cu.url };
+      }));
+
+      for (const r of connResults) {
+        if (r.status === "fulfilled" && r.value.ok) {
+          connectorContents.push({
+            source: r.value.source,
+            url: r.value.url,
+            title: r.value.title,
+            content: r.value.content,
+            sizeBytes: r.value.content.length,
+          });
+          logOk(`  Connector OK [${r.value.source}]: ${r.value.title} (${r.value.content.length} chars)`);
+        } else {
+          const val = r.status === "fulfilled" ? r.value : { url: "unknown", error: r.reason?.message || "Fetch failed", source: "unknown" };
+          authRequiredUrls.push({ url: val.url, reason: val.error || "Connector fetch failed", docType: classifyDocUrl(val.url) });
+          logWarn(`  Connector FAIL [${val.source}]: ${val.error}`);
+        }
+      }
+
+      // Overflow URLs get paste instructions
+      for (const cu of overflow) {
+        authRequiredUrls.push({ url: cu.url, reason: "Connector limit reached — paste content manually", docType: classifyDocUrl(cu.url) });
+      }
+
+      // Replace externalUrls with only non-connector URLs for further processing
+      externalUrls.splice(0, externalUrls.length, ...remainingUrls);
+    }
+
+    // ── Postman attachment detection (zero-auth path) ──
+    if (connectorContents.length < MAX_CONNECTOR_ITEMS && parseBoolean(process.env.POSTMAN_ENABLED) !== false) {
+      for (const att of attachmentContents) {
+        if (connectorContents.length >= MAX_CONNECTOR_ITEMS) break;
+        if (att.mimeType === "application/json" && att.content) {
+          if (postman.detectPostmanAttachment(att.content)) {
+            try {
+              const parsed = typeof att.content === "string" ? JSON.parse(att.content) : att.content;
+              const content = postman.flattenCollection(parsed);
+              connectorContents.push({
+                source: "postman",
+                url: `attachment:${att.filename}`,
+                title: att.filename,
+                content,
+                sizeBytes: content.length,
+              });
+              logOk(`  Postman attachment detected: ${att.filename} (${content.length} chars)`);
+            } catch (e) {
+              logWarn(`  Postman attachment parse failed for ${att.filename}: ${e.message}`);
+            }
+          }
+        }
+      }
+    }
+
+    state.data.ticket.connectorContents = connectorContents;
+    save(state);
+  } else {
+    logInfo(`Connector contents already populated (${connectorContents.length} items) — skipping re-fetch`);
+    // Remove connector URLs from externalUrls to avoid UNFETCHABLE filter noise
+    const remainingUrls = externalUrls.filter((url) =>
+      !gdrive.matchUrl(url) && !figma.matchUrl(url) && !postman.matchUrl(url)
+    );
+    externalUrls.splice(0, externalUrls.length, ...remainingUrls);
+  }
+
   // ── Layer 7: Fetch accessible external URLs (P2: parallel batches) ──
   // Q1: Expanded unfetchable URL patterns (includes auth-gated services)
   const UNFETCHABLE = /figma\.com|docs\.google\.com|sheets\.google\.com|drive\.google\.com|lovable\.app|canva\.com|miro\.com|postman\.com|getpostman\.com|confluence\.|notion\.so|\.sharepoint\.com|swagger\/api-docs/i;
@@ -408,7 +531,6 @@ async function stageFetchTicket(state) {
   state.data.ticket.fetchedUrlContents = fetchedUrlContents;
 
   // ── Q1: Detect auth-required URLs (401/403 or redirect to login) ──
-  const authRequiredUrls = [];
   for (const url of fetchableUrls) {
     const fetched = fetchedUrlContents.find((f) => f.url === url);
     if (fetched) continue; // successfully fetched, skip
@@ -443,6 +565,7 @@ async function stageFetchTicket(state) {
     state.data.ticket.parent ? `Parent: ${state.data.ticket.parent.key}` : null,
     attachmentContents.length > 0 ? `Attachment content: ${attachmentContents.length} files` : null,
     fetchedUrlContents.length > 0 ? `Fetched URLs: ${fetchedUrlContents.length}` : null,
+    connectorContents.length > 0 ? `Connector docs: ${connectorContents.length}` : null,
     externalUrls.length > 0 ? `External URLs: ${externalUrls.length}` : null,
   ].filter(Boolean);
   logOk(`Context gathered: ${contextSummary.join(" | ")}`);

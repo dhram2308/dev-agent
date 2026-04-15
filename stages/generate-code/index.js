@@ -96,6 +96,14 @@ async function stageGenerateCode(state) {
       devFullContext += `### ${fu.url}\n\`\`\`\n${sanitizeForPrompt(content)}\n\`\`\`\n\n`;
     }
   }
+  const connectorContents = ticket.connectorContents;
+  if (connectorContents && connectorContents.length > 0) {
+    devFullContext += "\n## Connector Documents\n";
+    for (const cd of connectorContents) {
+      const content = truncateWithIndicator(cd.content, 15000);
+      devFullContext += `### ${cd.title} (source: ${cd.source})\n${sanitizeForPrompt(content)}\n\n`;
+    }
+  }
 
   // Build context object shared by sub-modules
   const ctx = { state, approvedPlan, devFullContext, extraDocs, extraFeedback, feedback };

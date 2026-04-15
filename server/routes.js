@@ -800,9 +800,9 @@ async function handleRequest(url, request, res, apiToken, html) {
     try {
       const raw = await parseBody(request, getBodySizeLimit("/api/config/test"));
       const { service } = sanitizeBody("/api/config/test", raw);
-      if (!service || !["jira", "gitlab", "slack"].includes(service)) {
+      if (!service || !["jira", "gitlab", "slack", "gdrive", "figma", "postman"].includes(service)) {
         res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: false, error: "service must be one of: jira, gitlab, slack" }));
+        res.end(JSON.stringify({ ok: false, error: "service must be one of: jira, gitlab, slack, gdrive, figma, postman" }));
         return true;
       }
 
@@ -899,6 +899,24 @@ async function handleRequest(url, request, res, apiToken, html) {
           req.write(payload);
           req.end();
         });
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(result));
+
+      } else if (service === "gdrive") {
+        const gdrive = require("../lib/gdrive");
+        const result = await gdrive.testConnection();
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(result));
+
+      } else if (service === "figma") {
+        const figma = require("../lib/figma");
+        const result = await figma.testConnection();
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(result));
+
+      } else if (service === "postman") {
+        const postmanLib = require("../lib/postman");
+        const result = await postmanLib.testConnection();
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify(result));
       }

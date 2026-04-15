@@ -376,3 +376,17 @@
 {"ts":"2026-04-15T06:29:39.827Z","level":"info","cid":"864bfa101755","msg":"Removing worktree for AUT-8425…"}
 {"ts":"2026-04-15T06:29:43.635Z","level":"info","cid":"864bfa101755","msg":"Worktree for AUT-8425 removed"}
 {"ts":"2026-04-15T06:29:43.643Z","level":"info","cid":"864bfa101755","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-15T08:34:28.668Z","level":"info","cid":"864bfa101755","msg":"[Shutdown] Received SIGTERM — beginning graceful shutdown"}
+{"ts":"2026-04-15T08:34:28.668Z","level":"info","cid":"864bfa101755","msg":"[Shutdown] Phase 1: Stopping HTTP server from accepting new connections"}
+{"ts":"2026-04-15T08:34:28.668Z","level":"info","cid":"864bfa101755","msg":"[Shutdown] Phase 2: Saving state checkpoint"}
+{"ts":"2026-04-15T08:34:28.669Z","level":"info","cid":"864bfa101755","msg":"[Shutdown] Phase 3: Terminating 0 child process(es)"}
+{"ts":"2026-04-15T08:34:28.669Z","level":"info","cid":"864bfa101755","msg":"[Shutdown] Phase 4: Closing SSE connections"}
+{"ts":"2026-04-15T08:34:28.669Z","level":"info","cid":"864bfa101755","msg":"[Shutdown] Phase 5: Waiting for in-flight requests"}
+{"ts":"2026-04-15T09:01:08.601Z","level":"info","cid":"b4ec5bd4d760","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-15T09:05:01.221Z","level":"info","cid":"b4ec5bd4d760","msg":"[Shutdown] Received SIGTERM -- beginning graceful shutdown"}
+{"ts":"2026-04-15T09:05:01.221Z","level":"info","cid":"b4ec5bd4d760","msg":"[Shutdown] Phase 1: Stopping HTTP server from accepting new connections"}
+{"ts":"2026-04-15T09:05:01.221Z","level":"info","cid":"b4ec5bd4d760","msg":"[Shutdown] Phase 2: Saving state checkpoint"}
+{"ts":"2026-04-15T09:05:01.221Z","level":"info","cid":"b4ec5bd4d760","msg":"[Shutdown] Phase 3: Terminating 0 child process(es)"}
+{"ts":"2026-04-15T09:05:01.221Z","level":"info","cid":"b4ec5bd4d760","msg":"[Shutdown] Phase 4: Closing SSE connections"}
+{"ts":"2026-04-15T09:05:01.221Z","level":"info","cid":"b4ec5bd4d760","msg":"[Shutdown] Phase 5: Waiting for in-flight requests"}
+{"ts":"2026-04-15T09:08:12.424Z","level":"info","cid":"6f8f0b8686ac","msg":"[Shutdown] Graceful shutdown handlers installed"}

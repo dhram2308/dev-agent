@@ -1,0 +1,184 @@
+{"ts":"2026-04-15T06:11:44.211Z","level":"info","cid":"9f796ded11e5","msg":"[Shutdown] Graceful shutdown handlers installed"}
+{"ts":"2026-04-15T06:11:44.793Z","level":"info","cid":"c38d33393e7f","msg":"Claude Code CLI found at /usr/local/bin/claude (2.1.52 (Claude Code))"}
+{"ts":"2026-04-15T06:11:44.800Z","level":"info","cid":"c38d33393e7f","msg":"Git CLI found"}
+{"ts":"2026-04-15T06:11:44.802Z","level":"warn","cid":"c38d33393e7f","msg":"GitLab URL uses HTTP — API tokens transmitted unencrypted. Use HTTPS for production."}
+{"ts":"2026-04-15T06:11:44.803Z","level":"warn","cid":"c38d33393e7f","msg":"QA main credentials not configured — QA testing stage will fail. Set QA_MAIN_USER and QA_MAIN_PASS."}
+{"ts":"2026-04-15T06:11:44.803Z","level":"warn","cid":"c38d33393e7f","msg":"QA1 credentials not configured — QA1 testing will fail. Set QA1_USER and QA1_PASS."}
+{"ts":"2026-04-15T06:11:44.803Z","level":"warn","cid":"c38d33393e7f","msg":"S2: .env file is readable by other users! Run: chmod 600 .env"}
+{"ts":"2026-04-15T06:11:44.805Z","level":"info","cid":"c38d33393e7f","msg":"Validating Jira token..."}
+{"ts":"2026-04-15T06:11:45.337Z","level":"info","cid":"c38d33393e7f","msg":"Jira auth OK (user: Yogendra Singh)"}
+{"ts":"2026-04-15T06:11:45.338Z","level":"info","cid":"c38d33393e7f","msg":"Validating GitLab token..."}
+{"ts":"2026-04-15T06:11:46.134Z","level":"info","cid":"c38d33393e7f","msg":"GitLab auth OK (project: mi_frontend_apps)"}
+{"ts":"2026-04-15T06:11:46.134Z","level":"warn","cid":"c38d33393e7f","msg":"S10: GitLab URL uses HTTP — API tokens transmitted unencrypted. Use HTTPS for production deployments."}
+{"ts":"2026-04-15T06:11:46.134Z","level":"info","cid":"c38d33393e7f","msg":"Testing Slack webhook connectivity..."}
+{"ts":"2026-04-15T06:11:46.753Z","level":"info","cid":"c38d33393e7f","msg":"Slack webhook OK (619ms)"}
+{"ts":"2026-04-15T06:11:46.753Z","level":"info","cid":"c38d33393e7f","msg":"Slack notification system initialized and verified"}
+{"ts":"2026-04-15T06:11:47.385Z","level":"info","cid":"c38d33393e7f","msg":"Using worktree path: /home/yogendra/WebstormProjects/mi-dev-agent/.repo-cache/.worktrees/AUT-8428"}
+{"ts":"2026-04-15T06:11:47.441Z","level":"info","cid":"c38d33393e7f","msg":"Local tree: 8101 entries"}
+{"ts":"2026-04-15T06:11:47.442Z","level":"warn","cid":"c38d33393e7f","msg":"[Restart] Backoff delay: 5.0s (1 recent restarts)"}
+{"ts":"2026-04-15T06:11:52.447Z","level":"info","cid":"c38d33393e7f","msg":"[Restart] Backoff complete — proceeding"}
+{"ts":"2026-04-15T06:11:52.448Z","level":"info","cid":"c38d33393e7f","msg":"[Checkpoint] No checkpoint found — this is likely a first run or pre-checkpoint state"}
+{"ts":"2026-04-15T06:11:52.448Z","level":"info","cid":"c38d33393e7f","msg":"Stage: fetch_ticket"}
+{"ts":"2026-04-15T06:11:52.448Z","level":"info","cid":"c38d33393e7f","msg":"State: /home/yogendra/WebstormProjects/mi-dev-agent/state-AUT-8428.json"}
+{"ts":"2026-04-15T06:11:52.448Z","level":"info","cid":"c38d33393e7f","msg":"Correlation ID: c38d33393e7f"}
+{"ts":"2026-04-15T06:11:52.448Z","level":"info","cid":"c38d33393e7f","msg":"[Config] Capturing initial config snapshot"}
+{"ts":"2026-04-15T06:11:52.454Z","level":"info","cid":"c38d33393e7f","msg":"[Health] Starting pipeline health monitor (interval: 60s)"}
+{"ts":"2026-04-15T06:11:52.455Z","level":"info","cid":"c38d33393e7f","msg":"Escalation monitoring started (check every 60s)"}
+{"ts":"2026-04-15T06:11:52.456Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 2, found 3 — merging"}
+{"ts":"2026-04-15T06:11:52.462Z","level":"info","cid":"c38d33393e7f","msg":"[Timeout] Stage \"fetch_ticket\" timeout: 5.0m (stage limit: 5.0m, pipeline remaining: 24.0h)"}
+{"ts":"2026-04-15T06:11:52.464Z","level":"info","cid":"c38d33393e7f","msg":"Step 1 -- Fetch Jira ticket + full context","type":"stage_header"}
+{"ts":"2026-04-15T06:11:52.464Z","level":"info","cid":"c38d33393e7f","msg":"Q3: Running pre-flight validation…"}
+{"ts":"2026-04-15T06:11:53.507Z","level":"info","cid":"c38d33393e7f","msg":"X3: 25 Jira transitions available: Unit Testing local, Code Review, Unit Testing-QA, Testing-Cycle 1, Bug Fixing, Staging-Testing, Staging-Dev, Production, Devops/Prepro, To Do, Ready to Start, Ready For Pre-pro, Devops Prod, Production Fixes, Duplicate, Analysis, Done, Testing In Progress, Dev In Progress, Hold, Blocker, Completed/ready for prod, Verification (UAT)/Sales-qa, Assigned For Testing, Partially done"}
+{"ts":"2026-04-15T06:11:53.508Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 4, found 5 — merging"}
+{"ts":"2026-04-15T06:11:53.522Z","level":"info","cid":"c38d33393e7f","msg":"Q3: Pre-flight validation passed"}
+{"ts":"2026-04-15T06:11:53.847Z","level":"info","cid":"c38d33393e7f","msg":"Ticket : [Defect/High] Supplier GSTIN column missing when clearing all GSTINs from filter and clicking apply"}
+{"ts":"2026-04-15T06:11:53.847Z","level":"info","cid":"c38d33393e7f","msg":"Desc   : When clearing all gstins from filter and clicking apply it shows data but supplier gstin column is missing. Refer to SS …"}
+{"ts":"2026-04-15T06:11:53.847Z","level":"info","cid":"c38d33393e7f","msg":"Reading all Jira comments…"}
+{"ts":"2026-04-15T06:11:54.728Z","level":"info","cid":"c38d33393e7f","msg":"Linked : AUT-7382 (relates to [outward]) — Pan-level Filing"}
+{"ts":"2026-04-15T06:11:54.729Z","level":"info","cid":"c38d33393e7f","msg":"Context gathered: Description: 211 chars (markdown) | AC: 211 chars | Linked issues: 1"}
+{"ts":"2026-04-15T06:11:54.729Z","level":"info","cid":"c38d33393e7f","msg":"X7: Complexity: LOW (score: 1, timeout multiplier: 1x)"}
+{"ts":"2026-04-15T06:11:54.730Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 6, found 7 — merging"}
+{"ts":"2026-04-15T06:11:54.745Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 8, found 9 — merging"}
+{"ts":"2026-04-15T06:11:54.751Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 10, found 11 — merging"}
+{"ts":"2026-04-15T06:11:54.757Z","level":"info","cid":"c38d33393e7f","msg":"[Config] Refreshing config snapshot after fetch_ticket"}
+{"ts":"2026-04-15T06:11:54.757Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 12, found 13 — merging"}
+{"ts":"2026-04-15T06:11:54.764Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 14, found 15 — merging"}
+{"ts":"2026-04-15T06:11:54.770Z","level":"info","cid":"c38d33393e7f","msg":"[Timeout] Stage \"explore_plan\" timeout: 30.0m (stage limit: 30.0m, pipeline remaining: 24.0h)"}
+{"ts":"2026-04-15T06:11:54.771Z","level":"info","cid":"c38d33393e7f","msg":"Step 1b -- Explore & Plan — analyzing ticket with agents team","type":"stage_header"}
+{"ts":"2026-04-15T06:11:54.772Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 16, found 17 — merging"}
+{"ts":"2026-04-15T06:11:54.777Z","level":"info","cid":"c38d33393e7f","msg":"Agents Team — launching exploration…"}
+{"ts":"2026-04-15T06:11:54.862Z","level":"info","cid":"c38d33393e7f","msg":"Repo: 8101 total, 4367 source files, 2723 relevant"}
+{"ts":"2026-04-15T06:11:54.863Z","level":"info","cid":"c38d33393e7f","msg":"  → Analysis Team: launching 3 parallel sub-agents…"}
+{"ts":"2026-04-15T06:11:54.863Z","level":"info","cid":"c38d33393e7f","msg":"[Analysis Team] Starting 3 parallel agent(s)…"}
+{"ts":"2026-04-15T06:11:54.863Z","level":"info","cid":"c38d33393e7f","msg":"  Running 3 agent(s) in parallel (0 cached)…"}
+{"ts":"2026-04-15T06:11:54.864Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 18, found 19 — merging"}
+{"ts":"2026-04-15T06:11:54.870Z","level":"info","cid":"c38d33393e7f","msg":"  [Requirements Agent] Starting… (timeout: 360s)"}
+{"ts":"2026-04-15T06:11:54.870Z","level":"info","cid":"c38d33393e7f","msg":"[Requirements Agent] Prompt: 3124 chars (~781 tokens) | Timeout: 360s | MaxTurns: 4"}
+{"ts":"2026-04-15T06:11:54.874Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 20, found 21 — merging"}
+{"ts":"2026-04-15T06:11:54.879Z","level":"info","cid":"c38d33393e7f","msg":"  [Code Explorer Agent] Starting… (timeout: 420s)"}
+{"ts":"2026-04-15T06:11:54.879Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Prompt: 9294 chars (~2324 tokens) | Timeout: 420s | MaxTurns: 20"}
+{"ts":"2026-04-15T06:11:54.883Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 22, found 23 — merging"}
+{"ts":"2026-04-15T06:11:54.888Z","level":"info","cid":"c38d33393e7f","msg":"  [Risk Analyst Agent] Starting… (timeout: 300s)"}
+{"ts":"2026-04-15T06:11:54.888Z","level":"info","cid":"c38d33393e7f","msg":"[Risk Analyst Agent] Prompt: 9688 chars (~2422 tokens) | Timeout: 300s | MaxTurns: 4"}
+{"ts":"2026-04-15T06:11:54.891Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 24, found 25 — merging"}
+{"ts":"2026-04-15T06:12:24.893Z","level":"info","cid":"c38d33393e7f","msg":"[Requirements Agent] Working… 30s elapsed"}
+{"ts":"2026-04-15T06:12:24.895Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 26, found 27 — merging"}
+{"ts":"2026-04-15T06:12:24.909Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 30s elapsed"}
+{"ts":"2026-04-15T06:12:24.910Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 28, found 29 — merging"}
+{"ts":"2026-04-15T06:12:24.916Z","level":"info","cid":"c38d33393e7f","msg":"[Risk Analyst Agent] Working… 30s elapsed"}
+{"ts":"2026-04-15T06:12:24.917Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 30, found 31 — merging"}
+{"ts":"2026-04-15T06:12:54.896Z","level":"info","cid":"c38d33393e7f","msg":"[Requirements Agent] Working… 1m 0s elapsed"}
+{"ts":"2026-04-15T06:12:54.898Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 32, found 33 — merging"}
+{"ts":"2026-04-15T06:12:54.915Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 1m 0s elapsed"}
+{"ts":"2026-04-15T06:12:54.916Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 34, found 35 — merging"}
+{"ts":"2026-04-15T06:12:54.921Z","level":"info","cid":"c38d33393e7f","msg":"[Risk Analyst Agent] Working… 1m 0s elapsed"}
+{"ts":"2026-04-15T06:12:54.922Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 36, found 37 — merging"}
+{"ts":"2026-04-15T06:13:24.900Z","level":"info","cid":"c38d33393e7f","msg":"[Requirements Agent] Working… 1m 30s elapsed"}
+{"ts":"2026-04-15T06:13:24.901Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 38, found 39 — merging"}
+{"ts":"2026-04-15T06:13:24.916Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 1m 30s elapsed"}
+{"ts":"2026-04-15T06:13:24.917Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 40, found 41 — merging"}
+{"ts":"2026-04-15T06:13:24.923Z","level":"info","cid":"c38d33393e7f","msg":"[Risk Analyst Agent] Working… 1m 30s elapsed"}
+{"ts":"2026-04-15T06:13:24.924Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 42, found 43 — merging"}
+{"ts":"2026-04-15T06:13:54.903Z","level":"info","cid":"c38d33393e7f","msg":"[Requirements Agent] Working… 2m 0s elapsed"}
+{"ts":"2026-04-15T06:13:54.905Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 44, found 45 — merging"}
+{"ts":"2026-04-15T06:13:54.919Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 2m 0s elapsed"}
+{"ts":"2026-04-15T06:13:54.920Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 46, found 47 — merging"}
+{"ts":"2026-04-15T06:13:54.926Z","level":"info","cid":"c38d33393e7f","msg":"[Risk Analyst Agent] Working… 2m 0s elapsed"}
+{"ts":"2026-04-15T06:13:54.927Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 48, found 49 — merging"}
+{"ts":"2026-04-15T06:14:24.933Z","level":"info","cid":"c38d33393e7f","msg":"[Requirements Agent] Working… 2m 30s elapsed"}
+{"ts":"2026-04-15T06:14:24.934Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 50, found 51 — merging"}
+{"ts":"2026-04-15T06:14:24.949Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 2m 30s elapsed"}
+{"ts":"2026-04-15T06:14:24.949Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 52, found 53 — merging"}
+{"ts":"2026-04-15T06:14:24.956Z","level":"info","cid":"c38d33393e7f","msg":"[Risk Analyst Agent] Working… 2m 30s elapsed"}
+{"ts":"2026-04-15T06:14:24.957Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 54, found 55 — merging"}
+{"ts":"2026-04-15T06:14:54.935Z","level":"info","cid":"c38d33393e7f","msg":"[Requirements Agent] Working… 3m 0s elapsed"}
+{"ts":"2026-04-15T06:14:54.936Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 56, found 57 — merging"}
+{"ts":"2026-04-15T06:14:54.950Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 3m 0s elapsed"}
+{"ts":"2026-04-15T06:14:54.951Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 58, found 59 — merging"}
+{"ts":"2026-04-15T06:14:54.957Z","level":"info","cid":"c38d33393e7f","msg":"[Risk Analyst Agent] Working… 3m 0s elapsed"}
+{"ts":"2026-04-15T06:14:54.957Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 60, found 61 — merging"}
+{"ts":"2026-04-15T06:15:11.316Z","level":"info","cid":"c38d33393e7f","msg":"[Risk Analyst Agent] Complete in 196.4s"}
+{"ts":"2026-04-15T06:15:11.317Z","level":"info","cid":"c38d33393e7f","msg":"  [Risk Analyst Agent] Complete (196.4s, 6223 chars)"}
+{"ts":"2026-04-15T06:15:11.319Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 62, found 63 — merging"}
+{"ts":"2026-04-15T06:15:24.949Z","level":"info","cid":"c38d33393e7f","msg":"[Requirements Agent] Working… 3m 30s elapsed"}
+{"ts":"2026-04-15T06:15:24.950Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 64, found 65 — merging"}
+{"ts":"2026-04-15T06:15:24.965Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 3m 30s elapsed"}
+{"ts":"2026-04-15T06:15:24.966Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 66, found 67 — merging"}
+{"ts":"2026-04-15T06:15:37.833Z","level":"info","cid":"c38d33393e7f","msg":"[Requirements Agent] Complete in 223.0s"}
+{"ts":"2026-04-15T06:15:37.833Z","level":"info","cid":"c38d33393e7f","msg":"  [Requirements Agent] Complete (223.0s, 28 chars)"}
+{"ts":"2026-04-15T06:15:37.835Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 68, found 69 — merging"}
+{"ts":"2026-04-15T06:15:54.965Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 4m 0s elapsed"}
+{"ts":"2026-04-15T06:15:54.966Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 70, found 71 — merging"}
+{"ts":"2026-04-15T06:16:24.994Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 4m 30s elapsed"}
+{"ts":"2026-04-15T06:16:24.995Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 72, found 73 — merging"}
+{"ts":"2026-04-15T06:16:54.772Z","level":"info","cid":"c38d33393e7f","msg":"[Timeout] Stage \"explore_plan\": 5.0m elapsed, 25.0m remaining"}
+{"ts":"2026-04-15T06:16:54.995Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 5m 0s elapsed"}
+{"ts":"2026-04-15T06:16:54.996Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 74, found 75 — merging"}
+{"ts":"2026-04-15T06:17:25.024Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 5m 30s elapsed"}
+{"ts":"2026-04-15T06:17:25.026Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 76, found 77 — merging"}
+{"ts":"2026-04-15T06:17:55.026Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 6m 0s elapsed"}
+{"ts":"2026-04-15T06:17:55.027Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 78, found 79 — merging"}
+{"ts":"2026-04-15T06:18:25.056Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 6m 30s elapsed"}
+{"ts":"2026-04-15T06:18:25.057Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 80, found 81 — merging"}
+{"ts":"2026-04-15T06:18:54.889Z","level":"warn","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Timeout — retrying with 630s timeout, 10 maxTurns (degraded)"}
+{"ts":"2026-04-15T06:18:54.893Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 82, found 83 — merging"}
+{"ts":"2026-04-15T06:19:24.926Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 30s elapsed"}
+{"ts":"2026-04-15T06:19:24.927Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 84, found 85 — merging"}
+{"ts":"2026-04-15T06:19:54.928Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 1m 0s elapsed"}
+{"ts":"2026-04-15T06:19:54.930Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 86, found 87 — merging"}
+{"ts":"2026-04-15T06:20:24.958Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 1m 30s elapsed"}
+{"ts":"2026-04-15T06:20:24.959Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 88, found 89 — merging"}
+{"ts":"2026-04-15T06:20:54.960Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 2m 0s elapsed"}
+{"ts":"2026-04-15T06:20:54.962Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 90, found 91 — merging"}
+{"ts":"2026-04-15T06:21:24.991Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Working… 2m 30s elapsed"}
+{"ts":"2026-04-15T06:21:24.992Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 92, found 93 — merging"}
+{"ts":"2026-04-15T06:21:33.420Z","level":"info","cid":"c38d33393e7f","msg":"[Code Explorer Agent] Complete in 578.5s (after retry)"}
+{"ts":"2026-04-15T06:21:33.420Z","level":"info","cid":"c38d33393e7f","msg":"  [Code Explorer Agent] Complete (578.5s, 29 chars)"}
+{"ts":"2026-04-15T06:21:33.421Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 94, found 95 — merging"}
+{"ts":"2026-04-15T06:21:33.428Z","level":"info","cid":"c38d33393e7f","msg":"[Analysis Team] Done in 578.6s — 3 succeeded, 0 optional failed"}
+{"ts":"2026-04-15T06:21:33.429Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 96, found 97 — merging"}
+{"ts":"2026-04-15T06:21:33.435Z","level":"info","cid":"c38d33393e7f","msg":"  Analysis Team complete"}
+{"ts":"2026-04-15T06:21:33.435Z","level":"info","cid":"c38d33393e7f","msg":"Analysis complete"}
+{"ts":"2026-04-15T06:21:33.435Z","level":"info","cid":"c38d33393e7f","msg":"  → OpenSpec: scaffolding change…"}
+{"ts":"2026-04-15T06:21:33.436Z","level":"info","cid":"c38d33393e7f","msg":"OpenSpec: creating change 'aut-8428'…"}
+{"ts":"2026-04-15T06:21:41.620Z","level":"info","cid":"c38d33393e7f","msg":"OpenSpec: scaffolded 'aut-8428' with 4 artifact templates"}
+{"ts":"2026-04-15T06:21:41.620Z","level":"info","cid":"c38d33393e7f","msg":"  → OpenSpec Architect Agent: producing structured plan artifacts…"}
+{"ts":"2026-04-15T06:21:41.621Z","level":"info","cid":"c38d33393e7f","msg":"[OpenSpec Architect Agent] Starting 1 parallel agent(s)…"}
+{"ts":"2026-04-15T06:21:41.621Z","level":"info","cid":"c38d33393e7f","msg":"  Running 1 agent(s) in parallel (0 cached)…"}
+{"ts":"2026-04-15T06:21:41.622Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 98, found 99 — merging"}
+{"ts":"2026-04-15T06:21:41.637Z","level":"info","cid":"c38d33393e7f","msg":"  [OpenSpec Architect Agent] Starting… (timeout: 900s)"}
+{"ts":"2026-04-15T06:21:41.637Z","level":"info","cid":"c38d33393e7f","msg":"[OpenSpec Architect Agent] Prompt: 15468 chars (~3867 tokens) | Timeout: 900s | MaxTurns: 25"}
+{"ts":"2026-04-15T06:21:41.642Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 100, found 101 — merging"}
+{"ts":"2026-04-15T06:21:52.462Z","level":"info","cid":"c38d33393e7f","msg":"[Restart] Agent marked as stable (10 minutes without crash)"}
+{"ts":"2026-04-15T06:21:52.464Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 102, found 103 — merging"}
+{"ts":"2026-04-15T06:21:54.773Z","level":"info","cid":"c38d33393e7f","msg":"[Timeout] Stage \"explore_plan\": 10.0m elapsed, 20.0m remaining"}
+{"ts":"2026-04-15T06:22:11.663Z","level":"info","cid":"c38d33393e7f","msg":"[OpenSpec Architect Agent] Working… 30s elapsed"}
+{"ts":"2026-04-15T06:22:11.664Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 104, found 105 — merging"}
+{"ts":"2026-04-15T06:22:41.693Z","level":"info","cid":"c38d33393e7f","msg":"[OpenSpec Architect Agent] Working… 1m 0s elapsed"}
+{"ts":"2026-04-15T06:22:41.695Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 106, found 107 — merging"}
+{"ts":"2026-04-15T06:23:11.712Z","level":"info","cid":"c38d33393e7f","msg":"[OpenSpec Architect Agent] Working… 1m 30s elapsed"}
+{"ts":"2026-04-15T06:23:11.713Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 108, found 109 — merging"}
+{"ts":"2026-04-15T06:23:41.742Z","level":"info","cid":"c38d33393e7f","msg":"[OpenSpec Architect Agent] Working… 2m 0s elapsed"}
+{"ts":"2026-04-15T06:23:41.743Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 110, found 111 — merging"}
+{"ts":"2026-04-15T06:24:11.761Z","level":"info","cid":"c38d33393e7f","msg":"[OpenSpec Architect Agent] Working… 2m 30s elapsed"}
+{"ts":"2026-04-15T06:24:11.762Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 112, found 113 — merging"}
+{"ts":"2026-04-15T06:24:41.791Z","level":"info","cid":"c38d33393e7f","msg":"[OpenSpec Architect Agent] Working… 3m 0s elapsed"}
+{"ts":"2026-04-15T06:24:41.793Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 114, found 115 — merging"}
+{"ts":"2026-04-15T06:25:11.810Z","level":"info","cid":"c38d33393e7f","msg":"[OpenSpec Architect Agent] Working… 3m 30s elapsed"}
+{"ts":"2026-04-15T06:25:11.811Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 116, found 117 — merging"}
+{"ts":"2026-04-15T06:25:41.840Z","level":"info","cid":"c38d33393e7f","msg":"[OpenSpec Architect Agent] Working… 4m 0s elapsed"}
+{"ts":"2026-04-15T06:25:41.841Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 118, found 119 — merging"}
+{"ts":"2026-04-15T06:26:10.644Z","level":"info","cid":"c38d33393e7f","msg":"[OpenSpec Architect Agent] Complete in 269.0s"}
+{"ts":"2026-04-15T06:26:10.644Z","level":"info","cid":"c38d33393e7f","msg":"  [OpenSpec Architect Agent] Complete (269.0s, 712 chars)"}
+{"ts":"2026-04-15T06:26:10.645Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 120, found 121 — merging"}
+{"ts":"2026-04-15T06:26:10.660Z","level":"info","cid":"c38d33393e7f","msg":"[OpenSpec Architect Agent] Done in 269.0s — 1 succeeded, 0 optional failed"}
+{"ts":"2026-04-15T06:26:10.660Z","level":"warn","cid":"c38d33393e7f","msg":"OpenSpec: could not parse markers from architect output — using raw output"}
+{"ts":"2026-04-15T06:26:10.660Z","level":"warn","cid":"c38d33393e7f","msg":"OpenSpec artifact parsing failed — using raw architect output"}
+{"ts":"2026-04-15T06:26:10.661Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 122, found 123 — merging"}
+{"ts":"2026-04-15T06:26:10.669Z","level":"info","cid":"c38d33393e7f","msg":"Implementation plan ready (2 agents completed)"}
+{"ts":"2026-04-15T06:26:11.290Z","level":"warn","cid":"c38d33393e7f","msg":"[State CAS] CAS conflict: expected seq 124, found 125 — merging"}
+{"ts":"2026-04-15T06:26:11.304Z","level":"info","cid":"c38d33393e7f","msg":"Plan ready on Web UI — waiting for your approval"}
+{"ts":"2026-04-15T06:26:11.304Z","level":"info","cid":"c38d33393e7f","msg":"Waiting for plan approval (Web UI)…"}
+{"ts":"2026-04-15T06:26:54.776Z","level":"info","cid":"c38d33393e7f","msg":"[Timeout] Stage \"explore_plan\": 15.0m elapsed, 15.0m remaining"}
+{"ts":"2026-04-15T06:28:43.312Z","level":"info","cid":"c38d33393e7f","msg":"Waiting for plan approval… 2m elapsed"}
+{"ts":"2026-04-15T06:29:33.264Z","level":"info","cid":"c38d33393e7f","msg":"[Shutdown] Received SIGTERM — beginning graceful shutdown"}

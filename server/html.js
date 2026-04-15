@@ -5877,7 +5877,8 @@ var groupLabels = {
   git: "Git", qa: "QA Environment", timeouts: "Timeouts", limits: "Limits",
   build: "Build & Deploy", testing: "Testing", browser: "Browser / Playwright",
   runtime_tests: "Runtime Tests", logging: "Logging", server: "Server",
-  claude: "Claude", vite: "Vite / Frontend", polling: "Polling"
+  claude: "Claude", vite: "Vite / Frontend", polling: "Polling",
+  gdrive: "Google Drive", figma: "Figma", postman: "Postman"
 };
 // configFields will be built dynamically from API response
 var configFields = {};
@@ -5918,8 +5919,9 @@ function renderSettingsPage() {
     { id: "gitlab", name: "GitLab", icon: "\uD83E\uDD8A", desc: "Source control, CI/CD, and merge requests", active: true },
     { id: "slack", name: "Slack", icon: "\uD83D\uDCAC", desc: "Team notifications and alerts", active: true },
     { id: "claude", name: "Claude", icon: "\uD83E\uDDE0", desc: "AI code generation via Claude CLI", active: true },
-    { id: "gdrive", name: "Google Drive", icon: "\uD83D\uDCC1", desc: "Document storage and sharing", active: false },
-    { id: "figma", name: "Figma", icon: "\uD83C\uDFA8", desc: "UI/UX design assets and specs", active: false },
+    { id: "gdrive", name: "Google Drive", icon: "\uD83D\uDCC1", desc: "Auto-fetch Google Docs and Sheets linked in Jira tickets", active: true },
+    { id: "figma", name: "Figma", icon: "\uD83C\uDFA8", desc: "Auto-fetch Figma design files, extract text and structure", active: true },
+    { id: "postman", name: "Postman", icon: "\uD83D\uDCE6", desc: "Auto-fetch Postman collections, flatten API endpoints", active: true },
     { id: "confluence", name: "Confluence", icon: "\uD83D\uDCD6", desc: "Team wiki and documentation", active: false },
     { id: "notion", name: "Notion", icon: "\uD83D\uDDD2", desc: "Notes, docs, and knowledge base", active: false }
   ];
