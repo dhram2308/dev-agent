@@ -108,8 +108,8 @@ catch {
     localRepo = null;
 }
 // ── Configuration ────────────────────────────────────────────────
-/** M6: Auth token for POST endpoints */
-const API_TOKEN = crypto.randomBytes(24).toString('hex');
+/** M6: Auth token for POST endpoints — accept from env for dev-mode token sharing */
+const API_TOKEN = process.env.API_TOKEN || crypto.randomBytes(24).toString('hex');
 exports.API_TOKEN = API_TOKEN;
 /** Server port */
 const PORT = parseInt(process.env.PORT || '3000', 10) || 3000;

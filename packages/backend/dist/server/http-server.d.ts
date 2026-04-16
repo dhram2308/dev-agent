@@ -1,5 +1,5 @@
 import type { Server } from 'http';
-/** M6: Auth token for POST endpoints */
+/** M6: Auth token for POST endpoints — accept from env for dev-mode token sharing */
 declare const API_TOKEN: string;
 /** Server port */
 declare const PORT: number;

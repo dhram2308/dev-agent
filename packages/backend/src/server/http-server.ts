@@ -121,8 +121,8 @@ try {
 
 // ── Configuration ────────────────────────────────────────────────
 
-/** M6: Auth token for POST endpoints */
-const API_TOKEN: string = crypto.randomBytes(24).toString('hex');
+/** M6: Auth token for POST endpoints — accept from env for dev-mode token sharing */
+const API_TOKEN: string = process.env.API_TOKEN || crypto.randomBytes(24).toString('hex');
 
 /** Server port */
 const PORT: number = parseInt(process.env.PORT || '3000', 10) || 3000;
