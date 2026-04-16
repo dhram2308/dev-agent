@@ -30,6 +30,7 @@
     "lint:backend": "cd packages/backend && npx tsc --noEmit",
     "lint:frontend": "cd packages/frontend && npx tsc --noEmit",
     "dev": "node packages/backend/boot.js",
+    "dev:full": "./scripts/agent-dev-mode.sh",
     "start": "NODE_ENV=production node packages/backend/boot.js",
     "agent": "node packages/backend/boot-agent.js",
     "dev:legacy": "node server.js",

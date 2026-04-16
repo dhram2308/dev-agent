@@ -5,8 +5,10 @@
 // buttons, expiry countdown, account identity, and PAT fallback
 // ═══════════════════════════════════════════════════════════════
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { ConnectorStatus, TestConnectionResult } from '../../store/settings';
+import type { FieldType } from '../../store/settings';
+import { ConfigField } from './ConfigField';
 
 // ── OAuth status types ──────────────────────────────────────
 
@@ -22,6 +24,18 @@ export interface OAuthInfo {
   oauthStatus: OAuthStatus;
   expiresAt?: number | null;
   metadata?: { email?: string; [key: string]: unknown };
+}
+
+export interface ConnectorConfigField {
+  key: string;
+  label: string;
+  type: FieldType;
+  description: string;
+  required: boolean;
+  frozen?: boolean;
+  enumValues?: string[];
+  min?: number;
+  max?: number;
 }
 
 // ── Props ───────────────────────────────────────────────────
@@ -46,6 +60,12 @@ interface ConnectorCardProps {
   oauthLaunching?: boolean;
   /** Inline children for PAT fallback (token input + test button) */
   patFallbackContent?: React.ReactNode;
+  /** Config field definitions for this connector's group */
+  configFields?: ConnectorConfigField[];
+  /** Current config values from the store */
+  configValues?: Record<string, unknown>;
+  /** Save only this connector's changed config fields */
+  onSaveConnectorConfig?: (values: Record<string, unknown>) => Promise<void>;
 }
 
 // ── Styles ──────────────────────────────────────────────────
@@ -250,6 +270,156 @@ const styles = {
   },
   patContent: {
     marginTop: 'var(--sp-2)',
+  },
+  // Manage modal styles
+  modalOverlay: {
+    position: 'fixed' as const,
+    inset: 0,
+    zIndex: 9000,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'var(--bg-overlay)',
+    backdropFilter: 'blur(4px)',
+    WebkitBackdropFilter: 'blur(4px)',
+    animation: 'fadeIn 0.2s var(--ease-smooth)',
+  },
+  modalDialog: {
+    background: 'var(--bg-surface)',
+    border: '1px solid var(--border-default)',
+    borderRadius: 'var(--radius-lg)',
+    padding: 'var(--sp-6)',
+    maxWidth: 440,
+    width: '90%',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+    animation: 'modalIn 0.2s var(--ease-smooth)',
+  },
+  modalHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 'var(--sp-4)',
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 700,
+    color: 'var(--text-primary)',
+    fontFamily: 'var(--font-sans)',
+  },
+  modalCloseBtn: {
+    padding: 4,
+    border: 'none',
+    background: 'transparent',
+    color: 'var(--text-tertiary)',
+    cursor: 'pointer',
+    borderRadius: 'var(--radius-sm)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'color 0.15s',
+  },
+  modalStatusTable: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 'var(--sp-2)',
+    padding: 'var(--sp-4)',
+    borderRadius: 'var(--radius-md)',
+    background: 'var(--bg-elevated)',
+    border: '1px solid var(--border-subtle)',
+    marginBottom: 'var(--sp-4)',
+  },
+  modalStatusRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--sp-3)',
+    fontSize: 13,
+    fontFamily: 'var(--font-sans)',
+  },
+  modalStatusLabel: {
+    color: 'var(--text-tertiary)',
+    minWidth: 70,
+    fontWeight: 500,
+    fontSize: 12,
+  },
+  modalStatusValue: {
+    color: 'var(--text-primary)',
+    fontWeight: 500,
+  },
+  modalStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: '50%',
+    display: 'inline-block',
+    flexShrink: 0,
+  },
+  modalActions: {
+    display: 'flex',
+    gap: 'var(--sp-2)',
+    flexWrap: 'wrap' as const,
+  },
+  modalBtn: {
+    padding: 'var(--sp-2) var(--sp-4)',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer',
+    border: '1px solid var(--border-default)',
+    background: 'var(--bg-elevated)',
+    color: 'var(--text-secondary)',
+    transition: 'all 0.15s',
+    fontFamily: 'var(--font-sans)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 'var(--sp-1)',
+  },
+  modalBtnDanger: {
+    background: 'var(--danger-muted)',
+    color: 'var(--danger)',
+    border: '1px solid rgba(239,68,68,0.2)',
+  },
+  modalBtnSave: {
+    background: 'linear-gradient(135deg, var(--accent), #7c3aed)',
+    color: '#fff',
+    border: 'none',
+  },
+  modalConfigSection: {
+    marginBottom: 'var(--sp-4)',
+    maxHeight: 400,
+    overflowY: 'auto' as const,
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--border-subtle)',
+    padding: '0 var(--sp-3)',
+    background: 'var(--bg-surface)',
+  },
+  modalDirtyBadge: {
+    fontSize: 10,
+    padding: '1px 6px',
+    borderRadius: 'var(--radius-full)',
+    background: 'var(--warning-muted)',
+    color: 'var(--warning)',
+    fontWeight: 600,
+  },
+  modalComingSoon: {
+    fontSize: 13,
+    color: 'var(--text-tertiary)',
+    fontFamily: 'var(--font-sans)',
+    textAlign: 'center' as const,
+    padding: 'var(--sp-3) 0',
+  },
+  manageBtn: {
+    padding: 'var(--sp-2) var(--sp-3)',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer',
+    border: '1px solid var(--border-default)',
+    background: 'var(--bg-elevated)',
+    color: 'var(--text-secondary)',
+    transition: 'all 0.15s',
+    fontFamily: 'var(--font-sans)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 'var(--sp-1)',
   },
 } as const;
 
@@ -480,6 +650,9 @@ export function ConnectorCard({
   onOAuthDisconnect,
   oauthLaunching = false,
   patFallbackContent,
+  configFields,
+  configValues,
+  onSaveConnectorConfig,
 }: ConnectorCardProps): JSX.Element {
   const isComingSoon = status === 'coming_soon';
   const isTesting = testResult?.loading ?? false;
@@ -488,8 +661,98 @@ export function ConnectorCard({
   // PAT fallback disclosure state (for OAuth-capable providers)
   const [patExpanded, setPatExpanded] = useState(false);
 
+  // Manage modal state
+  const [manageOpen, setManageOpen] = useState(false);
+  const manageCloseRef = useRef<HTMLButtonElement>(null);
+
+  // Local config state for modal (isolated from global store dirty state)
+  const [localConfig, setLocalConfig] = useState<Record<string, unknown>>({});
+  const [localOriginal, setLocalOriginal] = useState<Record<string, unknown>>({});
+  const [localSaving, setLocalSaving] = useState(false);
+
+  const localDirty = useMemo(() => {
+    return Object.keys(localConfig).some((k) => localConfig[k] !== localOriginal[k]);
+  }, [localConfig, localOriginal]);
+
   // Expiry countdown
   const expiryText = useExpiryCountdown(oauthInfo?.expiresAt);
+
+  // Close manage modal
+  const closeManage = useCallback(() => setManageOpen(false), []);
+
+  // Esc key to close manage modal
+  useEffect(() => {
+    if (!manageOpen) return;
+    const handleKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeManage();
+      }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [manageOpen, closeManage]);
+
+  // Initialize local config and focus close button when modal opens
+  useEffect(() => {
+    if (manageOpen) {
+      manageCloseRef.current?.focus();
+      if (configFields && configValues) {
+        const snapshot: Record<string, unknown> = {};
+        for (const f of configFields) {
+          snapshot[f.key] = configValues[f.key] ?? '';
+        }
+        setLocalConfig(snapshot);
+        setLocalOriginal(snapshot);
+      }
+    }
+  }, [manageOpen, configFields, configValues]);
+
+  // Overlay click to close
+  const handleOverlayClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.target === e.currentTarget) closeManage();
+    },
+    [closeManage],
+  );
+
+  // Configure action from modal (close modal + navigate)
+  const handleModalConfigure = useCallback(() => {
+    closeManage();
+    onConfigure?.();
+  }, [closeManage, onConfigure]);
+
+  // Local config field change handler
+  const handleLocalFieldChange = useCallback((key: string, value: unknown) => {
+    setLocalConfig((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  // Save only this connector's changed fields
+  const handleLocalSave = useCallback(async () => {
+    if (!localDirty || localSaving || !onSaveConnectorConfig) return;
+    const changed: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(localConfig)) {
+      if (v !== localOriginal[k] && typeof v === 'string' && !v.startsWith('****')) {
+        changed[k] = v;
+      } else if (v !== localOriginal[k] && typeof v !== 'string') {
+        changed[k] = v;
+      }
+    }
+    if (Object.keys(changed).length === 0) return;
+    setLocalSaving(true);
+    try {
+      await onSaveConnectorConfig(changed);
+      // After save, update original to match current
+      setLocalOriginal({ ...localConfig });
+    } finally {
+      setLocalSaving(false);
+    }
+  }, [localDirty, localSaving, localConfig, localOriginal, onSaveConnectorConfig]);
+
+  // Reset local config to original values
+  const handleLocalReset = useCallback(() => {
+    setLocalConfig({ ...localOriginal });
+  }, [localOriginal]);
 
   // Derive OAuth display state
   const oauthStatus = oauthInfo?.oauthStatus ?? 'NOT_CONNECTED';
@@ -644,20 +907,14 @@ export function ConnectorCard({
             )}
           </button>
         )}
-        {!isComingSoon && (
-          <button
-            type="button"
-            style={{
-              ...styles.configLink,
-              ...(onConfigure ? {} : styles.btnDisabled),
-            }}
-            onClick={onConfigure}
-            disabled={!onConfigure}
-            aria-label={`Configure ${name}`}
-          >
-            Configure
-          </button>
-        )}
+        <button
+          type="button"
+          style={styles.manageBtn}
+          onClick={() => setManageOpen(true)}
+          aria-label={`Manage ${name}`}
+        >
+          Manage
+        </button>
       </div>
 
       {/* Test result row */}
@@ -680,6 +937,204 @@ export function ConnectorCard({
             </svg>
           )}
           <span>{result.message || (result.ok ? 'Connected' : 'Connection failed')}</span>
+        </div>
+      )}
+
+      {/* Manage modal */}
+      {manageOpen && (
+        <div
+          style={styles.modalOverlay}
+          onClick={handleOverlayClick}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="manage-modal-title"
+        >
+          <div style={{ ...styles.modalDialog, maxWidth: configFields?.length ? 560 : 440 }}>
+            {/* Header */}
+            <div style={styles.modalHeader}>
+              <span id="manage-modal-title" style={styles.modalTitle}>Manage {name}</span>
+              <button
+                ref={manageCloseRef}
+                type="button"
+                style={styles.modalCloseBtn}
+                onClick={closeManage}
+                aria-label="Close"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M4 4l8 8M12 4l-8 8" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Coming soon */}
+            {isComingSoon ? (
+              <>
+                <div style={styles.modalStatusTable}>
+                  <div style={styles.modalStatusRow}>
+                    <span style={styles.modalStatusLabel}>Status</span>
+                    <span style={{ ...styles.modalStatusDot, background: 'var(--text-tertiary)' }} />
+                    <span style={styles.modalStatusValue}>Coming Soon</span>
+                  </div>
+                  <div style={styles.modalStatusRow}>
+                    <span style={styles.modalStatusLabel}>Auth</span>
+                    <span style={styles.modalStatusValue}>&mdash;</span>
+                  </div>
+                </div>
+                <div style={styles.modalComingSoon}>This connector is not yet available.</div>
+              </>
+            ) : (
+              <>
+                {/* Status summary */}
+                <div style={styles.modalStatusTable}>
+                  <div style={styles.modalStatusRow}>
+                    <span style={styles.modalStatusLabel}>Status</span>
+                    <span
+                      style={{
+                        ...styles.modalStatusDot,
+                        background: supportsOAuth
+                          ? oauthStatus === 'CONNECTED' || oauthStatus === 'PAT'
+                            ? 'var(--success)'
+                            : oauthStatus === 'RE_AUTH_REQUIRED'
+                              ? 'var(--warning)'
+                              : oauthStatus === 'REVOKED'
+                                ? 'var(--danger)'
+                                : oauthStatus === 'REFRESHING'
+                                  ? 'var(--blue)'
+                                  : 'var(--text-tertiary)'
+                          : status === 'connected'
+                            ? 'var(--success)'
+                            : 'var(--text-tertiary)',
+                      }}
+                    />
+                    <span style={styles.modalStatusValue}>
+                      {supportsOAuth
+                        ? OAUTH_PILL_MAP[oauthStatus].label
+                        : statusLabel(status)}
+                    </span>
+                  </div>
+                  <div style={styles.modalStatusRow}>
+                    <span style={styles.modalStatusLabel}>Auth</span>
+                    <span style={styles.modalStatusValue}>
+                      {supportsOAuth ? 'OAuth 2.0' : 'PAT (Personal Access Token)'}
+                    </span>
+                  </div>
+                  {supportsOAuth && accountEmail && (
+                    <div style={styles.modalStatusRow}>
+                      <span style={styles.modalStatusLabel}>Account</span>
+                      <span style={styles.modalStatusValue}>{accountEmail}</span>
+                    </div>
+                  )}
+                  {supportsOAuth && expiryText && (
+                    <div style={styles.modalStatusRow}>
+                      <span style={styles.modalStatusLabel}>Expiry</span>
+                      <span style={styles.modalStatusValue}>{expiryText}</span>
+                    </div>
+                  )}
+                  <div style={styles.modalStatusRow}>
+                    <span style={styles.modalStatusLabel}>Last Test</span>
+                    {result ? (
+                      <span style={{ ...styles.modalStatusValue, color: result.ok ? 'var(--success)' : 'var(--danger)' }}>
+                        {result.ok ? '\u2713 Passed' : '\u2717 Failed'}
+                        {result.message ? ` \u2014 ${result.message}` : ''}
+                      </span>
+                    ) : (
+                      <span style={{ ...styles.modalStatusValue, color: 'var(--text-tertiary)' }}>Not tested</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Config fields */}
+                {configFields && configFields.length > 0 && (
+                  <div style={styles.modalConfigSection}>
+                    {configFields.map((field) => (
+                      <ConfigField
+                        key={field.key}
+                        fieldKey={field.key}
+                        label={field.label}
+                        type={field.type}
+                        value={localConfig[field.key]}
+                        onChange={handleLocalFieldChange}
+                        required={field.required}
+                        description={field.description}
+                        enumValues={field.enumValues}
+                        min={field.min}
+                        max={field.max}
+                        frozen={field.frozen}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div style={styles.modalActions}>
+                  {onTest && (
+                    <button
+                      type="button"
+                      style={{
+                        ...styles.modalBtn,
+                        ...(isTesting ? styles.btnDisabled : {}),
+                      }}
+                      onClick={onTest}
+                      disabled={isTesting}
+                    >
+                      {isTesting ? (
+                        <>
+                          <span style={styles.spinner} />
+                          Testing…
+                        </>
+                      ) : (
+                        'Test Now'
+                      )}
+                    </button>
+                  )}
+                  {configFields && configFields.length > 0 && onSaveConnectorConfig && (
+                    <>
+                      <button
+                        type="button"
+                        style={{
+                          ...styles.modalBtn,
+                          ...styles.modalBtnSave,
+                          ...(!localDirty || localSaving ? styles.btnDisabled : {}),
+                        }}
+                        onClick={handleLocalSave}
+                        disabled={!localDirty || localSaving}
+                      >
+                        {localSaving ? (
+                          <>
+                            <span style={styles.spinner} />
+                            Saving…
+                          </>
+                        ) : (
+                          'Save'
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        style={{
+                          ...styles.modalBtn,
+                          ...(!localDirty ? styles.btnDisabled : {}),
+                        }}
+                        onClick={handleLocalReset}
+                        disabled={!localDirty}
+                      >
+                        Reset
+                      </button>
+                      {localDirty && <span style={styles.modalDirtyBadge}>Unsaved changes</span>}
+                    </>
+                  )}
+                  {supportsOAuth && isOAuthConnected && onOAuthDisconnect && (
+                    <button
+                      type="button"
+                      style={{ ...styles.modalBtn, ...styles.modalBtnDanger }}
+                      onClick={onOAuthDisconnect}
+                    >
+                      Disconnect
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 

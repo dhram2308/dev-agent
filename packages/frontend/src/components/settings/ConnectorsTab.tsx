@@ -5,9 +5,10 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { useCallback, useMemo } from 'react';
-import { useSettingsStore } from '../../store/settings';
-import { ConnectorCard, type OAuthInfo } from './ConnectorCard';
+import { useSettingsStore, CONFIG_GROUPS } from '../../store/settings';
+import { ConnectorCard, type OAuthInfo, type ConnectorConfigField } from './ConnectorCard';
 import { useOAuthLauncher } from '../../hooks/useOAuthLauncher';
+import * as api from '../../lib/api';
 
 // Map a connector id to the config-group id that owns its settings.
 // Connectors not listed here have no configurable group (e.g. coming-soon ones).
@@ -25,6 +26,12 @@ const CONNECTOR_TO_GROUP: Record<string, string> = {
 
 // Providers that support OAuth flow (show Connect/Disconnect buttons)
 const OAUTH_PROVIDERS = new Set(['figma', 'google-drive']);
+
+// Map connector IDs to OAuth provider names (backend registers as 'google', not 'google-drive')
+const OAUTH_PROVIDER_NAME: Record<string, string> = {
+  'google-drive': 'google',
+};
+const toOAuthName = (id: string): string => OAUTH_PROVIDER_NAME[id] || id;
 
 // Provider categories for grouped display
 interface ProviderCategory {
@@ -98,11 +105,40 @@ export function ConnectorsTab(): JSX.Element {
   const connectors = useSettingsStore((s) => s.connectors);
   const testResults = useSettingsStore((s) => s.testResults);
   const testConnection = useSettingsStore((s) => s.testConnection);
-  const setActiveTab = useSettingsStore((s) => s.setActiveTab);
-  const setFocusGroup = useSettingsStore((s) => s.setFocusGroup);
   const oauthStatuses = useSettingsStore((s) => s.oauthStatuses);
 
   const { launch, disconnect, launching } = useOAuthLauncher();
+
+  const config = useSettingsStore((s) => s.config);
+  const fetchConfig = useSettingsStore((s) => s.fetchConfig);
+
+  // Build map: connector id → config group fields
+  const configFieldsMap = useMemo(() => {
+    const map = new Map<string, ConnectorConfigField[]>();
+    for (const [connectorId, groupId] of Object.entries(CONNECTOR_TO_GROUP)) {
+      const group = CONFIG_GROUPS.find((g) => g.id === groupId);
+      if (group) {
+        map.set(connectorId, group.fields.map((f) => ({
+          key: f.key,
+          label: f.label,
+          type: f.type,
+          description: f.description,
+          required: f.required,
+          frozen: f.frozen,
+          enumValues: f.enumValues,
+          min: f.min,
+          max: f.max,
+        })));
+      }
+    }
+    return map;
+  }, []);
+
+  // Save only specific connector config fields via API, then refresh store
+  const handleSaveConnectorConfig = useCallback(async (values: Record<string, unknown>) => {
+    await api.saveConfig(values as Record<string, string>);
+    fetchConfig();
+  }, [fetchConfig]);
 
   // Build a map from connector id → ConnectorInfo for quick lookup
   const connectorMap = useMemo(() => {
@@ -117,26 +153,16 @@ export function ConnectorsTab(): JSX.Element {
     [testConnection],
   );
 
-  const handleConfigure = useCallback(
-    (id: string) => {
-      const groupId = CONNECTOR_TO_GROUP[id];
-      if (!groupId) return;
-      setFocusGroup(groupId);
-      setActiveTab('config');
-    },
-    [setActiveTab, setFocusGroup],
-  );
-
   const handleOAuthConnect = useCallback(
     (id: string) => {
-      launch(id);
+      launch(toOAuthName(id));
     },
     [launch],
   );
 
   const handleOAuthDisconnect = useCallback(
     (id: string) => {
-      disconnect(id);
+      disconnect(toOAuthName(id));
     },
     [disconnect],
   );
@@ -165,11 +191,9 @@ export function ConnectorsTab(): JSX.Element {
             <div style={{ ...styles.grid, marginTop: 'var(--sp-3)' }}>
               {categoryConnectors.map((connector) => {
                 const canTest = connector.status !== 'coming_soon';
-                const canConfigure =
-                  canTest && CONNECTOR_TO_GROUP[connector.id] !== undefined;
                 const isOAuth = OAUTH_PROVIDERS.has(connector.id);
                 const oauthInfo: OAuthInfo | undefined = isOAuth && oauthStatuses
-                  ? oauthStatuses[connector.id]
+                  ? (oauthStatuses[toOAuthName(connector.id)] || oauthStatuses[connector.id])
                   : undefined;
 
                 return (
@@ -181,9 +205,6 @@ export function ConnectorsTab(): JSX.Element {
                     status={connector.status}
                     testResult={testResults[connector.id]}
                     onTest={canTest ? () => handleTest(connector.id) : undefined}
-                    onConfigure={
-                      canConfigure ? () => handleConfigure(connector.id) : undefined
-                    }
                     supportsOAuth={isOAuth}
                     oauthInfo={oauthInfo}
                     onOAuthConnect={
@@ -192,7 +213,10 @@ export function ConnectorsTab(): JSX.Element {
                     onOAuthDisconnect={
                       isOAuth ? () => handleOAuthDisconnect(connector.id) : undefined
                     }
-                    oauthLaunching={launching === connector.id}
+                    oauthLaunching={launching === toOAuthName(connector.id)}
+                    configFields={configFieldsMap.get(connector.id)}
+                    configValues={config}
+                    onSaveConnectorConfig={handleSaveConnectorConfig}
                   />
                 );
               })}

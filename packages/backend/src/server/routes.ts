@@ -399,8 +399,11 @@ export async function handleRequest(
     }
   }
 
-  // T1.8: Auth token check on ALL /api/ requests (GET and POST)
-  if (url.pathname.startsWith('/api/') && url.pathname !== '/api/health') {
+  // T1.8: Auth token check on /api/ requests.
+  // Read-only endpoints that return no secrets are public (GET config, health, state, pipelines).
+  const PUBLIC_GET_PATHS = ['/api/health', '/api/config', '/api/state', '/api/pipelines', '/api/notification-config'];
+  const isPublicGet = request.method === 'GET' && PUBLIC_GET_PATHS.includes(url.pathname);
+  if (url.pathname.startsWith('/api/') && !isPublicGet) {
     const token = request.headers['x-api-token'] || url.searchParams.get('token');
     if (token !== apiToken) {
       res.writeHead(403, { 'Content-Type': 'application/json' });

@@ -7,7 +7,7 @@
 //
 // Storage layout:
 //   service:  mi-dev-agent
-//   account:  oauth:<provider>  |  pat:<provider>  |  ...
+//   account:  oauth.<provider>  |  pat.<provider>  |  ...
 //   password: JSON-serialized TokenSet
 //
 // A provider registry is stored as a separate keychain entry
@@ -39,7 +39,8 @@ const REGISTRY_ACCOUNT = '_registry';
  * Format: `<kind>:<provider>` (e.g. `oauth:jira`, `pat:gitlab`).
  */
 function accountKey(provider: string, kind: string): string {
-  return `${kind}:${provider}`;
+  // cross-keychain only allows [a-zA-Z0-9._@-] in account names.
+  return `${kind}.${provider}`;
 }
 
 /**

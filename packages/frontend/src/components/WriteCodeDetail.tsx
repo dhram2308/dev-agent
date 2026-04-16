@@ -322,14 +322,31 @@ function DeveloperTab({ d }: { d: Record<string, unknown> }): JSX.Element {
   const hadRetry = !!d._dev_retry_result;
   const feedback = d.feedback as string | undefined;
 
+  const singleResult = d._dev_single_result as string | undefined;
+  const retryResult = d._dev_retry_result as string | undefined;
+
   return (
     <div>
       {mode ? <Row label="Codegen Mode" status="done" extra={mode} /> : null}
       <Row label="Code Generation" status={devStatus}
         extra={hadParallel ? `${groupKeys.length} parallel groups` : hadRetry ? 'retried' : undefined} />
+      <Row label="Dev Mode" status={hadParallel ? 'done' : d._dev_complete ? 'done' : 'pending'}
+        extra={hadParallel ? 'parallel groups' : 'single agent'} />
+      {hadParallel ? (
+        <>
+          <div style={styles.sectionLabel}>Parallel Groups</div>
+          {groupKeys.map(key => (
+            <div key={key}>
+              <Row label={key} status="done" />
+              {d[key] ? <Collapsible text={String(d[key])} maxH={100} /> : null}
+            </div>
+          ))}
+        </>
+      ) : null}
       {rejections != null && rejections > 0 ? (
         <Row label="Rejections" status="fail" extra={`${rejections} rejection(s)`} />
       ) : null}
+      <Row label="Retry" status={hadRetry ? 'done' : 'pending'} extra={hadRetry ? 'retried after failure' : '—'} />
       {d._dev_failed ? (
         <div style={{ ...styles.collapsible, color: 'var(--danger)', maxHeight: 60, fontFamily: 'var(--font-sans)' }}>
           Code generation produced zero file changes after retry. Manual intervention required — check Slack for details.
@@ -345,6 +362,18 @@ function DeveloperTab({ d }: { d: Record<string, unknown> }): JSX.Element {
         <>
           <div style={styles.sectionLabel}>Developer Summary</div>
           <Collapsible text={String(d._dev_summary)} />
+        </>
+      ) : null}
+      {singleResult && singleResult !== String(d._dev_summary || '') ? (
+        <>
+          <div style={styles.sectionLabel}>Single Agent Result</div>
+          <Collapsible text={singleResult} />
+        </>
+      ) : null}
+      {retryResult ? (
+        <>
+          <div style={styles.sectionLabel}>Retry Result</div>
+          <Collapsible text={String(retryResult)} />
         </>
       ) : null}
     </div>
@@ -540,9 +569,12 @@ function ACTab({ d }: { d: Record<string, unknown> }): JSX.Element {
   return (
     <div>
       <Row label="AC Verified" status={acStatus} />
-      {retryCount != null ? (
-        <Row label="Fix Retries" status={retryCount > 0 ? 'in_progress' : 'done'} extra={`${retryCount}/2`} />
-      ) : null}
+      <Row label="Fix Retries" status={retryCount != null && retryCount > 0 ? 'in_progress' : retryCount === 0 ? 'done' : 'pending'}
+        extra={retryCount != null ? `${retryCount}/2` : '—'} />
+      <Row label="Fix Attempt 1" status={d._ac_fix_attempt_1 ? 'done' : 'pending'} extra={d._ac_fix_attempt_1 ? 'completed' : '—'} />
+      {d._ac_fix_attempt_1 ? <Collapsible text={String(d._ac_fix_attempt_1)} maxH={120} /> : null}
+      <Row label="Fix Attempt 2" status={d._ac_fix_attempt_2 ? 'done' : 'pending'} extra={d._ac_fix_attempt_2 ? 'completed' : '—'} />
+      {d._ac_fix_attempt_2 ? <Collapsible text={String(d._ac_fix_attempt_2)} maxH={120} /> : null}
       {gapText ? (
         <>
           <div style={styles.sectionLabel}>Known Gaps</div>
@@ -567,6 +599,7 @@ function ACTab({ d }: { d: Record<string, unknown> }): JSX.Element {
 function MRTab({ d }: { d: Record<string, unknown> }): JSX.Element {
   const branch = d.code_branch as string | undefined;
   const sourceBranch = d.code_source_branch as string | undefined;
+  const parentBranch = d.parentBranch as string | undefined;
   const sha = d._last_commit_sha as string | undefined;
   const mrUrl = d.code_mr_url as string | undefined;
   const mrIid = d.code_mr_iid as string | number | undefined;
@@ -574,7 +607,9 @@ function MRTab({ d }: { d: Record<string, unknown> }): JSX.Element {
   return (
     <div>
       <Row label="Branch" status={boolStatus(d.code_branch)} extra={branch || undefined} />
-      {sourceBranch ? <Row label="Source Branch" status="done" extra={sourceBranch} /> : null}
+      <Row label="Source Branch" status={sourceBranch ? 'done' : 'pending'} extra={sourceBranch || '—'} />
+      <Row label="Parent Branch" status={parentBranch ? 'done' : 'pending'}
+        extra={parentBranch ? (parentBranch !== sourceBranch ? parentBranch : `same as source`) : '—'} />
       <Row label="Committed" status={boolStatus(d.code_committed)} extra={sha ? sha.slice(0, 8) : undefined} />
       <Row label="Conflict Check" status={boolStatus(d._conflict_check_done)} />
       <Row label="Divergence Check" status={boolStatus(d._divergence_checked)} />

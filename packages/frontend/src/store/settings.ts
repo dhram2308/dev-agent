@@ -348,7 +348,43 @@ export const CONFIG_GROUPS: ConfigGroup[] = [
       { key: 'CONSOLE_WARNING_THRESHOLD', label: 'Console Warning Threshold', type: 'number', description: 'Max browser console warnings before flagging', required: false, frozen: false, min: 0, max: 100, defaultValue: 5 },
     ],
   },
+  {
+    id: 'figma',
+    label: 'Figma',
+    description: 'Figma design file integration (OAuth or PAT)',
+    icon: 'figma',
+    fields: [
+      { key: 'FIGMA_TOKEN', label: 'Figma Personal Access Token', type: 'password', description: 'Figma PAT for API access (fallback if OAuth not configured)', required: false, frozen: true },
+      { key: 'OAUTH_FIGMA_CLIENT_ID', label: 'Figma OAuth Client ID', type: 'string', description: 'Figma OAuth app client ID', required: false, frozen: true },
+      { key: 'OAUTH_FIGMA_CLIENT_SECRET', label: 'Figma OAuth Client Secret', type: 'password', description: 'Figma OAuth app client secret', required: false, frozen: true },
+    ],
+  },
+  {
+    id: 'google-drive',
+    label: 'Google Drive',
+    description: 'Google Drive and Docs integration (OAuth or service account)',
+    icon: 'drive',
+    fields: [
+      { key: 'GDRIVE_SERVICE_ACCOUNT_JSON', label: 'Service Account JSON', type: 'password', description: 'Google service account credentials JSON (fallback if OAuth not configured)', required: false, frozen: true },
+      { key: 'OAUTH_GOOGLE_CLIENT_ID', label: 'Google OAuth Client ID', type: 'string', description: 'Google OAuth app client ID', required: false, frozen: true },
+      { key: 'OAUTH_GOOGLE_CLIENT_SECRET', label: 'Google OAuth Client Secret', type: 'password', description: 'Google OAuth app client secret', required: false, frozen: true },
+    ],
+  },
+  {
+    id: 'postman',
+    label: 'Postman',
+    description: 'Postman API collection integration',
+    icon: 'postman',
+    fields: [
+      { key: 'POSTMAN_API_KEY', label: 'Postman API Key', type: 'password', description: 'Postman API key for fetching collections', required: false, frozen: true },
+    ],
+  },
 ];
+
+/** Config group IDs that belong to connectors (shown in Manage modal, hidden from ConfigTab) */
+export const CONNECTOR_GROUP_IDS = new Set([
+  'jira', 'gitlab', 'slack', 'claude', 'browser', 'figma', 'google-drive', 'postman',
+]);
 
 // ── Notification defaults ───────────────────────────────────
 

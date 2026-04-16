@@ -309,7 +309,7 @@ function buildRedirectUri(request: IncomingMessage, provider: string): string {
   const forwardedHost = request.headers['x-forwarded-host'] as string | undefined;
   const host = forwardedHost || request.headers['host'] || 'localhost:3000';
   const forwardedProto = request.headers['x-forwarded-proto'] as string | undefined;
-  const protocol = forwardedProto || (host.startsWith('localhost') ? 'http' : 'https');
+  const protocol = forwardedProto || (host.startsWith('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https');
   return `${protocol}://${host}/oauth/${provider}/callback`;
 }
 

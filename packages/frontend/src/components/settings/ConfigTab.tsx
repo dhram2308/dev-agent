@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSettingsStore } from '../../store/settings';
 import type { ConfigGroup } from '../../store/settings';
+import { CONNECTOR_GROUP_IDS } from '../../store/settings';
 import { ConfigField } from './ConfigField';
 import { TestConnectionButton } from './TestConnectionButton';
 
@@ -327,9 +328,11 @@ export function ConfigTab(): JSX.Element {
         </div>
       )}
 
-      {configGroups.map((group) => (
-        <ConfigGroupSection key={group.id} group={group} />
-      ))}
+      {configGroups
+        .filter((group) => !CONNECTOR_GROUP_IDS.has(group.id))
+        .map((group) => (
+          <ConfigGroupSection key={group.id} group={group} />
+        ))}
 
       {/* Sticky action bar */}
       <div style={styles.actionBar}>

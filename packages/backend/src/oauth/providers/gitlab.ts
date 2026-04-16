@@ -40,8 +40,8 @@ const gitlab: ProviderAdapter = {
 
   defaultScopes: ['api', 'read_user'],
 
-  clientId: process.env.OAUTH_GITLAB_CLIENT_ID || '',
-  clientSecret: process.env.OAUTH_GITLAB_CLIENT_SECRET || undefined,
+  get clientId() { return process.env.OAUTH_GITLAB_CLIENT_ID || ''; },
+  get clientSecret() { return process.env.OAUTH_GITLAB_CLIENT_SECRET || undefined; },
 
   /**
    * Parse GitLab's token endpoint response into a partial TokenSet.

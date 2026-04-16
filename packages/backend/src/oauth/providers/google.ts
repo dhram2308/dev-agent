@@ -32,8 +32,8 @@ const google: ProviderAdapter = {
     'email',
   ],
 
-  clientId: process.env.OAUTH_GOOGLE_CLIENT_ID || '',
-  clientSecret: process.env.OAUTH_GOOGLE_CLIENT_SECRET || undefined,
+  get clientId() { return process.env.OAUTH_GOOGLE_CLIENT_ID || ''; },
+  get clientSecret() { return process.env.OAUTH_GOOGLE_CLIENT_SECRET || undefined; },
 
   extraAuthorizeParams: {
     access_type: 'offline',

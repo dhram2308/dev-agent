@@ -109,8 +109,8 @@ const figma: ProviderAdapter = {
     'current_user:read',
   ],
 
-  clientId: process.env.OAUTH_FIGMA_CLIENT_ID || '',
-  clientSecret: process.env.OAUTH_FIGMA_CLIENT_SECRET || '',
+  get clientId() { return process.env.OAUTH_FIGMA_CLIENT_ID || ''; },
+  get clientSecret() { return process.env.OAUTH_FIGMA_CLIENT_SECRET || ''; },
 
   /**
    * Parse Figma's token endpoint response into a partial TokenSet.
