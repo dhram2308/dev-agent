@@ -60,7 +60,8 @@ Object.defineProperty(exports, "isShuttingDown", { enumerable: true, get: functi
 // are created in createHandlerRegistry() and used in the pipeline loop.
 // =====================================================================
 const stageStub = (name) => async (_state) => {
-    (0, logger_1.logWarn)(`Stage "${name}" handler is a stub -- not yet wired with dependencies`);
+    throw new Error(`Stage "${name}" handler is a stub -- not yet wired with dependencies. ` +
+        `Pass deps to runPipeline() or use createHandlerRegistry().`);
 };
 // =====================================================================
 // Stage Handler Registry

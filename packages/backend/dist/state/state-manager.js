@@ -676,6 +676,8 @@ function save(state, opts) {
     const secret = stateSecret();
     const envelope = wrapEnvelope(state, secret);
     atomicWriteSync(stateFilePath, envelope);
+    // Sync in-memory seq with what was written to disk (wrapEnvelope bumps +1)
+    state._seq = envelope._seq;
     // Update in-memory cache
     _currentState = state;
 }
@@ -712,6 +714,8 @@ async function saveAsync(state, opts) {
     const secret = stateSecret();
     const envelope = wrapEnvelope(state, secret);
     await atomicWriteAsync(stateFilePath, envelope);
+    // Sync in-memory seq with what was written to disk (wrapEnvelope bumps +1)
+    state._seq = envelope._seq;
     _currentState = state;
 }
 // ── UI Approval Check ─────────────────────────────────────────────

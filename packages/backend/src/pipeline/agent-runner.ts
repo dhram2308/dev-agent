@@ -94,7 +94,10 @@ export { isShuttingDown } from '../lib/graceful-shutdown';
 
 const stageStub = (name: StageName): StageHandler =>
   async (_state: PipelineState): Promise<void> => {
-    logWarn(`Stage "${name}" handler is a stub -- not yet wired with dependencies`);
+    throw new Error(
+      `Stage "${name}" handler is a stub -- not yet wired with dependencies. ` +
+      `Pass deps to runPipeline() or use createHandlerRegistry().`
+    );
   };
 
 // =====================================================================

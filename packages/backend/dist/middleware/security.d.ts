@@ -73,6 +73,8 @@ export interface SchemaFieldRule {
     min?: number;
     max?: number;
     trim?: boolean;
+    /** Restricts a string field to a fixed set of values (enum-style). */
+    allowed?: readonly string[];
 }
 /** Schema definition (field name -> rules) */
 export type SchemaDefinition = Record<string, SchemaFieldRule>;

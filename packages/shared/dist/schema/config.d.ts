@@ -101,9 +101,9 @@ export declare const freshConfigSchema: z.ZodObject<{
     CI_POLL: z.ZodDefault<z.ZodNumber>;
     LOG_LEVEL: z.ZodDefault<z.ZodEnum<{
         error: "error";
+        info: "info";
         trace: "trace";
         debug: "debug";
-        info: "info";
         warn: "warn";
     }>>;
     LOG_FORMAT: z.ZodDefault<z.ZodEnum<{
@@ -217,9 +217,9 @@ export declare const configSchema: z.ZodObject<{
         CI_POLL: z.ZodDefault<z.ZodNumber>;
         LOG_LEVEL: z.ZodDefault<z.ZodEnum<{
             error: "error";
+            info: "info";
             trace: "trace";
             debug: "debug";
-            info: "info";
             warn: "warn";
         }>>;
         LOG_FORMAT: z.ZodDefault<z.ZodEnum<{
@@ -331,9 +331,9 @@ export declare const flatConfigSchema: z.ZodObject<{
     CI_POLL: z.ZodDefault<z.ZodNumber>;
     LOG_LEVEL: z.ZodDefault<z.ZodEnum<{
         error: "error";
+        info: "info";
         trace: "trace";
         debug: "debug";
-        info: "info";
         warn: "warn";
     }>>;
     LOG_FORMAT: z.ZodDefault<z.ZodEnum<{
@@ -446,7 +446,7 @@ export declare function validateConfig(data: unknown): z.ZodSafeParseResult<{
         MAX_STATE_SIZE: number;
         POLL_INTERVAL: number;
         CI_POLL: number;
-        LOG_LEVEL: "error" | "trace" | "debug" | "info" | "warn";
+        LOG_LEVEL: "error" | "info" | "trace" | "debug" | "warn";
         LOG_FORMAT: "text" | "json";
         QA_SMOKE_LEVEL: "basic" | "full" | "none";
         TEST_ARTIFACTS_DIR: string;
@@ -547,7 +547,7 @@ export declare function validateFreshConfig(data: unknown): z.ZodSafeParseResult
     MAX_STATE_SIZE: number;
     POLL_INTERVAL: number;
     CI_POLL: number;
-    LOG_LEVEL: "error" | "trace" | "debug" | "info" | "warn";
+    LOG_LEVEL: "error" | "info" | "trace" | "debug" | "warn";
     LOG_FORMAT: "text" | "json";
     QA_SMOKE_LEVEL: "basic" | "full" | "none";
     TEST_ARTIFACTS_DIR: string;
@@ -635,7 +635,7 @@ export declare function validateFlatConfig(data: unknown): z.ZodSafeParseResult<
     MAX_STATE_SIZE: number;
     POLL_INTERVAL: number;
     CI_POLL: number;
-    LOG_LEVEL: "error" | "trace" | "debug" | "info" | "warn";
+    LOG_LEVEL: "error" | "info" | "trace" | "debug" | "warn";
     LOG_FORMAT: "text" | "json";
     QA_SMOKE_LEVEL: "basic" | "full" | "none";
     TEST_ARTIFACTS_DIR: string;

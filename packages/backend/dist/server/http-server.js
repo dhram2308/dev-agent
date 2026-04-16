@@ -70,12 +70,7 @@ try {
     securityMiddleware = require('../../lib/security').securityMiddleware || null;
 }
 catch {
-    try {
-        securityMiddleware = require('../../../../lib/security').securityMiddleware || null;
-    }
-    catch {
-        securityMiddleware = null;
-    }
+    securityMiddleware = null;
 }
 let agentProcess = null;
 try {
@@ -83,12 +78,26 @@ try {
     agentProcess = require('./agent-process');
 }
 catch {
-    // Fall back to legacy CommonJS module (server/agent-process.js)
     try {
-        agentProcess = require('../../../../server/agent-process');
+        // Fall back to compiled agent package (packages/agent/dist/server/agent-process.js)
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        agentProcess = require('../../../agent/dist/server/agent-process');
     }
     catch {
         agentProcess = null;
+    }
+}
+// Bug fix: inject the backend's SSE module into the agent-process wrapper
+// so the child agent's addLog/broadcast/clearTicketLogs calls reach the UI.
+// Without this, agent-process falls back to its own packages/agent/dist/server/sse.js
+// instance which has zero connected clients.
+if (agentProcess && typeof agentProcess.setSseModule === 'function') {
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        agentProcess.setSseModule(require('./sse'));
+    }
+    catch (e) {
+        console.warn('[http-server] Failed to inject SSE module into agent-process:', e.message);
     }
 }
 let localRepo = null;
@@ -96,12 +105,7 @@ try {
     localRepo = require('../../lib/local-repo');
 }
 catch {
-    try {
-        localRepo = require('../../../../lib/local-repo');
-    }
-    catch {
-        localRepo = null;
-    }
+    localRepo = null;
 }
 // ── Configuration ────────────────────────────────────────────────
 /** M6: Auth token for POST endpoints */
@@ -110,8 +114,9 @@ exports.API_TOKEN = API_TOKEN;
 /** Server port */
 const PORT = parseInt(process.env.PORT || '3000', 10) || 3000;
 exports.PORT = PORT;
-/** Server bind host */
-const BIND_HOST = process.env.BIND_HOST || '127.0.0.1';
+/** Server bind host -- loopback-only by default for OAuth redirect compliance.
+ *  Set HTTP_BIND_HOST=0.0.0.0 when running behind a reverse-proxy. */
+const BIND_HOST = process.env.HTTP_BIND_HOST || '127.0.0.1';
 exports.BIND_HOST = BIND_HOST;
 /** Base directory for the project */
 const BASE_DIR = path.join(__dirname, '..', '..', '..', '..');
@@ -196,6 +201,21 @@ function startServer() {
         });
         // Wire agent procs getter into SSE for status broadcasts
         (0, sse_1.setAgentProcsGetter)(agentProcess.getAgentProcs);
+        // [OAuth Resume] Wire agent-process auth-waiting functions into OAuth routes
+        // so the OAuth callback can auto-resume paused pipelines after re-auth.
+        if (agentProcess.getAuthWaitingTickets && agentProcess.clearAuthTimeout) {
+            try {
+                const { setOAuthAgentHandlers } = require('../oauth/routes');
+                setOAuthAgentHandlers({
+                    getAuthWaitingTickets: agentProcess.getAuthWaitingTickets,
+                    startAgent: agentProcess.startAgent,
+                    clearAuthTimeout: agentProcess.clearAuthTimeout,
+                });
+            }
+            catch (e) {
+                console.warn('[http-server] Failed to wire OAuth resume handlers:', e.message);
+            }
+        }
     }
     // ── Create HTTP Server ─────────────────────────────────────────
     server = http.createServer(async (request, res) => {
@@ -259,6 +279,51 @@ function startServer() {
         }
         throw err;
     });
+    // [Config Hot-Reload] Start config watcher for SSE broadcasts
+    try {
+        const { startConfigWatcher } = require('./config-watcher');
+        startConfigWatcher();
+    }
+    catch (e) {
+        console.warn('[http-server] Config watcher not available:', e.message);
+    }
+    // ── State Poll: broadcast state changes via SSE ─────────────────
+    // Every 5 seconds, read active pipeline states and emit SSE `state`
+    // events when the stage OR data._seq changes. This ensures the
+    // frontend receives sub-stage checkpoint updates (e.g. _dev_complete,
+    // _reviewed) within long-running stages like generate_code.
+    const _stageCache = {};
+    const _seqCache = {};
+    if (agentProcess) {
+        const statePollTimer = setInterval(() => {
+            try {
+                const procs = agentProcess.getAgentProcs();
+                for (const ticket of Object.keys(procs)) {
+                    const state = (0, state_manager_1.readForDisplay)(ticket);
+                    if (!state)
+                        continue;
+                    const stateData = (state.data ?? {});
+                    const seq = state._seq;
+                    const stageChanged = state.stage !== _stageCache[ticket];
+                    const seqChanged = seq !== undefined && seq !== _seqCache[ticket];
+                    if (stageChanged || seqChanged) {
+                        _stageCache[ticket] = state.stage;
+                        if (seq !== undefined)
+                            _seqCache[ticket] = seq;
+                        (0, sse_1.broadcastStateChange)(ticket, state.stage, stateData, seq);
+                    }
+                }
+            }
+            catch {
+                // Non-fatal: state files may not exist yet
+            }
+        }, 5_000);
+        statePollTimer.unref();
+        // Clean cache when agent processes are removed
+        (0, graceful_shutdown_1.onShutdown)('state-poll-cleanup', async () => {
+            clearInterval(statePollTimer);
+        });
+    }
     // ── Listen ─────────────────────────────────────────────────────
     server.listen(PORT, BIND_HOST, () => {
         console.log(`\n  AI Dev Agent UI -> http://${BIND_HOST}:${PORT}\n`);

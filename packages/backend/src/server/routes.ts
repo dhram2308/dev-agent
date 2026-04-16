@@ -129,12 +129,41 @@ try {
   getSlackHealth = require('../../lib/slack').getSlackHealth || null;
 } catch { getSlackHealth = null; }
 
+// Config schema: for /api/config endpoints (source: packages/agent/dist/lib/config-schema.js)
+let CONFIG_SCHEMA: Record<string, {
+  env: string; type: string; default?: unknown; required?: boolean;
+  sensitive?: boolean; group?: string; description?: string;
+  hotReload?: boolean; allowed?: unknown;
+}> = {};
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  CONFIG_SCHEMA = require('../../../agent/dist/lib/config-schema').CONFIG_SCHEMA || {};
+} catch { CONFIG_SCHEMA = {}; }
+
+// Notification config: for /api/notification-config endpoints
+let loadNotificationConfig: () => Record<string, unknown> = () => ({});
+let saveNotificationConfig: (config: Record<string, unknown>) => void = () => { /* noop */ };
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const nc = require('../../../agent/dist/lib/notification-config');
+  if (nc.loadNotificationConfig) loadNotificationConfig = nc.loadNotificationConfig;
+  if (nc.saveNotificationConfig) saveNotificationConfig = nc.saveNotificationConfig;
+} catch { /* keep noop fallbacks */ }
+
 // ── Configuration ───────────────────────────────────────────────
 
 const BASE_DIR = path.join(__dirname, '..', '..', '..', '..');
 
 /** O7: Stage skip requires env var opt-in */
 const ALLOW_STAGE_SKIP = process.env.ALLOW_STAGE_SKIP === 'true';
+
+// ── OAuth routes (optional -- may not exist in all envs) ────────
+
+let handleOAuthRoute: ((url: URL, request: IncomingMessage, res: ServerResponse, apiToken: string) => Promise<boolean>) | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  handleOAuthRoute = require('../oauth/routes').handleOAuthRoute || null;
+} catch { handleOAuthRoute = null; }
 
 // ── Rate Limiting (in-memory per-IP) ────────────────────────────
 
@@ -353,6 +382,12 @@ export async function handleRequest(
   apiToken: string,
   html?: string,
 ): Promise<boolean> {
+
+  // OAuth routes: handle before auth check (callback has no auth)
+  if (handleOAuthRoute && (url.pathname.startsWith('/oauth/') || url.pathname.startsWith('/api/oauth/'))) {
+    const handled = await handleOAuthRoute(url, request, res, apiToken);
+    if (handled) return true;
+  }
 
   // S12: Rate limiting for API routes
   if (url.pathname.startsWith('/api/')) {
@@ -801,19 +836,58 @@ export async function handleRequest(
   }
 
   // -- POST /api/comments --
+  // Accepts two shapes:
+  //   1. Full blob:   { ticket, comments: Record<string, unknown> }
+  //   2. Single add:  { ticket, file, line, body, parentId? }   (the new UI sends this)
   if (url.pathname === '/api/comments' && request.method === 'POST') {
     try {
       const rawComments = await parseBody(request, getBodySizeLimit('/api/comments'));
-      const { ticket, comments } = sanitizeBody('/api/comments', rawComments) as {
-        ticket?: string; comments?: Record<string, unknown>;
+      const parsed = sanitizeBody('/api/comments', rawComments) as {
+        ticket?: string;
+        comments?: Record<string, unknown>;
+        file?: string;
+        line?: number;
+        body?: string;
+        parentId?: string;
       };
-      const t = safeTicket(ticket);
+      const t = safeTicket(parsed.ticket);
       if (!t) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end('{"error":"Invalid ticket"}');
         return true;
       }
-      const ok = await saveReviewComments(t, comments || {});
+
+      let ok: boolean;
+      if (parsed.comments && typeof parsed.comments === 'object') {
+        // Shape 1: full blob replaces the persisted comments.
+        ok = await saveReviewComments(t, parsed.comments);
+      } else if (
+        typeof parsed.file === 'string' &&
+        typeof parsed.line === 'number' &&
+        typeof parsed.body === 'string' &&
+        parsed.body.length > 0
+      ) {
+        // Shape 2: append a single comment into the existing blob.
+        const existing = await getReviewComments(t);
+        const key = `${parsed.file}:${parsed.line}`;
+        const list = Array.isArray(existing[key]) ? (existing[key] as unknown[]) : [];
+        const entry = {
+          id: `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          file: parsed.file,
+          line: parsed.line,
+          body: parsed.body,
+          author: 'reviewer',
+          timestamp: Date.now(),
+          parentId: parsed.parentId,
+        };
+        const next: Record<string, unknown> = { ...existing, [key]: [...list, entry] };
+        ok = await saveReviewComments(t, next);
+      } else {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end('{"error":"Invalid payload: expected {comments} or {file,line,body}"}');
+        return true;
+      }
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok }));
     } catch (e: unknown) {
@@ -1247,6 +1321,289 @@ export async function handleRequest(
       const msg = e instanceof Error ? e.message : String(e);
       const status = msg.includes('no state file') ? 404 : 400;
       res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: msg }));
+    }
+    return true;
+  }
+
+  // ── GET /api/config — Return all config vars with values (secrets masked) ──
+  if (url.pathname === '/api/config' && request.method === 'GET') {
+    const items: unknown[] = [];
+    for (const [key, schema] of Object.entries(CONFIG_SCHEMA)) {
+      const rawValue = process.env[schema.env];
+      let value = rawValue !== undefined
+        ? rawValue
+        : (schema.default !== undefined ? String(schema.default) : '');
+      if (schema.sensitive && rawValue) {
+        value = rawValue.length > 4 ? '****' + rawValue.slice(-4) : '****';
+      }
+      items.push({
+        key,
+        env: schema.env,
+        type: schema.type,
+        value,
+        default: schema.default !== undefined ? String(schema.default) : '',
+        required: !!schema.required,
+        sensitive: !!schema.sensitive,
+        group: schema.group || '',
+        description: schema.description || '',
+        hotReload: !!schema.hotReload,
+        allowed: schema.allowed || null,
+      });
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, items }));
+    return true;
+  }
+
+  // ── POST /api/config/save — Save env var changes to .env file atomically ──
+  if (url.pathname === '/api/config/save' && request.method === 'POST') {
+    try {
+      const raw = await parseBody(request, getBodySizeLimit('/api/config/save'));
+      const { values } = sanitizeBody('/api/config/save', raw) as { values?: Record<string, string> };
+      if (!values || typeof values !== 'object') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'values object is required' }));
+        return true;
+      }
+      const envPath = path.join(BASE_DIR, '.env');
+      let envContent = '';
+      try { envContent = fs.readFileSync(envPath, 'utf8'); } catch { /* no .env yet */ }
+      const lines = envContent.split('\n');
+      const existingKeys = new Set<string>();
+      const updatedLines: string[] = [];
+      for (const line of lines) {
+        const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)/);
+        if (match) {
+          const envKey = match[1];
+          existingKeys.add(envKey);
+          if (envKey in values && !values[envKey].startsWith('****')) {
+            updatedLines.push(`${envKey}=${values[envKey]}`);
+            process.env[envKey] = values[envKey];
+          } else {
+            updatedLines.push(line);
+          }
+        } else {
+          updatedLines.push(line);
+        }
+      }
+      for (const [envKey, envVal] of Object.entries(values)) {
+        if (envVal.startsWith('****')) continue;
+        if (!existingKeys.has(envKey)) {
+          updatedLines.push(`${envKey}=${envVal}`);
+          process.env[envKey] = envVal;
+        }
+      }
+      const tmpPath = envPath + '.' + Date.now() + '.tmp';
+      fs.writeFileSync(tmpPath, updatedLines.join('\n'), 'utf8');
+      fs.renameSync(tmpPath, envPath);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: true,
+        saved: Object.keys(values).filter((k) => !values[k].startsWith('****')).length,
+      }));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: msg }));
+    }
+    return true;
+  }
+
+  // ── POST /api/config/test — Test service connectivity ──
+  if (url.pathname === '/api/config/test' && request.method === 'POST') {
+    try {
+      const raw = await parseBody(request, getBodySizeLimit('/api/config/test'));
+      const { service } = sanitizeBody('/api/config/test', raw) as { service?: string };
+      const allowed = [
+        'jira', 'gitlab', 'slack',
+        'gdrive', 'figma', 'postman',
+        'claude', 'anthropic', 'browser',
+      ];
+      if (!service || !allowed.includes(service)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: `service must be one of: ${allowed.join(', ')}` }));
+        return true;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const https = require('https');
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const http = require('http');
+      type TestResult = { ok: boolean; message?: string; error?: string };
+      let result: TestResult = { ok: false, error: 'not implemented' };
+
+      if (service === 'jira') {
+        const jiraBase = (process.env.JIRA_BASE_URL || 'https://mastersindia-sols.atlassian.net').replace(/\/+$/, '');
+        const jiraEmail = process.env.JIRA_EMAIL;
+        const jiraToken = process.env.JIRA_TOKEN;
+        if (!jiraEmail || !jiraToken) {
+          result = { ok: false, error: 'JIRA_EMAIL and JIRA_TOKEN must be set' };
+        } else {
+          const testUrl = new URL(jiraBase + '/rest/api/3/myself');
+          const proto = testUrl.protocol === 'https:' ? https : http;
+          const authHeader = 'Basic ' + Buffer.from(`${jiraEmail}:${jiraToken}`).toString('base64');
+          result = await new Promise<TestResult>((resolve) => {
+            const req = proto.get(testUrl.href, {
+              headers: { Authorization: authHeader, Accept: 'application/json' },
+              timeout: 10000,
+            }, (resp: { statusCode: number; on: (ev: string, cb: (data?: unknown) => void) => void }) => {
+              let body = '';
+              resp.on('data', (c: unknown) => { body += c; });
+              resp.on('end', () => {
+                if (resp.statusCode >= 200 && resp.statusCode < 300) {
+                  try {
+                    const j = JSON.parse(body);
+                    resolve({ ok: true, message: `Connected as ${j.displayName || j.emailAddress || 'OK'}` });
+                  } catch {
+                    resolve({ ok: true, message: 'Connected (status ' + resp.statusCode + ')' });
+                  }
+                } else {
+                  resolve({ ok: false, error: `HTTP ${resp.statusCode}: ${body.slice(0, 200)}` });
+                }
+              });
+            });
+            req.on('error', (e: Error) => resolve({ ok: false, error: e.message }));
+            req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'Connection timed out' }); });
+          });
+        }
+      } else if (service === 'gitlab') {
+        const gitlabUrl = (process.env.GITLAB_URL || 'http://10.200.11.32').replace(/\/+$/, '');
+        const gitlabToken = process.env.GITLAB_TOKEN;
+        const gitlabProjectId = process.env.GITLAB_PROJECT_ID;
+        if (!gitlabToken || !gitlabProjectId) {
+          result = { ok: false, error: 'GITLAB_TOKEN and GITLAB_PROJECT_ID must be set' };
+        } else {
+          const testUrl = new URL(`${gitlabUrl}/api/v4/projects/${gitlabProjectId}`);
+          const proto = testUrl.protocol === 'https:' ? https : http;
+          result = await new Promise<TestResult>((resolve) => {
+            const req = proto.get(testUrl.href, {
+              headers: { 'PRIVATE-TOKEN': gitlabToken, Accept: 'application/json' },
+              timeout: 10000,
+            }, (resp: { statusCode: number; on: (ev: string, cb: (data?: unknown) => void) => void }) => {
+              let body = '';
+              resp.on('data', (c: unknown) => { body += c; });
+              resp.on('end', () => {
+                if (resp.statusCode >= 200 && resp.statusCode < 300) {
+                  try {
+                    const j = JSON.parse(body);
+                    resolve({ ok: true, message: `Connected to project: ${j.name_with_namespace || j.name || 'OK'}` });
+                  } catch {
+                    resolve({ ok: true, message: 'Connected (status ' + resp.statusCode + ')' });
+                  }
+                } else {
+                  resolve({ ok: false, error: `HTTP ${resp.statusCode}: ${body.slice(0, 200)}` });
+                }
+              });
+            });
+            req.on('error', (e: Error) => resolve({ ok: false, error: e.message }));
+            req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'Connection timed out' }); });
+          });
+        }
+      } else if (service === 'slack') {
+        const webhookUrl = process.env.SLACK_WEBHOOK;
+        if (!webhookUrl) {
+          result = { ok: false, error: 'SLACK_WEBHOOK must be set' };
+        } else {
+          const payload = JSON.stringify({ text: '[MI Dev Agent] Connectivity test — this message confirms Slack integration is working.' });
+          const testUrl = new URL(webhookUrl);
+          const proto = testUrl.protocol === 'https:' ? https : http;
+          result = await new Promise<TestResult>((resolve) => {
+            const req = proto.request(testUrl.href, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+              timeout: 10000,
+            }, (resp: { statusCode: number; on: (ev: string, cb: (data?: unknown) => void) => void }) => {
+              let body = '';
+              resp.on('data', (c: unknown) => { body += c; });
+              resp.on('end', () => {
+                if (resp.statusCode >= 200 && resp.statusCode < 300) {
+                  resolve({ ok: true, message: 'Slack webhook responded OK — test message sent' });
+                } else if (resp.statusCode === 302 || resp.statusCode === 301) {
+                  resolve({ ok: false, error: 'Webhook returned redirect — the URL is likely expired or revoked. Generate a new webhook in Slack.' });
+                } else {
+                  resolve({ ok: false, error: `HTTP ${resp.statusCode}: ${body.slice(0, 200)}` });
+                }
+              });
+            });
+            req.on('error', (e: Error) => resolve({ ok: false, error: e.message }));
+            req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'Connection timed out' }); });
+            req.write(payload);
+            req.end();
+          });
+        }
+      } else if (service === 'claude') {
+        // Claude CLI is a local binary -- no network call. Report OK if the
+        // model override or an API fallback is configured.
+        const model = process.env.CLAUDE_MODEL;
+        const apiKey = process.env.ANTHROPIC_API_KEY;
+        if (model) {
+          result = { ok: true, message: `Claude model configured: ${model}` };
+        } else if (apiKey) {
+          result = { ok: true, message: 'Claude CLI + Anthropic API fallback configured' };
+        } else {
+          result = { ok: false, error: 'Neither CLAUDE_MODEL nor ANTHROPIC_API_KEY is set' };
+        }
+      } else if (service === 'anthropic') {
+        const apiKey = process.env.ANTHROPIC_API_KEY;
+        if (!apiKey) {
+          result = { ok: false, error: 'ANTHROPIC_API_KEY must be set' };
+        } else {
+          result = { ok: true, message: 'Anthropic API key configured (not validated against API to avoid charges)' };
+        }
+      } else if (service === 'browser') {
+        const browser = process.env.PLAYWRIGHT_BROWSER || 'chromium';
+        const validBrowsers = ['chromium', 'firefox', 'webkit'];
+        if (!validBrowsers.includes(browser)) {
+          result = { ok: false, error: `PLAYWRIGHT_BROWSER must be one of: ${validBrowsers.join(', ')}` };
+        } else {
+          result = { ok: true, message: `Playwright configured: ${browser}` };
+        }
+      } else {
+        // gdrive / figma / postman — load agent lib via relative require
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const lib = require(`../../../agent/dist/lib/${service}`);
+          result = await lib.testConnection();
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
+          result = { ok: false, error: `${service} connector unavailable: ${msg}` };
+        }
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: msg }));
+    }
+    return true;
+  }
+
+  // ── GET /api/notification-config — Return current notification config ──
+  if (url.pathname === '/api/notification-config' && request.method === 'GET') {
+    const config = loadNotificationConfig();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, config }));
+    return true;
+  }
+
+  // ── POST /api/notification-config — Save notification config ──
+  if (url.pathname === '/api/notification-config' && request.method === 'POST') {
+    try {
+      const raw = await parseBody(request, getBodySizeLimit('/api/notification-config'));
+      const { config } = sanitizeBody('/api/notification-config', raw) as { config?: Record<string, unknown> };
+      if (!config || typeof config !== 'object') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'config object is required' }));
+        return true;
+      }
+      saveNotificationConfig(config);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: false, error: msg }));
     }
     return true;

@@ -574,8 +574,15 @@ async function stageExplorePlan(state, deps) {
                 return stageExplorePlan(state, deps);
             }
         }
-        // Check Jira comments
-        const comments = await jira.getComments(TICKET, data.explore_plan_at);
+        // Check Jira comments (non-fatal -- Web UI is the primary approval path)
+        let comments = [];
+        try {
+            comments = await jira.getComments(TICKET, data.explore_plan_at);
+        }
+        catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            (0, logger_1.logWarn)(`Jira comment poll failed (non-fatal): ${msg}`);
+        }
         for (const c of comments) {
             const text = adfText(c.body).toLowerCase().trim();
             const rawText = adfText(c.body).trim();

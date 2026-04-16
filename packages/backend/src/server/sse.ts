@@ -578,6 +578,21 @@ export function setAgentProcsGetter(fn: AgentProcsGetter): void {
   _agentProcsGetter = fn;
 }
 
+// ── State Change Broadcast ───────────────────────────────────────
+
+/**
+ * Broadcast a pipeline state change to all SSE clients.
+ * Called by the http-server state poller when a ticket's stage changes.
+ */
+export function broadcastStateChange(
+  ticket: string,
+  stage: string,
+  data: Record<string, unknown>,
+  seq?: number,
+): void {
+  broadcast('state', { ticket, stage, data, _seq: seq });
+}
+
 // ── Pipeline Dashboard: Broadcast ───────────────────────────────
 
 /**

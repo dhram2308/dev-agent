@@ -49,14 +49,16 @@ COPY package.json package-lock.json* ./
 
 # Copy all package sources
 COPY packages/shared/ packages/shared/
+COPY packages/agent/ packages/agent/
 COPY packages/backend/ packages/backend/
 COPY packages/frontend/ packages/frontend/
 
 # Install all workspace dependencies
-RUN npm ci --workspace=packages/shared --workspace=packages/backend --workspace=packages/frontend
+RUN npm ci --workspace=packages/shared --workspace=packages/agent --workspace=packages/backend --workspace=packages/frontend
 
-# Build in dependency order: shared -> frontend & backend
+# Build in dependency order: shared -> agent -> frontend & backend
 RUN npm run build -w packages/shared
+RUN npm run build -w packages/agent
 RUN npm run build -w packages/frontend
 RUN npm run build -w packages/backend
 
@@ -77,17 +79,19 @@ COPY --from=rust-builder /native-out/ packages/native/
 # Copy compiled TypeScript/JS from Node build
 COPY --from=node-builder /build/packages/backend/dist/ packages/backend/dist/
 COPY --from=node-builder /build/packages/shared/dist/ packages/shared/dist/
+COPY --from=node-builder /build/packages/agent/dist/ packages/agent/dist/
 COPY --from=node-builder /build/packages/frontend/dist/ packages/frontend/dist/
 
 # Copy package.json files for Node module resolution
 COPY --from=node-builder /build/package.json ./
 COPY --from=node-builder /build/packages/backend/package.json packages/backend/
 COPY --from=node-builder /build/packages/shared/package.json packages/shared/
+COPY --from=node-builder /build/packages/agent/package.json packages/agent/
 COPY --from=node-builder /build/packages/frontend/package.json packages/frontend/
 
 # Install production-only dependencies
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev --workspace=packages/backend --workspace=packages/shared 2>/dev/null || true
+RUN npm ci --omit=dev --workspace=packages/backend --workspace=packages/shared --workspace=packages/agent 2>/dev/null || true
 
 # Copy entrypoint
 COPY docker-entrypoint.sh /usr/local/bin/

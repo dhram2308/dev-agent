@@ -10,7 +10,35 @@ import {
   useGroupedPipelines,
   stageIndex,
 } from '../store/pipeline';
+import { useNavigationStore, type AppView } from '../store/navigation';
 import { STAGE_INFO, type StageName, type PipelineSummary } from '../types';
+
+// ── View navigation config ────────────────────────────────────
+
+interface ViewNavItem {
+  view: AppView;
+  label: string;
+  /** SVG path for the icon (16x16 viewBox) */
+  iconPath: string;
+}
+
+const VIEW_NAV_ITEMS: ViewNavItem[] = [
+  {
+    view: 'dashboard',
+    label: 'Dashboard',
+    iconPath: 'M2 2h5v6H2V2zm7 0h5v4H9V2zM2 10h5v4H2v-4zm7-2h5v6H9V8z',
+  },
+  {
+    view: 'settings',
+    label: 'Settings',
+    iconPath: 'M8 10a2 2 0 100-4 2 2 0 000 4zm6.32-1.9l1.12.65a.5.5 0 01.18.68l-1 1.73a.5.5 0 01-.68.18l-1.12-.65a4.97 4.97 0 01-1.32.76v1.3a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-1.3a4.97 4.97 0 01-1.32-.76l-1.12.65a.5.5 0 01-.68-.18l-1-1.73a.5.5 0 01.18-.68l1.12-.65a5.03 5.03 0 010-1.52L4.54 5.93a.5.5 0 01-.18-.68l1-1.73a.5.5 0 01.68-.18l1.12.65a4.97 4.97 0 011.32-.76V1.93a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v1.3c.48.18.92.44 1.32.76l1.12-.65a.5.5 0 01.68.18l1 1.73a.5.5 0 01-.18.68l-1.12.65a5.03 5.03 0 010 1.52z',
+  },
+  {
+    view: 'review',
+    label: 'Review',
+    iconPath: 'M8 1C4.13 1 1 4.13 1 8s3.13 7 7 7 7-3.13 7-7-3.13-7-7-7zm3.22 5.28l-3.5 3.5a.75.75 0 01-1.06 0l-1.5-1.5a.75.75 0 111.06-1.06L7.22 8.22l2.97-2.97a.75.75 0 111.06 1.06z',
+  },
+];
 
 // ── Styles ─────────────────────────────────────────────────────
 
@@ -209,6 +237,38 @@ const styles = {
     fontSize: 11,
     color: 'var(--text-tertiary)',
   },
+  viewNav: {
+    padding: 'var(--sp-3) var(--sp-2)',
+    borderBottom: '1px solid var(--border-subtle)',
+  },
+  viewNavItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--sp-3)',
+    padding: 'var(--sp-2) var(--sp-3)',
+    borderRadius: 'var(--radius-sm)',
+    cursor: 'pointer',
+    transition: 'all 150ms var(--ease-smooth)',
+    border: 'none',
+    background: 'transparent',
+    width: '100%',
+    textAlign: 'left' as const,
+    fontFamily: 'var(--font-sans)',
+    fontSize: 13,
+    color: 'var(--text-secondary)',
+    marginBottom: 1,
+  },
+  viewNavItemActive: {
+    background: 'var(--accent-muted)',
+    color: 'var(--text-primary)',
+    fontWeight: 600,
+  },
+  viewNavIcon: {
+    width: 16,
+    height: 16,
+    flexShrink: 0,
+    opacity: 0.7,
+  },
 } as const;
 
 // ── Pipeline status dot styles ──────────────────────────────────
@@ -286,6 +346,8 @@ export function Sidebar(): JSX.Element {
   const startAgent = usePipelineStore((s) => s.startAgent);
   const sseConnected = usePipelineStore((s) => s.sseConnected);
   const grouped = useGroupedPipelines();
+  const currentView = useNavigationStore((s) => s.currentView);
+  const setView = useNavigationStore((s) => s.setView);
 
   const [addTicketValue, setAddTicketValue] = useState('');
 
@@ -297,11 +359,14 @@ export function Sidebar(): JSX.Element {
 
   const handlePipelineClick = useCallback((ticket: string) => {
     setActiveTicket(ticket);
-    // Ensure ticket exists in tickets map
     const store = usePipelineStore.getState();
+    // Ensure ticket exists in tickets map
     if (!store.tickets.has(ticket)) {
       store.addTicket(ticket);
     }
+    // Immediately fetch full state from backend so stage, data, and
+    // gate status populate without waiting for SSE or the 30s poll
+    store.fetchTicketState(ticket);
   }, [setActiveTicket]);
 
   const handleAddTicket = useCallback((e: React.FormEvent) => {
@@ -336,6 +401,35 @@ export function Sidebar(): JSX.Element {
           <div style={styles.headerTitle}>AI Dev Agent</div>
           <div style={styles.headerSub}>Pipeline Automation</div>
         </div>
+      </div>
+
+      {/* View Navigation */}
+      <div style={styles.viewNav}>
+        {VIEW_NAV_ITEMS.map((item) => {
+          const isActive = currentView === item.view;
+          return (
+            <button
+              key={item.view}
+              style={{
+                ...styles.viewNavItem,
+                ...(isActive ? styles.viewNavItemActive : {}),
+              }}
+              onClick={() => setView(item.view)}
+              aria-current={isActive ? 'page' : undefined}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                style={styles.viewNavIcon}
+              >
+                <path d={item.iconPath} />
+              </svg>
+              <span style={styles.label}>{item.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Pipeline list */}

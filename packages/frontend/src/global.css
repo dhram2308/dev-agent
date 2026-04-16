@@ -178,3 +178,7 @@ body::after {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+@keyframes btnSpin {
+  to { transform: rotate(360deg); }
+}

@@ -1,0 +1,297 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+// ===================================================================
+// MI Dev Agent -- Inline Comment Component
+// Displays existing comments and provides a comment form for new ones
+// ===================================================================
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { useReviewStore } from '../../store/review';
+import { usePipelineStore } from '../../store/pipeline';
+import * as api from '../../lib/api';
+// -- Styles ---------------------------------------------------------
+const styles = {
+    container: {
+        background: 'var(--bg-surface)',
+        borderTop: '1px solid var(--border-subtle)',
+        borderBottom: '1px solid var(--border-subtle)',
+        padding: 'var(--sp-3) var(--sp-4)',
+        animation: 'fadeIn 0.2s ease-out',
+    },
+    commentDisplay: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--sp-1)',
+    },
+    commentHeader: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--sp-2)',
+        fontSize: 11,
+    },
+    author: {
+        fontWeight: 600,
+        color: 'var(--text-primary)',
+    },
+    timestamp: {
+        color: 'var(--text-ghost)',
+        fontSize: 10,
+    },
+    pendingBadge: {
+        fontSize: 9,
+        fontWeight: 600,
+        padding: '1px 5px',
+        borderRadius: 'var(--radius-full)',
+        background: 'var(--warning-muted)',
+        color: 'var(--warning)',
+    },
+    commentBody: {
+        fontSize: 12,
+        color: 'var(--text-secondary)',
+        lineHeight: 1.6,
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+        fontFamily: 'var(--font-sans)',
+    },
+    deleteBtn: {
+        fontSize: 10,
+        color: 'var(--text-ghost)',
+        cursor: 'pointer',
+        border: 'none',
+        background: 'transparent',
+        padding: '0 4px',
+        fontFamily: 'var(--font-sans)',
+        transition: 'color 0.15s',
+    },
+    replyBtn: {
+        fontSize: 10,
+        color: 'var(--text-ghost)',
+        cursor: 'pointer',
+        border: 'none',
+        background: 'transparent',
+        padding: '0 4px',
+        fontFamily: 'var(--font-sans)',
+        transition: 'color 0.15s',
+        marginLeft: 'auto',
+    },
+    replyStack: {
+        marginTop: 'var(--sp-2)',
+        paddingLeft: 'var(--sp-4)',
+        borderLeft: '2px solid var(--border-subtle)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--sp-2)',
+    },
+    // Edit form styles
+    form: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--sp-2)',
+    },
+    formLabel: {
+        fontSize: 11,
+        fontWeight: 600,
+        color: 'var(--text-tertiary)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--sp-1)',
+    },
+    textarea: {
+        width: '100%',
+        minHeight: 60,
+        maxHeight: 200,
+        background: 'var(--bg-elevated)',
+        border: '1px solid var(--border-default)',
+        borderRadius: 'var(--radius-sm)',
+        padding: 'var(--sp-2) var(--sp-3)',
+        color: 'var(--text-primary)',
+        fontFamily: 'var(--font-sans)',
+        fontSize: 12,
+        lineHeight: 1.5,
+        resize: 'vertical',
+        outline: 'none',
+        transition: 'border-color 0.2s',
+    },
+    formActions: {
+        display: 'flex',
+        gap: 'var(--sp-2)',
+        justifyContent: 'flex-end',
+    },
+    btnCancel: {
+        padding: '4px 12px',
+        borderRadius: 'var(--radius-sm)',
+        fontSize: 11,
+        fontWeight: 600,
+        cursor: 'pointer',
+        background: 'var(--bg-elevated)',
+        color: 'var(--text-tertiary)',
+        border: '1px solid var(--border-default)',
+        fontFamily: 'var(--font-sans)',
+        transition: 'all 0.15s',
+    },
+    btnSubmit: {
+        padding: '4px 12px',
+        borderRadius: 'var(--radius-sm)',
+        fontSize: 11,
+        fontWeight: 600,
+        cursor: 'pointer',
+        background: 'var(--accent)',
+        color: '#fff',
+        border: 'none',
+        fontFamily: 'var(--font-sans)',
+        transition: 'all 0.15s',
+    },
+    btnDisabled: {
+        opacity: 0.4,
+        cursor: 'not-allowed',
+    },
+};
+// -- Helpers --------------------------------------------------------
+function formatTime(ts) {
+    const d = new Date(ts);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1)
+        return 'just now';
+    if (diffMin < 60)
+        return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24)
+        return `${diffHr}h ago`;
+    return d.toLocaleDateString();
+}
+// -- Component ------------------------------------------------------
+export function InlineComment(props) {
+    // Display mode: show existing comment
+    if (props.comment) {
+        return _jsx(CommentDisplay, { comment: props.comment });
+    }
+    // Edit mode: comment form
+    return (_jsx(CommentForm, { file: props.file, line: props.line, parentId: props.parentId }));
+}
+// -- Comment Display ------------------------------------------------
+function CommentDisplay({ comment, }) {
+    const removeComment = useReviewStore((s) => s.removeComment);
+    // Pull all comments for this file:line so we can find replies to this comment.
+    // We intentionally avoid a new selector to keep the store surface small.
+    const allForLine = useReviewStore((s) => {
+        const key = `${comment.file}:${comment.line}`;
+        return s.comments.get(key) ?? [];
+    });
+    const replies = allForLine
+        .filter((c) => c.parentId === comment.id)
+        .sort((a, b) => a.timestamp - b.timestamp);
+    const [replying, setReplying] = useState(false);
+    return (_jsxs("div", { style: styles.container, children: [_jsxs("div", { style: styles.commentDisplay, children: [_jsxs("div", { style: styles.commentHeader, children: [_jsx("span", { style: styles.author, children: comment.author }), _jsx("span", { style: styles.timestamp, children: formatTime(comment.timestamp) }), comment.pending && (_jsx("span", { style: styles.pendingBadge, children: "pending" })), _jsx("button", { style: styles.replyBtn, onClick: () => setReplying((v) => !v), title: replying ? 'Cancel reply' : 'Reply to comment', "aria-label": replying ? 'Cancel reply' : 'Reply to comment', onMouseEnter: (e) => {
+                                    e.target.style.color = 'var(--accent)';
+                                }, onMouseLeave: (e) => {
+                                    e.target.style.color = 'var(--text-ghost)';
+                                }, children: replying ? 'Cancel' : 'Reply' }), _jsx("button", { style: styles.deleteBtn, onClick: () => removeComment(comment.id), title: "Delete comment", "aria-label": "Delete comment", onMouseEnter: (e) => {
+                                    e.target.style.color = 'var(--danger)';
+                                }, onMouseLeave: (e) => {
+                                    e.target.style.color = 'var(--text-ghost)';
+                                }, children: "x" })] }), _jsx("div", { style: styles.commentBody, children: comment.body })] }), (replies.length > 0 || replying) && (_jsxs("div", { style: styles.replyStack, children: [replies.map((r) => (_jsx(CommentDisplay, { comment: r }, r.id))), replying && (_jsx(CommentForm, { file: comment.file, line: comment.line, parentId: comment.id, onDone: () => setReplying(false) }))] }))] }));
+}
+// -- Comment Form ---------------------------------------------------
+function draftKey(ticket, file, line, parentId) {
+    return `comment_draft_${ticket ?? 'no-ticket'}_${file}_${line}_${parentId ?? 'root'}`;
+}
+function CommentForm({ file, line, parentId, onDone, }) {
+    const addComment = useReviewStore((s) => s.addComment);
+    const setCommentingOn = useReviewStore((s) => s.setCommentingOn);
+    const activeTicket = usePipelineStore((s) => s.activeTicket);
+    const textareaRef = useRef(null);
+    // Restore any previously-saved draft for this ticket/file/line (/parent for replies)
+    const [body, setBody] = useState(() => {
+        try {
+            return localStorage.getItem(draftKey(activeTicket, file, line, parentId)) ?? '';
+        }
+        catch {
+            return '';
+        }
+    });
+    const [submitting, setSubmitting] = useState(false);
+    // Auto-focus the textarea
+    useEffect(() => {
+        textareaRef.current?.focus();
+    }, []);
+    // Persist draft to localStorage on every change (cleared on submit/cancel)
+    useEffect(() => {
+        try {
+            const key = draftKey(activeTicket, file, line, parentId);
+            if (body.length > 0) {
+                localStorage.setItem(key, body);
+            }
+            else {
+                localStorage.removeItem(key);
+            }
+        }
+        catch {
+            // localStorage may be unavailable (private mode / quota) — fail silently
+        }
+    }, [body, activeTicket, file, line, parentId]);
+    const clearDraft = useCallback(() => {
+        try {
+            localStorage.removeItem(draftKey(activeTicket, file, line, parentId));
+        }
+        catch {
+            // ignore
+        }
+    }, [activeTicket, file, line, parentId]);
+    const handleSubmit = useCallback(async () => {
+        const text = body.trim();
+        if (!text)
+            return;
+        setSubmitting(true);
+        // Add to local store immediately (optimistic)
+        const comment = {
+            id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            file,
+            line,
+            body: text,
+            author: 'You',
+            timestamp: Date.now(),
+            pending: true,
+            parentId,
+        };
+        addComment(comment);
+        setBody('');
+        clearDraft();
+        // Submit to API if ticket is available
+        if (activeTicket) {
+            try {
+                await api.submitComment(activeTicket, file, line, text, parentId);
+            }
+            catch {
+                // Comment is already added locally, just ignore API errors
+            }
+        }
+        setSubmitting(false);
+        // Close the reply form on successful submit (root forms use setCommentingOn below)
+        onDone?.();
+    }, [body, file, line, addComment, activeTicket, clearDraft, parentId, onDone]);
+    const handleCancel = useCallback(() => {
+        clearDraft();
+        if (onDone) {
+            onDone();
+        }
+        else {
+            setCommentingOn(null);
+        }
+    }, [setCommentingOn, clearDraft, onDone]);
+    const handleKeyDown = useCallback((e) => {
+        // Cmd/Ctrl + Enter to submit
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            e.preventDefault();
+            handleSubmit();
+        }
+        // Escape to cancel
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            handleCancel();
+        }
+    }, [handleSubmit, handleCancel]);
+    return (_jsx("div", { style: styles.container, children: _jsxs("div", { style: styles.form, children: [_jsxs("div", { style: styles.formLabel, children: [_jsx("svg", { width: "12", height: "12", viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: "1.5", children: _jsx("path", { d: "M2 3h12v8H5l-3 3V3z", strokeLinejoin: "round" }) }), parentId ? 'Reply' : `Comment on line ${line}`] }), _jsx("textarea", { ref: textareaRef, value: body, onChange: (e) => setBody(e.target.value), onKeyDown: handleKeyDown, placeholder: "Write a comment... (Ctrl+Enter to submit, Esc to cancel)", style: styles.textarea, disabled: submitting, "aria-label": `Write comment for line ${line}` }), _jsxs("div", { style: styles.formActions, children: [_jsx("button", { style: styles.btnCancel, onClick: handleCancel, disabled: submitting, children: "Cancel" }), _jsx("button", { style: {
+                                ...styles.btnSubmit,
+                                ...(!body.trim() || submitting ? styles.btnDisabled : {}),
+                            }, onClick: handleSubmit, disabled: !body.trim() || submitting, children: submitting ? 'Posting...' : 'Comment' })] })] }) }));
+}

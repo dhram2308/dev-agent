@@ -3,8 +3,12 @@
 // Shows approval/reject dialogs when pipeline is waiting at a gate
 // ═══════════════════════════════════════════════════════════════
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { usePipelineStore, useActiveTicketState } from '../store/pipeline';
+import { useReviewStore } from '../store/review';
+import { useToast } from '../contexts/ToastContext';
+import { RejectForm } from './approval/RejectForm';
+import { RefineForm } from './approval/RefineForm';
 import type { StageName, PipelineData } from '../types';
 
 // ── Styles ─────────────────────────────────────────────────────
@@ -296,13 +300,14 @@ export function GateApproval(): JSX.Element | null {
   const activeTicket = usePipelineStore((s) => s.activeTicket);
   const approveGateAction = usePipelineStore((s) => s.approveGate);
   const rejectGateAction = usePipelineStore((s) => s.rejectGate);
+  const refineGateAction = usePipelineStore((s) => s.refineGate);
+
+  const { addToast } = useToast();
 
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [showRefineForm, setShowRefineForm] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
-  const [refineInstructions, setRefineInstructions] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [confirmDialog, setConfirmDialog] = useState<'approve' | 'reject' | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<'approve' | null>(null);
 
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -321,31 +326,37 @@ export function GateApproval(): JSX.Element | null {
     setSubmitting(true);
     try {
       await approveGateAction(activeTicket, gateWaiting);
+      addToast(`${config.title} approved — pipeline proceeding`, 'success');
+    } catch {
+      addToast('Approval failed — please try again', 'error');
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Handle reject
-  const handleReject = async (): Promise<void> => {
-    setConfirmDialog(null);
+  // Handle reject (from RejectForm component)
+  const handleReject = async (reason: string): Promise<void> => {
     setSubmitting(true);
     try {
-      await rejectGateAction(activeTicket, gateWaiting, rejectReason);
-      setRejectReason('');
+      await rejectGateAction(activeTicket, gateWaiting, reason);
       setShowRejectForm(false);
+      addToast('Rejection submitted — agent will address feedback', 'warn');
+    } catch {
+      addToast('Rejection failed — please try again', 'error');
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Handle refine (reject with instructions for re-planning)
-  const handleRefine = async (): Promise<void> => {
+  // Handle refine (from RefineForm component)
+  const handleRefine = async (instructions: string): Promise<void> => {
     setSubmitting(true);
     try {
-      await rejectGateAction(activeTicket, gateWaiting, `[REFINE] ${refineInstructions}`);
-      setRefineInstructions('');
+      await refineGateAction(activeTicket, gateWaiting, instructions);
       setShowRefineForm(false);
+      addToast('Refinement submitted — agent will revise plan', 'info');
+    } catch {
+      addToast('Refinement failed — please try again', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -435,12 +446,8 @@ export function GateApproval(): JSX.Element | null {
           <button
             style={{ ...styles.btnReject, ...(submitting ? styles.disabled : {}) }}
             onClick={() => {
-              if (showRejectForm) {
-                setConfirmDialog('reject');
-              } else {
-                setShowRejectForm(true);
-                setShowRefineForm(false);
-              }
+              setShowRejectForm(!showRejectForm);
+              setShowRefineForm(false);
             }}
             disabled={submitting}
             aria-label={config.rejectLabel}
@@ -465,72 +472,35 @@ export function GateApproval(): JSX.Element | null {
 
         {/* Reject feedback form */}
         {showRejectForm && (
-          <div style={styles.feedbackArea}>
-            <textarea
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Describe what needs to change..."
-              style={styles.textarea}
-              aria-label="Rejection feedback"
-            />
-            <button
-              onClick={() => setConfirmDialog('reject')}
-              disabled={!rejectReason.trim() || submitting}
-              style={{
-                ...styles.submitBtn,
-                background: rejectReason.trim() ? 'var(--danger)' : 'var(--bg-elevated)',
-                color: rejectReason.trim() ? '#fff' : 'var(--text-tertiary)',
-                cursor: rejectReason.trim() && !submitting ? 'pointer' : 'not-allowed',
-              }}
-              aria-label="Submit rejection feedback"
-            >
-              Submit Rejection
-            </button>
-          </div>
+          <RejectForm
+            onSubmit={handleReject}
+            onCancel={() => setShowRejectForm(false)}
+            submitting={submitting}
+          />
         )}
 
         {/* Refine feedback form */}
         {showRefineForm && (
-          <div style={styles.feedbackArea}>
-            <textarea
-              value={refineInstructions}
-              onChange={(e) => setRefineInstructions(e.target.value)}
-              placeholder="e.g., dive deeper into API integration, add error handling specs, explore the existing reconcile module for patterns..."
-              style={styles.textarea}
-              aria-label="Refinement instructions"
-            />
-            <button
-              onClick={handleRefine}
-              disabled={!refineInstructions.trim() || submitting}
-              style={{
-                ...styles.submitBtn,
-                background: refineInstructions.trim() ? 'var(--accent)' : 'var(--bg-elevated)',
-                color: refineInstructions.trim() ? '#fff' : 'var(--text-tertiary)',
-                cursor: refineInstructions.trim() && !submitting ? 'pointer' : 'not-allowed',
-              }}
-              aria-label="Submit refinement instructions"
-            >
-              Submit Refinement
-            </button>
-          </div>
+          <RefineForm
+            onSubmit={handleRefine}
+            onCancel={() => setShowRefineForm(false)}
+            submitting={submitting}
+          />
         )}
       </div>
 
-      {/* Confirmation dialog */}
-      {confirmDialog && (
+      {/* Confirmation dialog (approve only) */}
+      {confirmDialog === 'approve' && (
         <div
           style={styles.dialogOverlay}
           onClick={(e) => { if (e.target === e.currentTarget) setConfirmDialog(null); }}
         >
           <div ref={dialogRef} style={styles.dialogBox} role="alertdialog" aria-labelledby="confirm-title" aria-describedby="confirm-msg">
             <h3 id="confirm-title" style={styles.dialogTitle}>
-              {confirmDialog === 'approve' ? 'Confirm Approval' : 'Confirm Rejection'}
+              Confirm Approval
             </h3>
             <p id="confirm-msg" style={styles.dialogMsg}>
-              {confirmDialog === 'approve'
-                ? `Are you sure you want to approve ${config.title.toLowerCase()}? The pipeline will proceed to the next stage.`
-                : `Are you sure you want to reject? ${rejectReason ? 'Your feedback will be sent to the agent for correction.' : ''}`
-              }
+              Are you sure you want to approve {config.title.toLowerCase()}? The pipeline will proceed to the next stage.
             </p>
             <div style={styles.dialogActions}>
               <button
@@ -542,12 +512,12 @@ export function GateApproval(): JSX.Element | null {
               <button
                 style={{
                   ...styles.dialogConfirm,
-                  background: confirmDialog === 'approve' ? 'var(--success)' : 'var(--danger)',
+                  background: 'var(--success)',
                   color: '#fff',
                 }}
-                onClick={confirmDialog === 'approve' ? handleApprove : handleReject}
+                onClick={handleApprove}
               >
-                {confirmDialog === 'approve' ? 'Approve' : 'Reject'}
+                Approve
               </button>
             </div>
           </div>

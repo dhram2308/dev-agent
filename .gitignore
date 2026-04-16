@@ -1,5 +1,24 @@
 node_modules/
 .env
 .repo-cache/
-state-*.json
 /.idea/
+
+# Runtime state & logs
+state-*.json
+state-*.json.bak
+state-*.lock
+agent-*.log
+.api-token
+.state-secret
+
+# Build outputs
+packages/*/dist/
+packages/frontend/dist/
+packages/native/target/
+.cargo/
+dist/
+
+# OS/editor junk
+.DS_Store
+*.swp
+*~

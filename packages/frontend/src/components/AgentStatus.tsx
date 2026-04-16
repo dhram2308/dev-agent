@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { usePipelineStore, useActiveTicketState, useIsStuck, stageIndex } from '../store/pipeline';
 import { STAGE_ORDER, STAGE_INFO } from '../types';
+import { AgentActivityBar } from './AgentActivityBar';
 
 // ── Timer hook ─────────────────────────────────────────────────
 
@@ -306,6 +307,9 @@ export function AgentStatus(): JSX.Element | null {
           );
         })}
       </div>
+
+      {/* Live agent activity (pulsing dot + one-line status) */}
+      <AgentActivityBar />
 
       {/* Stage pills grid */}
       <div style={styles.stageGrid} role="tablist" aria-label="Pipeline stages">

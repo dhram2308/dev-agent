@@ -26,6 +26,7 @@ vi.mock('../src/store/pipeline', () => ({
 }));
 
 import { GateApproval } from '../src/components/GateApproval';
+import { ToastProvider } from '../src/contexts/ToastContext';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -49,7 +50,11 @@ function makeTicketState(overrides: Partial<PipelineTicketState> = {}): Pipeline
 }
 
 function renderApproval() {
-  return render(<GateApproval />);
+  return render(
+    <ToastProvider>
+      <GateApproval />
+    </ToastProvider>
+  );
 }
 
 // ── Tests ──────────────────────────────────────────────────────────
@@ -165,7 +170,7 @@ describe('GateApproval', () => {
       expect(windowConfirmSpy).not.toHaveBeenCalled();
     });
 
-    it('shows confirm dialog for rejection after entering feedback', () => {
+    it('submits rejection directly via RejectForm without confirm dialog', async () => {
       mockTicketState = makeTicketState({ gateWaiting: 'gate_code_review' });
 
       renderApproval();
@@ -177,12 +182,16 @@ describe('GateApproval', () => {
       const textarea = screen.getByLabelText('Rejection feedback');
       fireEvent.change(textarea, { target: { value: 'Fix the null check' } });
 
-      // Click submit rejection
-      fireEvent.click(screen.getByLabelText('Submit rejection feedback'));
+      // Click submit rejection — calls rejectGate directly (no confirm step)
+      fireEvent.click(screen.getByLabelText('Submit rejection'));
 
-      // Confirm dialog should appear
-      expect(screen.getByRole('alertdialog')).toBeDefined();
-      expect(screen.getByText('Confirm Rejection')).toBeDefined();
+      await waitFor(() => {
+        expect(mockRejectGate).toHaveBeenCalledWith(
+          'AUT-123',
+          'gate_code_review',
+          'Fix the null check',
+        );
+      });
     });
 
     it('cancel button on confirm dialog closes it without action', () => {
@@ -229,7 +238,7 @@ describe('GateApproval', () => {
   // ── Reject action ──────────────────────────────────────────
 
   describe('reject action', () => {
-    it('calls rejectGate with feedback when confirmed', async () => {
+    it('calls rejectGate with feedback when submitted', async () => {
       mockTicketState = makeTicketState({ gateWaiting: 'gate_code_review' });
 
       renderApproval();
@@ -241,11 +250,8 @@ describe('GateApproval', () => {
       const textarea = screen.getByLabelText('Rejection feedback');
       fireEvent.change(textarea, { target: { value: 'Missing error handling' } });
 
-      // Submit -> confirm dialog
-      fireEvent.click(screen.getByLabelText('Submit rejection feedback'));
-
-      // Confirm rejection
-      fireEvent.click(screen.getByText('Reject'));
+      // Submit (no confirm dialog for reject anymore)
+      fireEvent.click(screen.getByLabelText('Submit rejection'));
 
       await waitFor(() => {
         expect(mockRejectGate).toHaveBeenCalledTimes(1);
@@ -266,7 +272,7 @@ describe('GateApproval', () => {
       fireEvent.click(screen.getByLabelText('Request Changes'));
 
       // Submit button should be disabled with empty feedback
-      const submitBtn = screen.getByLabelText('Submit rejection feedback');
+      const submitBtn = screen.getByLabelText('Submit rejection');
       expect(submitBtn).toBeDisabled();
     });
   });
@@ -294,7 +300,7 @@ describe('GateApproval', () => {
       fireEvent.change(textarea, { target: { value: 'Add error handling specs' } });
 
       // Submit refinement (direct call, no confirm dialog for refine)
-      fireEvent.click(screen.getByLabelText('Submit refinement instructions'));
+      fireEvent.click(screen.getByLabelText('Submit refinement'));
 
       await waitFor(() => {
         expect(mockRejectGate).toHaveBeenCalledTimes(1);

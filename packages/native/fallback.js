@@ -458,15 +458,291 @@ class StringCircularBuffer {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// SseEvent (JS implementation)
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Matches the Rust SseEvent napi(object) struct:
+//   { id: u32, eventType: string, data: string, timestamp: f64 }
+//
+// In JS this is a simple class that mirrors the Rust struct fields.
+// The napi(object) attribute exports Rust structs as plain JS objects,
+// so this class provides the same shape with a convenient constructor.
+
+class SseEvent {
+  /**
+   * @param {number} id - Monotonic event ID
+   * @param {string} eventType - SSE event type (e.g., "log", "status")
+   * @param {string} data - JSON-serialized event data
+   * @param {number} timestamp - Timestamp in ms since epoch (Date.now())
+   */
+  constructor(id, eventType, data, timestamp) {
+    this.id = id;
+    this.eventType = eventType;
+    this.data = data;
+    this.timestamp = timestamp;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Typed Circular Buffer (JS implementation)
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Matches the Rust TypedCircularBuffer API:
+//   - new TypedCircularBuffer(capacity)
+//   - push(event: SseEvent)
+//   - replay(sinceId: number) -> SseEvent[]
+//   - toArray() -> SseEvent[]
+//   - len() -> number
+//   - clear()
+//
+// Stores SseEvent objects in a fixed-size ring buffer with head/tail
+// pointers for O(1) push. Supports replay-from-ID for SSE reconnection.
+
+class TypedCircularBuffer {
+  /**
+   * @param {number} capacity - Maximum number of events
+   */
+  constructor(capacity) {
+    this._capacity = Math.max(1, capacity);
+    this._buf = new Array(this._capacity);
+    this._head = 0;
+    this._tail = 0;
+    this._count = 0;
+  }
+
+  /**
+   * Push an SseEvent into the buffer. Overwrites oldest if full. O(1).
+   * @param {{ id: number, eventType: string, data: string, timestamp: number }} event
+   */
+  push(event) {
+    this._buf[this._tail] = event;
+    this._tail = (this._tail + 1) % this._capacity;
+
+    if (this._count < this._capacity) {
+      this._count++;
+    } else {
+      // Full -> oldest overwritten, advance head
+      this._head = (this._head + 1) % this._capacity;
+    }
+  }
+
+  /**
+   * Replay all events with ID strictly greater than sinceId.
+   * Returns events in chronological order (oldest to newest).
+   *
+   * @param {number} sinceId - Replay events after this ID
+   * @returns {Array<{ id: number, eventType: string, data: string, timestamp: number }>}
+   */
+  replay(sinceId) {
+    const result = [];
+    for (let i = 0; i < this._count; i++) {
+      const idx = (this._head + i) % this._capacity;
+      const event = this._buf[idx];
+      if (event && event.id > sinceId) {
+        result.push(event);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Return all events as an array, ordered oldest to newest.
+   * @returns {Array<{ id: number, eventType: string, data: string, timestamp: number }>}
+   */
+  toArray() {
+    const result = [];
+    for (let i = 0; i < this._count; i++) {
+      const idx = (this._head + i) % this._capacity;
+      if (this._buf[idx]) {
+        result.push(this._buf[idx]);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Number of events currently stored.
+   * @returns {number}
+   */
+  len() {
+    return this._count;
+  }
+
+  /**
+   * Clear all events.
+   */
+  clear() {
+    this._buf = new Array(this._capacity);
+    this._head = 0;
+    this._tail = 0;
+    this._count = 0;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Client Registry (JS implementation)
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Matches the Rust ClientRegistry API:
+//   - new ClientRegistry()
+//   - addClient(id, connectedAt, lastEventId)
+//   - removeClient(id) -> boolean
+//   - getClientCount() -> number
+//   - getClients() -> ClientInfo[]
+//   - hasClient(id) -> boolean
+//   - updateLastEventId(id, lastEventId)
+//   - clear()
+//
+// Uses a Map for O(1) add/remove/lookup by client ID.
+
+class ClientRegistry {
+  constructor() {
+    /** @type {Map<string, { id: string, connectedAt: number, lastEventId: number }>} */
+    this._clients = new Map();
+  }
+
+  /**
+   * Register a new client. Replaces existing client with same ID.
+   *
+   * @param {string} id - Unique client identifier
+   * @param {number} connectedAt - Connection timestamp (Date.now())
+   * @param {number} lastEventId - Last event ID sent to this client
+   */
+  addClient(id, connectedAt, lastEventId) {
+    this._clients.set(id, { id, connectedAt, lastEventId });
+  }
+
+  /**
+   * Remove a client by ID.
+   * @param {string} id
+   * @returns {boolean} true if found and removed
+   */
+  removeClient(id) {
+    return this._clients.delete(id);
+  }
+
+  /**
+   * Get the number of connected clients.
+   * @returns {number}
+   */
+  getClientCount() {
+    return this._clients.size;
+  }
+
+  /**
+   * Get all connected clients as an array.
+   * @returns {Array<{ id: string, connectedAt: number, lastEventId: number }>}
+   */
+  getClients() {
+    return Array.from(this._clients.values());
+  }
+
+  /**
+   * Check if a client with the given ID is registered.
+   * @param {string} id
+   * @returns {boolean}
+   */
+  hasClient(id) {
+    return this._clients.has(id);
+  }
+
+  /**
+   * Update the last event ID for a client.
+   * @param {string} id
+   * @param {number} lastEventId
+   * @returns {boolean} true if found and updated
+   */
+  updateLastEventId(id, lastEventId) {
+    const client = this._clients.get(id);
+    if (client) {
+      client.lastEventId = lastEventId;
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Clear all clients from the registry.
+   */
+  clear() {
+    this._clients.clear();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Atomic ID Counter (JS implementation)
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Matches the Rust next_id() / reset_id_counter() API.
+// Uses a module-scoped counter. Not truly atomic (single-threaded JS),
+// but matches the Rust behavior for the Node.js main thread.
+
+let _nextIdCounter = 1;
+
+/**
+ * Get the next monotonic message ID.
+ * Thread-safe in Rust (AtomicU64); single-threaded safe in JS.
+ *
+ * @returns {number} The next ID (wraps at 2^32 for u32 compat)
+ */
+function nextId() {
+  const id = _nextIdCounter;
+  _nextIdCounter = (_nextIdCounter + 1) >>> 0; // unsigned 32-bit wrap
+  if (_nextIdCounter === 0) _nextIdCounter = 1; // skip 0 after wrap
+  return id;
+}
+
+/**
+ * Reset the ID counter to 1. For testing only.
+ */
+function resetIdCounter() {
+  _nextIdCounter = 1;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SSE Frame Formatter (JS implementation)
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Matches the Rust format_sse_frame() API.
+// Returns a Buffer (like Rust returns Vec<u8> / napi Buffer).
+
+/**
+ * Format an SSE wire-protocol frame as a Buffer.
+ *
+ * Produces: "id: {id}\nevent: {event}\ndata: {data}\n\n"
+ *
+ * @param {number} id - Message ID
+ * @param {string} event - SSE event name
+ * @param {string} data - JSON-serialized data
+ * @returns {Buffer} Formatted SSE frame as bytes
+ */
+function formatSseFrame(id, event, data) {
+  return Buffer.from(`id: ${id}\nevent: ${event}\ndata: ${data}\n\n`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Exports
 // ═══════════════════════════════════════════════════════════════════════
 
 module.exports = {
+  // State engine
   computeHmac,
   verifyHmac,
   atomicWriteSync,
   acquireFileLock,
   releaseFileLock,
+
+  // HTTP engine
   CircuitBreaker,
+
+  // SSE engine — legacy
   StringCircularBuffer,
+
+  // SSE engine — new typed exports
+  SseEvent,
+  TypedCircularBuffer,
+  ClientRegistry,
+  nextId,
+  resetIdCounter,
+  formatSseFrame,
 };

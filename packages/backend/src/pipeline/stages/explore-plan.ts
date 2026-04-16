@@ -756,8 +756,14 @@ export async function stageExplorePlan(
       }
     }
 
-    // Check Jira comments
-    const comments = await jira.getComments(TICKET, data.explore_plan_at as string);
+    // Check Jira comments (non-fatal -- Web UI is the primary approval path)
+    let comments: Array<{ body: unknown; created: string }> = [];
+    try {
+      comments = await jira.getComments(TICKET, data.explore_plan_at as string);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logWarn(`Jira comment poll failed (non-fatal): ${msg}`);
+    }
     for (const c of comments) {
       const text = adfText(c.body).toLowerCase().trim();
       const rawText = adfText(c.body).trim();

@@ -99,6 +99,7 @@ function createTestQaHandler(deps) {
             }
             // Test each module
             for (const m of envCfg.modules) {
+                let moduleResult;
                 try {
                     const headers = sessionCookie ? { Cookie: sessionCookie } : {};
                     const r = await (0, client_1.req)(`${envCfg.url}${m.path}`, { method: 'GET', headers });
@@ -114,7 +115,7 @@ function createTestQaHandler(deps) {
                             (0, logger_1.logWarn)(`[${envName}] ${m.name}: HTTP ${r.status} but DOM check failed`);
                         }
                     }
-                    results.push({ ...m, env: envName, status: r.status, ok });
+                    moduleResult = { ...m, env: envName, status: r.status, ok };
                     (ok ? logger_1.logOk : logger_1.logErr)(`[${envName}] ${m.name}: HTTP ${r.status}`);
                 }
                 catch (e) {
@@ -122,8 +123,20 @@ function createTestQaHandler(deps) {
                     const isNetworkError = NETWORK_ERROR_CODES.has(err.code || '');
                     const errorType = isNetworkError ? 'ENV_DOWN' : 'TEST_FAIL';
                     const errMsg = err.message || String(e);
-                    results.push({ ...m, env: envName, status: 0, ok: false, error: errMsg, errorType });
+                    moduleResult = { ...m, env: envName, status: 0, ok: false, error: errMsg, errorType };
                     (0, logger_1.logErr)(`[${envName}] ${m.name}: ${errMsg} [${errorType}]`);
+                }
+                results.push(moduleResult);
+                // Incremental state save so the UI can render live progress pills.
+                // Both parallel streams append into the same qa_test array (keyed by env+name on read).
+                const existing = data.qa_test ?? [];
+                data.qa_test = [...existing, moduleResult];
+                try {
+                    (0, state_manager_1.save)(state);
+                }
+                catch (saveErr) {
+                    const saveMsg = saveErr instanceof Error ? saveErr.message : String(saveErr);
+                    (0, logger_1.logWarn)(`[test-qa] incremental save failed: ${saveMsg}`);
                 }
             }
             (0, logger_1.logInfo)(`[${envName}] Logout`);

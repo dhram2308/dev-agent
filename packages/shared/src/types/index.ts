@@ -92,6 +92,14 @@ export interface PipelineData {
   _ui_approve_gate?: string;
   _ui_approve_preprod?: string;
   _ui_approve_dual?: string;
+  /** OAuth: provider that caused an auth failure (exit-78 path) */
+  _authFailure?: { provider: string; ts: number; reason?: string };
+  /** OAuth: per-provider respawn count within this pipeline run */
+  _authRespawnCount?: Record<string, number>;
+  /** OAuth: set to true when pipeline is paused waiting for re-auth */
+  _authPaused?: boolean;
+  /** OAuth: stage the pipeline was on when auth pause started */
+  _authPausedAtStage?: string;
   [key: string]: unknown;
 }
 
@@ -252,6 +260,7 @@ export interface AppConfig {
     base: string;
     token: string;
     projectId: number;
+    authMode?: 'oauth' | 'pat';
   };
   slack: {
     token?: string;
@@ -286,3 +295,25 @@ export interface AppConfig {
     maxConcurrentAgents: number;
   };
 }
+
+// ── Domain type modules (Section 2: Jira, GitLab, ADF, etc.) ──
+export * from './jira';
+export * from './gitlab';
+export * from './adf';
+export * from './tickets';
+export * from './codegen';
+export * from './http';
+export * from './state';
+
+// ── Domain type modules (Section 3: Process, SSE, Connectors, etc.) ──
+export * from './process';
+export * from './sse';
+export * from './connectors';
+export * from './slack';
+export * from './approval';
+export * from './review';
+export * from './diff';
+export * from './logging';
+export * from './metrics';
+export * from './notifications';
+export * from './qa';

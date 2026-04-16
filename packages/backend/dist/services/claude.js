@@ -1,9 +1,9 @@
 "use strict";
 // =====================================================================
-// MI Dev Agent -- Claude Service (Anthropic API)
+// MI Dev Agent -- Claude Service (Anthropic API + CLI fallback)
 // =====================================================================
-// Direct replacement for lib/claude.js which used `claude -p` CLI.
-// Now uses the Anthropic Messages API over HTTPS.
+// Primary: Anthropic Messages API over HTTPS (requires ANTHROPIC_API_KEY).
+// Fallback: ClaudeCLIService wraps `claude -p` CLI (browser auth, no key).
 //
 // Features:
 //   - POST to https://api.anthropic.com/v1/messages
@@ -15,10 +15,12 @@
 //   - Heartbeat callback during long operations
 //   - Prompt size validation and logging
 //   - Output size limits (2MB stdout, 1MB stderr)
+//   - ClaudeCLIService: spawns `claude -p` for browser-authenticated usage
 // =====================================================================
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ClaudeService = void 0;
+exports.ClaudeCLIService = exports.ClaudeService = void 0;
 exports.createClaudeCaller = createClaudeCaller;
+const child_process_1 = require("child_process");
 const logger_1 = require("../lib/logger");
 const utils_1 = require("../lib/utils");
 const tool_executor_1 = require("../agents/tool-executor");
@@ -347,4 +349,135 @@ function createClaudeCaller(req, defaults) {
         return service.callClaude(prompt, timeoutMs, mergedOpts);
     };
 }
+// =====================================================================
+// ClaudeCLIService -- Fallback using `claude -p` CLI (browser auth)
+// =====================================================================
+// Used when ANTHROPIC_API_KEY is not set. Spawns the Claude Code CLI
+// which authenticates via browser login (no API key needed).
+//
+// Implements the same callClaude(prompt, timeout, opts) interface as
+// ClaudeService so it can be used as a drop-in replacement.
+// =====================================================================
+class ClaudeCLIService {
+    model;
+    constructor(opts) {
+        this.model = opts?.model || process.env.CLAUDE_MODEL || undefined;
+        (0, logger_1.logInfo)('[ClaudeCLI] Using `claude -p` CLI (browser auth, no API key)');
+    }
+    /**
+     * Call Claude via the `claude -p` CLI.
+     * Compatible with ClaudeService.callClaude() interface.
+     */
+    async callClaude(prompt, timeoutMs = 180_000, opts = {}) {
+        const agentName = opts.agentName || 'Claude';
+        const maxTurns = String(opts.maxTurns ?? 4);
+        const validated = (0, utils_1.validatePromptSize)(prompt, agentName);
+        const args = ['-p', '--output-format', 'text', '--max-turns', maxTurns];
+        if (this.model)
+            args.push('--model', this.model);
+        const allowedTools = opts.allowedTools;
+        if (allowedTools) {
+            args.push('--allowedTools', allowedTools.join(','));
+        }
+        // Whitelist env vars for the subprocess
+        const ALLOWED_ENV = [
+            'PATH', 'HOME', 'USER', 'SHELL', 'TERM', 'LANG', 'LC_ALL',
+            'NODE_PATH', 'NODE_OPTIONS', 'TMPDIR', 'XDG_CONFIG_HOME',
+            'XDG_DATA_HOME', 'ANTHROPIC_API_KEY', 'CLAUDE_MODEL',
+            'npm_config_prefix',
+        ];
+        const cleanEnv = {};
+        for (const k of ALLOWED_ENV) {
+            if (process.env[k])
+                cleanEnv[k] = process.env[k];
+        }
+        const spawnOpts = {
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: cleanEnv,
+        };
+        if (opts.projectDir)
+            spawnOpts.cwd = opts.projectDir;
+        (0, logger_1.logInfo)(`[${agentName}] CLI spawn: claude ${args.slice(0, 6).join(' ')}... ` +
+            `(prompt=${validated.length} chars, timeout=${timeoutMs / 1000}s)`);
+        return new Promise((resolve, reject) => {
+            const proc = (0, child_process_1.spawn)('claude', args, spawnOpts);
+            let stdout = '';
+            let stderr = '';
+            let done = false;
+            const startTs = Date.now();
+            // Timeout guard
+            const timer = setTimeout(() => {
+                if (!done) {
+                    done = true;
+                    try {
+                        proc.kill('SIGTERM');
+                    }
+                    catch { /* swallow */ }
+                    setTimeout(() => {
+                        try {
+                            proc.kill('SIGKILL');
+                        }
+                        catch { /* swallow */ }
+                    }, 5_000);
+                    reject(new Error(`[${agentName}] Claude CLI timed out after ${timeoutMs / 1000}s`));
+                }
+            }, timeoutMs);
+            // Heartbeat logging
+            const heartbeat = setInterval(() => {
+                const elapsed = Math.round((Date.now() - startTs) / 1000);
+                const mins = Math.floor(elapsed / 60);
+                const secs = elapsed % 60;
+                (0, logger_1.logInfo)(`[${agentName}] Still running... ${mins}m ${secs}s ` +
+                    `(stdout: ${stdout.length} chars)`);
+            }, 30_000);
+            proc.stdout?.on('data', (chunk) => {
+                stdout += chunk.toString();
+            });
+            proc.stderr?.on('data', (chunk) => {
+                stderr += chunk.toString();
+                // Log errors as they come
+                const line = chunk.toString().trim();
+                if (line)
+                    (0, logger_1.logDebug)(`[${agentName}] stderr: ${line.substring(0, 200)}`);
+            });
+            proc.on('close', (code) => {
+                clearTimeout(timer);
+                clearInterval(heartbeat);
+                if (done)
+                    return;
+                done = true;
+                const elapsed = ((Date.now() - startTs) / 1000).toFixed(1);
+                if (code === 0 && stdout.trim()) {
+                    (0, logger_1.logOk)(`[${agentName}] Done in ${elapsed}s ` +
+                        `(${stdout.length} chars output)`);
+                    resolve(stdout.trim());
+                }
+                else if (code === 0) {
+                    reject(new Error(`[${agentName}] Claude CLI returned empty output`));
+                }
+                else {
+                    const errSnippet = stderr.substring(0, 500) || '(no stderr)';
+                    reject(new Error(`[${agentName}] Claude CLI exited with code ${code}: ${errSnippet}`));
+                }
+            });
+            proc.on('error', (err) => {
+                clearTimeout(timer);
+                clearInterval(heartbeat);
+                if (done)
+                    return;
+                done = true;
+                reject(new Error(`[${agentName}] Claude CLI spawn failed: ${err.message}. ` +
+                    `Is 'claude' installed and in PATH?`));
+            });
+            // Send prompt on stdin
+            proc.stdin?.write(validated);
+            proc.stdin?.end();
+        });
+    }
+    /** No-op for CLI mode (project dir passed via cwd in callClaude opts) */
+    setProjectDir(_dir) {
+        // CLI mode uses cwd, not a project dir setter
+    }
+}
+exports.ClaudeCLIService = ClaudeCLIService;
 //# sourceMappingURL=claude.js.map

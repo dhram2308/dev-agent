@@ -22,6 +22,21 @@ const MAX_LOG_ENTRIES = 5000;
 /** Stuck detection threshold in milliseconds (10 minutes) */
 const STUCK_THRESHOLD_MS = 10 * 60 * 1000;
 
+/** Canonical ordering of pipeline stages for monotonic-guard dedup. */
+const STAGE_ORDER: Record<StageName, number> = {
+  fetch_ticket: 0,
+  explore_plan: 1,
+  generate_code: 2,
+  gate_code_review: 3,
+  deploy_qa: 4,
+  test_qa: 5,
+  gate_preprod_approval: 6,
+  create_preprod_mr: 7,
+  gate_dual_approval: 8,
+  deploy_prod: 9,
+  done: 10,
+};
+
 // ── Store Interface ────────────────────────────────────────────
 
 export interface PipelineStore {
@@ -37,6 +52,9 @@ export interface PipelineStore {
   sseRetryCount: number;
   lastHeartbeat: number | null;
 
+  /** Global uncaught error for ErrorOverlay (null when no error) */
+  globalError: Error | string | null;
+
   // Review data for the active ticket
   reviewData: ReviewData | null;
 
@@ -51,6 +69,7 @@ export interface PipelineStore {
   // Pipeline dashboard
   setPipelines: (pipelines: PipelineSummary[]) => void;
   fetchPipelines: () => Promise<void>;
+  syncStageFromPipelines: () => void;
 
   // Agent control
   startAgent: (ticket: string, mode?: 'resume' | 'fresh') => Promise<void>;
@@ -61,6 +80,23 @@ export interface PipelineStore {
   // Gate actions
   approveGate: (ticket: string, gate: string) => Promise<void>;
   rejectGate: (ticket: string, gate: string, reason: string) => Promise<void>;
+  refineGate: (ticket: string, gate: string, instructions: string) => Promise<void>;
+
+  /**
+   * Apply a `review` SSE event (approve/reject/refine). Clears `gateWaiting`
+   * on the target ticket so any mounted `GateApproval` unmounts immediately
+   * without waiting for the trailing `state` broadcast.
+   */
+  handleReviewEvent: (payload: {
+    ticket: string;
+    gate: string;
+    action: string;
+    feedback?: string;
+    instructions?: string;
+  }) => void;
+
+  // On-demand state loading
+  fetchTicketState: (ticket: string) => Promise<void>;
 
   // State updates (from SSE or polling)
   updateState: (state: PipelineState) => void;
@@ -76,6 +112,10 @@ export interface PipelineStore {
   // Error handling
   setError: (ticket: string, error: string | null) => void;
   clearError: (ticket: string) => void;
+
+  // Global error (surfaces ErrorOverlay)
+  setGlobalError: (error: Error | string | null) => void;
+  clearGlobalError: () => void;
 }
 
 // ── Helper: create default ticket state ────────────────────────
@@ -97,20 +137,22 @@ function createTicketState(ticket: string): PipelineTicketState {
 // ── Helper: detect gate waiting ────────────────────────────────
 
 function detectGateWaiting(state: PipelineState): StageName | null {
-  const stage = state.stage;
-  const data = state.data;
+  const { stage, data } = state;
 
-  if (stage === 'explore_plan' && data.explore_plan) {
-    // Plan is ready, waiting for approval
-    if (!data._ui_approve_gate) return 'explore_plan';
+  // explore_plan: plan posted to Jira, waiting for UI approval
+  if (stage === 'explore_plan' && data.explore_plan_posted && !data.explore_plan_ui_approved) {
+    return 'explore_plan';
   }
-  if (stage === 'gate_code_review' && !data._ui_approve_gate) {
+  // gate_code_review: MR created, waiting for code review approval
+  if (stage === 'gate_code_review' && data.code_mr_iid && !data.gate_code_review_ui_approved) {
     return 'gate_code_review';
   }
-  if (stage === 'gate_preprod_approval' && !data._ui_approve_preprod) {
+  // gate_preprod_approval: pre-prod gate posted, waiting for approval
+  if (stage === 'gate_preprod_approval' && data.gate2a_posted && !data.gate_preprod_approval_ui_approved) {
     return 'gate_preprod_approval';
   }
-  if (stage === 'gate_dual_approval' && !data._ui_approve_dual) {
+  // gate_dual_approval: dual gate posted, waiting for approval
+  if (stage === 'gate_dual_approval' && data.gate2b_posted && !data.gate_dual_approval_ui_approved) {
     return 'gate_dual_approval';
   }
   return null;
@@ -125,6 +167,7 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
   sseConnected: false,
   sseRetryCount: 0,
   lastHeartbeat: null,
+  globalError: null,
   reviewData: null,
 
   setActiveTicket: (ticket) => {
@@ -164,6 +207,51 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
     } catch {
       // Non-fatal: SSE will provide updates
     }
+  },
+
+  syncStageFromPipelines: () => {
+    const { pipelines, tickets } = get();
+    if (pipelines.length === 0) return;
+
+    let changed = false;
+    const next = new Map(tickets);
+
+    for (const p of pipelines) {
+      const pipelineStage = p.stage as StageName;
+      const ts = next.get(p.ticket);
+
+      if (!ts) {
+        // Seed a new ticket entry from pipeline summary so it has
+        // correct stage immediately (instead of defaulting to fetch_ticket)
+        changed = true;
+        next.set(p.ticket, {
+          ...createTicketState(p.ticket),
+          stage: pipelineStage,
+          isRunning: p.running,
+        });
+        continue;
+      }
+
+      const pipelineOrder = STAGE_ORDER[pipelineStage] ?? -1;
+      const currentOrder = STAGE_ORDER[ts.stage] ?? -1;
+
+      // Only advance forward (monotonic) to avoid flickering
+      if (pipelineOrder > currentOrder) {
+        changed = true;
+        next.set(p.ticket, {
+          ...ts,
+          stage: pipelineStage,
+          isRunning: p.running,
+          stageStartedAt: Date.now(),
+        });
+      } else if (ts.isRunning !== p.running) {
+        // Sync running status even if stage hasn't changed
+        changed = true;
+        next.set(p.ticket, { ...ts, isRunning: p.running });
+      }
+    }
+
+    if (changed) set({ tickets: next });
   },
 
   // ── Agent control ──
@@ -266,6 +354,50 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
     }
   },
 
+  refineGate: async (ticket, gate, instructions) => {
+    try {
+      await api.submitRefine(ticket, gate, instructions);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      get().setError(ticket, message);
+    }
+  },
+
+  handleReviewEvent: ({ ticket }) => {
+    // Clear the active gate so GateApproval unmounts immediately; a trailing
+    // `state` event will re-populate downstream stage data.
+    const { tickets } = get();
+    const ts = tickets.get(ticket);
+    if (!ts || ts.gateWaiting === null) return;
+    const next = new Map(tickets);
+    next.set(ticket, { ...ts, gateWaiting: null });
+    set({ tickets: next });
+  },
+
+  // ── On-demand state loading ──
+
+  fetchTicketState: async (ticket) => {
+    try {
+      const result = await api.getState(ticket);
+      // Backend wraps PipelineState in { running, state, health, ... }
+      const pipelineState = result?.state;
+      if (pipelineState && pipelineState.stage && pipelineState.ticket) {
+        get().updateState(pipelineState);
+      }
+      // Also sync running status from the response
+      if (result) {
+        const next = new Map(get().tickets);
+        const ts = next.get(ticket);
+        if (ts && ts.isRunning !== result.running) {
+          next.set(ticket, { ...ts, isRunning: result.running });
+          set({ tickets: next });
+        }
+      }
+    } catch {
+      // Non-fatal: state may not exist yet for new tickets
+    }
+  },
+
   // ── State updates ──
 
   updateState: (pipelineState) => {
@@ -275,20 +407,58 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
     const next = new Map(get().tickets);
     const existing = next.get(ticket) ?? createTicketState(ticket);
 
-    const isRunning = pipelineState.stage !== 'done' && (
-      pipelineState.stage !== 'fetch_ticket' ||
+    const incomingStage = pipelineState.stage;
+    const incomingOrder = STAGE_ORDER[incomingStage] ?? -1;
+    const existingOrder = STAGE_ORDER[existing.stage] ?? -1;
+    const incomingPipelineStart = pipelineState.data._pipeline_start ?? null;
+
+    // Guard: ignore events that carry a strictly earlier stage UNLESS a reset
+    // happened (detected via a newer `_pipeline_start` or the ticket coming
+    // back from `done`/not-running into a fresh run).
+    const isReset =
+      incomingPipelineStart !== null &&
+      existing.pipelineStartedAt !== null &&
+      incomingPipelineStart > existing.pipelineStartedAt;
+
+    if (existing.state !== null && incomingOrder >= 0 && existingOrder > incomingOrder && !isReset) {
+      if (import.meta.env.DEV) {
+        console.warn(
+          `[pipeline] dropping out-of-order state for ${ticket}: ${incomingStage} < ${existing.stage}`,
+        );
+      }
+      return;
+    }
+
+    // Dedup: skip if the exact same (stage, _seq) was already applied.
+    const incomingSeq = pipelineState._seq;
+    const existingSeq = existing.state?._seq;
+    if (
+      existing.state !== null &&
+      existing.stage === incomingStage &&
+      incomingSeq !== undefined &&
+      existingSeq !== undefined &&
+      incomingSeq === existingSeq
+    ) {
+      if (import.meta.env.DEV) {
+        console.warn(`[pipeline] dropping duplicate state for ${ticket} stage=${incomingStage} seq=${incomingSeq}`);
+      }
+      return;
+    }
+
+    const isRunning = incomingStage !== 'done' && (
+      incomingStage !== 'fetch_ticket' ||
       pipelineState.data._pipeline_start != null
     );
 
-    const stageChanged = existing.stage !== pipelineState.stage;
+    const stageChanged = existing.stage !== incomingStage;
 
     next.set(ticket, {
       ...existing,
       state: pipelineState,
-      stage: pipelineState.stage,
+      stage: incomingStage,
       isRunning,
       stageStartedAt: stageChanged ? Date.now() : existing.stageStartedAt,
-      pipelineStartedAt: pipelineState.data._pipeline_start ?? existing.pipelineStartedAt,
+      pipelineStartedAt: incomingPipelineStart ?? existing.pipelineStartedAt,
       gateWaiting: detectGateWaiting(pipelineState),
     });
 
@@ -372,6 +542,14 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
 
   clearError: (ticket) => {
     get().setError(ticket, null);
+  },
+
+  setGlobalError: (error) => {
+    set({ globalError: error });
+  },
+
+  clearGlobalError: () => {
+    set({ globalError: null });
   },
 }));
 

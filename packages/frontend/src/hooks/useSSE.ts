@@ -33,13 +33,28 @@ export interface SSEStateEvent {
   [key: string]: unknown;
 }
 
+export interface SSEReviewEvent {
+  ticket: string;
+  gate: string;
+  action: 'approved' | 'rejected' | 'refined' | string;
+  feedback?: string;
+  instructions?: string;
+  [key: string]: unknown;
+}
+
 /** Handler callbacks for SSE events */
 export interface SSEHandlers {
   onLog?: (data: SSELogEvent) => void;
   onStatus?: (data: SSEStatusEvent) => void;
   onState?: (data: SSEStateEvent) => void;
   onPipelines?: (data: unknown[]) => void;
+  onReview?: (data: SSEReviewEvent) => void;
   onError?: (error: Event) => void;
+  onConnectorConnected?: (data: { provider: string; [key: string]: unknown }) => void;
+  onConnectorDisconnected?: (data: { provider: string; [key: string]: unknown }) => void;
+  onConnectorError?: (data: { provider: string; error?: string; [key: string]: unknown }) => void;
+  onAuthRequired?: (data: { provider: string; reason?: string; [key: string]: unknown }) => void;
+  onConfigChanged?: (data: { changes: Record<string, string> }) => void;
 }
 
 /** Return type for the useSSE hook */
@@ -95,6 +110,15 @@ export function useSSE(
   const enabledRef = useRef<boolean>(enabled);
   enabledRef.current = enabled;
 
+  /**
+   * Track every `(eventName, handler)` pair registered via `addEventListener` on
+   * the current EventSource. We iterate this list on close to remove each
+   * listener before calling `.close()`, preventing listener accumulation across
+   * reconnects (one reconnect attaches 5 new listeners; without tracking they'd
+   * leak until the hook unmounts).
+   */
+  const listenersRef = useRef<Array<{ event: string; handler: (e: MessageEvent) => void }>>([]);
+
   // Clear any pending reconnect timer
   const clearReconnectTimer = useCallback(() => {
     if (reconnectTimerRef.current !== null) {
@@ -106,10 +130,16 @@ export function useSSE(
   // Close existing EventSource and clean up listeners
   const closeEventSource = useCallback(() => {
     if (eventSourceRef.current) {
+      const es = eventSourceRef.current;
       try {
-        eventSourceRef.current.onopen = null;
-        eventSourceRef.current.onerror = null;
-        eventSourceRef.current.close();
+        // Detach every named listener we attached in connect()
+        for (const { event, handler } of listenersRef.current) {
+          es.removeEventListener(event, handler as EventListener);
+        }
+        listenersRef.current = [];
+        es.onopen = null;
+        es.onerror = null;
+        es.close();
       } catch {
         // Ignore close errors
       }
@@ -135,8 +165,15 @@ export function useSSE(
     const es = new EventSource(fullUrl);
     eventSourceRef.current = es;
 
+    // Register a named listener AND record the pair so closeEventSource() can
+    // detach it — prevents accumulation across reconnects.
+    const addTracked = (event: string, handler: (e: MessageEvent) => void): void => {
+      es.addEventListener(event, handler as EventListener);
+      listenersRef.current.push({ event, handler });
+    };
+
     // Listen for "log" events
-    es.addEventListener('log', (e: MessageEvent) => {
+    addTracked('log', (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data) as SSELogEvent;
         handlersRef.current.onLog?.(data);
@@ -146,7 +183,7 @@ export function useSSE(
     });
 
     // Listen for "status" events
-    es.addEventListener('status', (e: MessageEvent) => {
+    addTracked('status', (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data) as SSEStatusEvent;
         handlersRef.current.onStatus?.(data);
@@ -156,7 +193,7 @@ export function useSSE(
     });
 
     // Listen for "state" events
-    es.addEventListener('state', (e: MessageEvent) => {
+    addTracked('state', (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data) as SSEStateEvent;
         handlersRef.current.onState?.(data);
@@ -166,10 +203,72 @@ export function useSSE(
     });
 
     // Listen for "pipelines" events (pipeline dashboard list)
-    es.addEventListener('pipelines', (e: MessageEvent) => {
+    addTracked('pipelines', (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data) as unknown[];
         handlersRef.current.onPipelines?.(data);
+      } catch {
+        // Malformed JSON -- skip
+      }
+    });
+
+    // Listen for "review" events (gate approve/reject/refine broadcasts) —
+    // lets GateApproval close its modal without waiting for the trailing state
+    // broadcast.
+    addTracked('review', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data) as SSEReviewEvent;
+        handlersRef.current.onReview?.(data);
+      } catch {
+        // Malformed JSON -- skip
+      }
+    });
+
+    // Listen for "connectorConnected" events
+    addTracked('connectorConnected', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data) as { provider: string; [key: string]: unknown };
+        handlersRef.current.onConnectorConnected?.(data);
+      } catch {
+        // Malformed JSON -- skip
+      }
+    });
+
+    // Listen for "connectorDisconnected" events
+    addTracked('connectorDisconnected', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data) as { provider: string; [key: string]: unknown };
+        handlersRef.current.onConnectorDisconnected?.(data);
+      } catch {
+        // Malformed JSON -- skip
+      }
+    });
+
+    // Listen for "connectorError" events
+    addTracked('connectorError', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data) as { provider: string; error?: string; [key: string]: unknown };
+        handlersRef.current.onConnectorError?.(data);
+      } catch {
+        // Malformed JSON -- skip
+      }
+    });
+
+    // Listen for "authRequired" events
+    addTracked('authRequired', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data) as { provider: string; reason?: string; [key: string]: unknown };
+        handlersRef.current.onAuthRequired?.(data);
+      } catch {
+        // Malformed JSON -- skip
+      }
+    });
+
+    // Listen for "configChanged" events (hot-reload)
+    addTracked('configChanged', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data) as { changes: Record<string, string> };
+        handlersRef.current.onConfigChanged?.(data);
       } catch {
         // Malformed JSON -- skip
       }

@@ -141,6 +141,7 @@ export function createTestQaHandler(deps: TestQaDeps): StageHandler {
 
       // Test each module
       for (const m of envCfg.modules) {
+        let moduleResult: TestResult;
         try {
           const headers: Record<string, string> = sessionCookie ? { Cookie: sessionCookie } : {};
           const r = await req(`${envCfg.url}${m.path}`, { method: 'GET', headers });
@@ -160,15 +161,28 @@ export function createTestQaHandler(deps: TestQaDeps): StageHandler {
             }
           }
 
-          results.push({ ...m, env: envName, status: r.status, ok });
+          moduleResult = { ...m, env: envName, status: r.status, ok };
           (ok ? logOk : logErr)(`[${envName}] ${m.name}: HTTP ${r.status}`);
         } catch (e: unknown) {
           const err = e as NodeJS.ErrnoException;
           const isNetworkError = NETWORK_ERROR_CODES.has(err.code || '');
           const errorType = isNetworkError ? 'ENV_DOWN' : 'TEST_FAIL';
           const errMsg = err.message || String(e);
-          results.push({ ...m, env: envName, status: 0, ok: false, error: errMsg, errorType });
+          moduleResult = { ...m, env: envName, status: 0, ok: false, error: errMsg, errorType };
           logErr(`[${envName}] ${m.name}: ${errMsg} [${errorType}]`);
+        }
+
+        results.push(moduleResult);
+
+        // Incremental state save so the UI can render live progress pills.
+        // Both parallel streams append into the same qa_test array (keyed by env+name on read).
+        const existing = (data.qa_test as TestResult[] | undefined) ?? [];
+        data.qa_test = [...existing, moduleResult];
+        try {
+          save(state);
+        } catch (saveErr: unknown) {
+          const saveMsg = saveErr instanceof Error ? saveErr.message : String(saveErr);
+          logWarn(`[test-qa] incremental save failed: ${saveMsg}`);
         }
       }
 

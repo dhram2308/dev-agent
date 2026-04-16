@@ -1,0 +1,4 @@
+import type { PipelineState } from '@mi/shared';
+declare const unwrapStateEnvelope: (raw: any) => any, getState: (ticket: string) => PipelineState | null, writeStateAsync: (ticket: string, state: PipelineState) => Promise<void>, readStateAsync: (ticket: string) => Promise<PipelineState | null>, saveReviewComments: (ticket: string, comments: Record<string, any>) => Promise<boolean>, getReviewComments: (ticket: string) => Record<string, any>, loadEnv: () => Record<string, string>, patchUIAsync: (ticket: string, gate: string, patch: Record<string, any>) => Promise<void>, updateAsync: (ticket: string, mutator: (state: PipelineState) => Promise<PipelineState>) => Promise<PipelineState>;
+export { unwrapStateEnvelope, getState, writeStateAsync, readStateAsync, saveReviewComments, getReviewComments, loadEnv, patchUIAsync, updateAsync, };
+//# sourceMappingURL=state-io.d.ts.map

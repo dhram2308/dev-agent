@@ -32,6 +32,7 @@ exports.getSseClients = getSseClients;
 exports.addSseClient = addSseClient;
 exports.removeSseClient = removeSseClient;
 exports.setAgentProcsGetter = setAgentProcsGetter;
+exports.broadcastStateChange = broadcastStateChange;
 exports.broadcastPipelineList = broadcastPipelineList;
 exports.getSSEStats = getSSEStats;
 let StringCircularBuffer;
@@ -485,6 +486,14 @@ let _agentProcsGetter = null;
  */
 function setAgentProcsGetter(fn) {
     _agentProcsGetter = fn;
+}
+// ── State Change Broadcast ───────────────────────────────────────
+/**
+ * Broadcast a pipeline state change to all SSE clients.
+ * Called by the http-server state poller when a ticket's stage changes.
+ */
+function broadcastStateChange(ticket, stage, data, seq) {
+    broadcast('state', { ticket, stage, data, _seq: seq });
 }
 // ── Pipeline Dashboard: Broadcast ───────────────────────────────
 /**

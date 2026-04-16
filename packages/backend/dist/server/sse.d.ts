@@ -105,6 +105,11 @@ type AgentProcsGetter = () => Record<string, unknown>;
  */
 export declare function setAgentProcsGetter(fn: AgentProcsGetter): void;
 /**
+ * Broadcast a pipeline state change to all SSE clients.
+ * Called by the http-server state poller when a ticket's stage changes.
+ */
+export declare function broadcastStateChange(ticket: string, stage: string, data: Record<string, unknown>, seq?: number): void;
+/**
  * Broadcast the current pipeline list to all SSE clients.
  * Uses late-bound agentProcs getter and state-manager's cached list.
  */

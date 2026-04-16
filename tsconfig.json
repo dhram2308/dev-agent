@@ -16,6 +16,7 @@
   },
   "references": [
     { "path": "packages/shared" },
+    { "path": "packages/agent" },
     { "path": "packages/backend" }
   ],
   "exclude": ["node_modules", "dist", "packages/native"]

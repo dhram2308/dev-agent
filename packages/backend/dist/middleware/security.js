@@ -494,6 +494,7 @@ exports.ERROR_STATUS_MAP = {
     INVALID_JSON: 400,
     INVALID_TYPE: 400,
     INVALID_PATH: 400,
+    INVALID_FIELD: 400,
     MISSING_FIELD: 400,
     TOO_SHORT: 400,
     TOO_LONG: 400,
@@ -523,6 +524,7 @@ exports.SAFE_ERROR_MESSAGES = {
     INVALID_JSON: 'Invalid JSON in request body',
     INVALID_TYPE: 'Invalid field type',
     INVALID_PATH: 'Invalid file path',
+    INVALID_FIELD: 'Invalid field value',
     MISSING_FIELD: 'Missing required field',
     TOO_SHORT: 'Input too short',
     TOO_LONG: 'Input too long',
@@ -664,6 +666,9 @@ function sanitize(body, schema) {
                 if (rules.maxLength !== undefined && str.length > rules.maxLength) {
                     throw new SecurityError('TOO_LONG', `Field ${field} must be at most ${rules.maxLength} characters`);
                 }
+                if (rules.allowed && !rules.allowed.includes(str)) {
+                    throw new SecurityError('INVALID_FIELD', `Field ${field} must be one of: ${rules.allowed.join(', ')}`);
+                }
                 // Prevent null bytes
                 str = str.replace(/\0/g, '');
                 result[field] = str;
@@ -752,6 +757,7 @@ function parseBodySafe(request, maxSize = 1_048_576) {
 exports.ENDPOINT_SCHEMAS = {
     '/api/start': {
         ticket: { type: 'ticket', required: true },
+        mode: { type: 'string', allowed: ['resume', 'fresh'] },
     },
     '/api/stop': {
         ticket: { type: 'ticket' },
@@ -788,9 +794,16 @@ exports.ENDPOINT_SCHEMAS = {
         gate: { type: 'gate', required: true },
         instructions: { type: 'string', required: true, minLength: 1, maxLength: 50_000 },
     },
+    // Accepts either a full-blob replace ({ticket, comments}) or a single append
+    // ({ticket, file, line, body, parentId?}) -- the route handler enforces which
+    // combination is present, so individual fields here are optional.
     '/api/comments': {
         ticket: { type: 'ticket', required: true },
-        comments: { type: 'object', required: true },
+        comments: { type: 'object' },
+        file: { type: 'string', maxLength: 500 },
+        line: { type: 'number' },
+        body: { type: 'string', maxLength: 50_000 },
+        parentId: { type: 'string', maxLength: 200 },
     },
     '/api/skip-stage': {
         ticket: { type: 'ticket', required: true },

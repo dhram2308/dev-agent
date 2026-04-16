@@ -60,8 +60,16 @@ module.exports = {
   // HTTP engine
   CircuitBreaker:   httpEngine?.CircuitBreaker      ?? fallback.CircuitBreaker,
 
-  // SSE engine
+  // SSE engine — legacy
   StringCircularBuffer: sseEngine?.StringCircularBuffer ?? fallback.StringCircularBuffer,
+
+  // SSE engine — new typed exports
+  SseEvent:              sseEngine?.SseEvent              ?? fallback.SseEvent,
+  TypedCircularBuffer:   sseEngine?.TypedCircularBuffer   ?? fallback.TypedCircularBuffer,
+  ClientRegistry:        sseEngine?.ClientRegistry        ?? fallback.ClientRegistry,
+  nextId:                sseEngine?.nextId                ?? fallback.nextId,
+  resetIdCounter:        sseEngine?.resetIdCounter        ?? fallback.resetIdCounter,
+  formatSseFrame:        sseEngine?.formatSseFrame        ?? fallback.formatSseFrame,
 
   // Metadata
   isNative: {

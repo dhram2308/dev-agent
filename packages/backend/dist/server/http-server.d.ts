@@ -3,7 +3,8 @@ import type { Server } from 'http';
 declare const API_TOKEN: string;
 /** Server port */
 declare const PORT: number;
-/** Server bind host */
+/** Server bind host -- loopback-only by default for OAuth redirect compliance.
+ *  Set HTTP_BIND_HOST=0.0.0.0 when running behind a reverse-proxy. */
 declare const BIND_HOST: string;
 /**
  * Start the HTTP server.

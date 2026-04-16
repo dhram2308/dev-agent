@@ -81,4 +81,17 @@ export declare function createClaudeCaller(req: ReqFn, defaults?: {
     maxTokens?: number;
     systemPrompt?: string;
 }): (prompt: string, timeoutMs?: number, opts?: ClaudeOptions) => Promise<string>;
+export declare class ClaudeCLIService {
+    private readonly model?;
+    constructor(opts?: {
+        model?: string;
+    });
+    /**
+     * Call Claude via the `claude -p` CLI.
+     * Compatible with ClaudeService.callClaude() interface.
+     */
+    callClaude(prompt: string, timeoutMs?: number, opts?: ClaudeOptions): Promise<string>;
+    /** No-op for CLI mode (project dir passed via cwd in callClaude opts) */
+    setProjectDir(_dir: string): void;
+}
 export {};

@@ -386,6 +386,7 @@ function loadConfig(envPath) {
             base: envStr(env, 'GITLAB_URL', 'http://10.200.11.32'),
             token: envStr(env, 'GITLAB_TOKEN', ''),
             projectId: envInt(env, 'GITLAB_PROJECT_ID', 0),
+            authMode: (env['GITLAB_AUTH_MODE'] === 'oauth' ? 'oauth' : 'pat'),
         },
         slack: {
             token: env['SLACK_WEBHOOK'] || undefined,
