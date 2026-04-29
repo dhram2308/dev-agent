@@ -21,6 +21,9 @@ import { TicketTabBar } from './components/TicketTabBar';
 import { QAProgressPanel } from './components/QAProgressPanel';
 import { WriteCodeDetail } from './components/WriteCodeDetail';
 import { DiffViewer } from './components/review/DiffViewer';
+import { AgentSwimLanes } from './components/AgentSwimLanes';
+import { useLiveForTicket } from './store/codegenLive';
+import { useAgentProgressStore } from './store/agentProgress';
 import { SettingsPage as SettingsPageImpl } from './components/settings/SettingsPage';
 import { ShortcutsHelpModal } from './components/ShortcutsHelpModal';
 import { RateLimitBanner } from './components/RateLimitBanner';
@@ -183,6 +186,31 @@ function ReviewPage(): JSX.Element {
   );
 }
 
+// ── Live Codegen Diff (mounted during generate_code) ─────────────
+//
+// Mounts the GitHub-style DiffViewer in "live" mode while the active
+// ticket is in `generate_code` AND the codegen-live store has an
+// entry for it. Entries are populated from SSE (`codegen:live`) and
+// hydrated once on active-ticket change via `/api/codegen/live`. The
+// entry is cleared automatically when the ticket transitions out of
+// `generate_code`, so the gate_code_review view falls back to the
+// existing frozen DiffViewer route via /review.
+
+function LiveCodegenDiff(): JSX.Element | null {
+  const activeTicket = usePipelineStore((s) => s.activeTicket);
+  const ticketState = useActiveTicketState();
+  const liveEntry = useLiveForTicket(activeTicket);
+
+  if (!activeTicket || !ticketState || ticketState.stage !== 'generate_code') return null;
+  if (!liveEntry) return null;
+
+  return (
+    <div style={{ marginBottom: 'var(--sp-4)' }}>
+      <DiffViewer source="live" liveData={liveEntry} />
+    </div>
+  );
+}
+
 // ── Dashboard View (existing content) ───────────────────────────
 
 // ── Theme toggle button (used in topbar) ──────────────────────
@@ -337,6 +365,8 @@ function DashboardView({
             {activePipeline && <PipelineDetail pipeline={activePipeline} />}
             <StuckBanner />
             <AgentStatus />
+            <AgentSwimLanes />
+            <LiveCodegenDiff />
             <WriteCodeDetail />
             <QAProgressPanel />
             {activeTicket && (
@@ -390,6 +420,15 @@ export function App(): JSX.Element {
 
   // Connect to SSE (token already set synchronously at module load)
   useSSEConnection();
+
+  useEffect(() => {
+    if (!activeTicket) return;
+    if (ticketState?.stage !== 'generate_code') return;
+    const store = useAgentProgressStore.getState();
+    if (!store.byTicket.has(activeTicket)) {
+      void store.hydrate(activeTicket);
+    }
+  }, [activeTicket, ticketState?.stage]);
 
   // Network offline detection (shows banner at top)
   const isOffline = useOfflineStatus();

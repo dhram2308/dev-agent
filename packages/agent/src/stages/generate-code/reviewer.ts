@@ -1,6 +1,6 @@
 "use strict";
 
-import type { PipelineState } from '@mi/shared';
+import type { PipelineState, QuestionAnswer } from '@mi/shared';
 
 const { cfg, TICKET, REVIEWER_TIMEOUT_MS, DEVELOPER_TIMEOUT_MS, applyComplexityTimeout } = require("../../lib/config");
 const { logInfo, logOk, logErr, logWarn } = require("../../lib/logging");
@@ -10,6 +10,9 @@ const { runAgentsTeam, runSingleAgent } = require("../../lib/agents-team");
 const { localGetChanges, localGetOriginal } = require("../../lib/local-repo");
 const { categorizeIssues } = require("../../lib/jira");
 const { parseVerdict } = require("./fixer");
+const { buildDecisionsBlock } = require("./decisions-block") as {
+  buildDecisionsBlock: (qa: QuestionAnswer[] | undefined | null) => string;
+};
 
 /**
  * Run Reviewer + Security Agents in parallel, then Fixer if needed.
@@ -30,6 +33,12 @@ async function runReviewerAndSecurity(ctx: any, fileChanges: any[], originalFile
   // F9/Z2: Include approved plan for Reviewer
   const planDigest = approvedPlan ? truncateWithIndicator(approvedPlan, 8000) : "(no plan available)";
 
+  // Decisions from clarifying-questions — all three agents here need them
+  // so they don't flag correctly-answered items as wrong.
+  const decisionsBlock = buildDecisionsBlock(
+    (state as PipelineState).data._qa_answers as QuestionAnswer[] | undefined,
+  );
+
   const reviewerPrompt =
     `You are the **Reviewer Agent** at MasterIndia. Review the code changes in this repository.\n\n` +
     `YOU HAVE DIRECT ACCESS TO THE REPOSITORY. Use Read/Grep/Glob tools to verify code quality.\n\n` +
@@ -44,6 +53,7 @@ async function runReviewerAndSecurity(ctx: any, fileChanges: any[], originalFile
     `## Approved Plan:\n${planDigest}\n\n` +
     `Ticket: ${TICKET} — ${sanitizeForPrompt(summary)}\n\n` +
     `## Changed files:\n${changedFilesList}\n\n` +
+    `${decisionsBlock}` +
     `Read the changed files, compare against existing patterns, and list all issues found.\n\n` +
     `**IMPORTANT**: End your response with EXACTLY one of: \`VERDICT: PASS\` or \`VERDICT: FAIL\``;
 
@@ -61,6 +71,7 @@ async function runReviewerAndSecurity(ctx: any, fileChanges: any[], originalFile
     `8. **Product Scope**: Ensure no cross-product data leakage (enterprise data stays enterprise).\n\n` +
     `Ticket: ${TICKET} — ${sanitizeForPrompt(summary)}\n\n` +
     `## Changed files:\n${changedFilesList}\n\n` +
+    `${decisionsBlock}` +
     `Read the changed files and list all security issues with severity (CRITICAL/HIGH/MEDIUM/LOW).\n\n` +
     `**IMPORTANT**: End your response with EXACTLY one of: \`VERDICT: PASS\` or \`VERDICT: FAIL\``;
 
@@ -126,6 +137,7 @@ async function runReviewerAndSecurity(ctx: any, fileChanges: any[], originalFile
         `If non-enterprise scope was flagged, remove all references to other product lines (SME, GST, TaxPro, etc.).\n\n` +
         `${allIssues}\n\n` +
         `## Changed files:\n${changedFilesList}\n\n` +
+        `${decisionsBlock}` +
         `Read each flagged file, apply the fixes, and confirm what you changed.`,
       timeout: applyComplexityTimeout(DEVELOPER_TIMEOUT_MS, state),
       opts: { cwd: cfg.localRepo, maxTurns: 20, allowedTools: ["Read", "Write", "Edit", "Grep", "Glob"] },

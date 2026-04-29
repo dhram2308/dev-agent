@@ -8,6 +8,9 @@ export default defineConfig({
       '/api': 'http://localhost:3000',
       '/events': 'http://localhost:3000',
     },
+    watch: {
+      ignored: ['**/node_modules/**', '**/.git/**'],
+    },
   },
   build: {
     outDir: 'dist',

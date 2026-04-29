@@ -3639,7 +3639,8 @@ function renderSubStageProgress() {
   var ssKey = (activeStepObj && activeStepObj.substageKey) ? activeStepObj.substageKey : currentStage;
   var ss = SUBSTAGES[ssKey];
   if (!ss) { el.innerHTML = ""; return; }
-  var activeAgents = lastStateData._active_agents || [];
+  var activeAgentsRaw = lastStateData._active_agents || [];
+  var activeAgents = activeAgentsRaw.map(function(a) { return typeof a === 'string' ? a : (a && a.name) || ''; });
   var html = '<div class="substage-bar">';
   var foundActive = false;
   for (var i = 0; i < ss.length; i++) {
@@ -6704,7 +6705,8 @@ async function pollAllTickets() {
 function renderAgentActivity() {
   var bar = document.getElementById("agentActivityBar");
   if (!bar) return;
-  var agents = (lastStateData && lastStateData._active_agents) || [];
+  var agentsRaw = (lastStateData && lastStateData._active_agents) || [];
+  var agents = agentsRaw.map(function(a) { return typeof a === 'string' ? a : (a && a.name) || ''; });
   if (agents.length === 0) { bar.style.display = "none"; return; }
   bar.style.display = "flex";
   bar.innerHTML = agents.map(function(a) {

@@ -1,12 +1,15 @@
 "use strict";
 
-import type { PipelineState } from '@mi/shared';
+import type { PipelineState, QuestionAnswer } from '@mi/shared';
 
 const { cfg, TICKET, REVIEWER_TIMEOUT_MS, DEVELOPER_TIMEOUT_MS, applyComplexityTimeout } = require("../../lib/config");
 const { logInfo, logOk, logWarn } = require("../../lib/logging");
 const { sanitizeForPrompt } = require("../../lib/utils");
 const { save } = require("../../lib/state");
 const { runSingleAgent } = require("../../lib/agents-team");
+const { buildDecisionsBlock } = require("./decisions-block") as {
+  buildDecisionsBlock: (qa: QuestionAnswer[] | undefined | null) => string;
+};
 const { localGetChanges, localGetOriginal } = require("../../lib/local-repo");
 
 /**
@@ -50,6 +53,10 @@ async function runACVerification(state: PipelineState, fileChanges: any[], origi
       `If a test PASSED for a specific AC, note higher confidence in PASS verdict.\n`;
   }
 
+  const decisionsBlock = buildDecisionsBlock(
+    (state as PipelineState).data._qa_answers as QuestionAnswer[] | undefined,
+  );
+
   const acVerifyResult = await runSingleAgent({
     name: "AC Verification Agent",
     prompt: `You are the **AC Verification Agent**. Compare the code changes against the acceptance criteria.\n\n` +
@@ -57,6 +64,7 @@ async function runACVerification(state: PipelineState, fileChanges: any[], origi
       `## Acceptance Criteria\n${sanitizeForPrompt(ac)}\n\n` +
       `## Changed files:\n${fileChanges.map((c: any) => `- ${c.action}: ${c.file_path}`).join("\n")}\n` +
       testEvidence + `\n` +
+      `${decisionsBlock}` +
       `For EACH acceptance criterion, rate it:\n` +
       `- **PASS**: Fully implemented and working\n` +
       `- **PARTIAL**: Partially implemented, some aspects missing\n` +
@@ -95,6 +103,7 @@ async function runACVerification(state: PipelineState, fileChanges: any[], origi
         `YOU HAVE DIRECT ACCESS TO THE REPOSITORY. Fix the issues directly.\n\n` +
         `## AC Verification Results\n${acVerifyResult}\n\n` +
         `## Acceptance Criteria\n${sanitizeForPrompt(ac)}\n\n` +
+        `${decisionsBlock}` +
         `Focus ONLY on items marked FAIL. Read the relevant files and fix them.`,
       timeout: applyComplexityTimeout(DEVELOPER_TIMEOUT_MS, state),
       opts: { cwd: cfg.localRepo, maxTurns: 15, allowedTools: ["Read", "Write", "Edit", "Grep", "Glob"] },

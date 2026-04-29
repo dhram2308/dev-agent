@@ -8,6 +8,8 @@ import { useSSE, type SSEHandlers, type SSELogEvent, type SSEStateEvent, type SS
 import { useLeaderElection } from './useLeaderElection';
 import { usePipelineStore } from '../store/pipeline';
 import { useSettingsStore, type OAuthStatusInfo } from '../store/settings';
+import { useCodegenLiveStore } from '../store/codegenLive';
+import { useAgentProgressStore } from '../store/agentProgress';
 import { getApiToken } from '../lib/api';
 import type { LogEntry, LogLevel, PipelineState, PipelineSummary, StageName } from '../types';
 
@@ -162,6 +164,27 @@ export function useSSEConnection(): void {
         new CustomEvent('mi:config-changed', { detail: data.changes }),
       );
     },
+
+    onCodegenLive: (data) => {
+      if (!data?.ticket) return;
+      useCodegenLiveStore.getState().setLive(data.ticket, {
+        team: data.team,
+        activeAgents: data.activeAgents ?? [],
+        changes: data.changes ?? [],
+        original_files: data.original_files ?? {},
+        ts: data.ts,
+      });
+    },
+
+    onCodegenLiveStop: (data) => {
+      if (!data?.ticket) return;
+      useCodegenLiveStore.getState().markStale(data.ticket);
+    },
+
+    onAgentProgress: (data) => {
+      if (!data?.ticket || !data?.agent || !data?.phase) return;
+      useAgentProgressStore.getState().applyEvent(data);
+    },
   }), []);
 
   // Use the SSE hook - it manages connection lifecycle.
@@ -199,5 +222,65 @@ export function useSSEConnection(): void {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
+  }, []);
+
+  // Watch pipeline-store transitions to:
+  //   (a) Clear a live entry when a ticket leaves `generate_code` — once
+  //       we hit `gate_code_review` the frozen `/api/review` data becomes
+  //       authoritative and the live snapshot is obsolete.
+  //   (b) Hydrate the live entry exactly once when the active ticket
+  //       changes to one currently in `generate_code` that has no entry
+  //       yet (e.g. the user opens the UI mid-codegen).
+  useEffect(() => {
+    // Seed the previous-stage map from the current store snapshot so the
+    // first subscribe fire doesn't treat every existing ticket as a
+    // transition. We still hydrate below for the active ticket.
+    const prevStages = new Map<string, StageName>();
+    {
+      const initial = usePipelineStore.getState();
+      for (const [ticket, ts] of initial.tickets) {
+        prevStages.set(ticket, ts.stage);
+      }
+      // Initial hydration pass for the currently-active ticket.
+      const active = initial.activeTicket;
+      if (active) {
+        const ae = initial.tickets.get(active);
+        const liveMap = useCodegenLiveStore.getState().liveByTicket;
+        if (ae?.stage === 'generate_code' && !liveMap.has(active)) {
+          useCodegenLiveStore.getState().hydrateFromSnapshot(active);
+        }
+      }
+    }
+
+    const unsubscribe = usePipelineStore.subscribe((state) => {
+      // (a) Detect `generate_code` → later stage transitions.
+      for (const [ticket, entry] of state.tickets) {
+        const prev = prevStages.get(ticket);
+        if (prev === 'generate_code' && entry.stage !== 'generate_code') {
+          useCodegenLiveStore.getState().clearLive(ticket);
+        }
+        prevStages.set(ticket, entry.stage);
+      }
+      // Forget tickets that were removed from the store so we don't
+      // grow the map indefinitely.
+      for (const ticket of Array.from(prevStages.keys())) {
+        if (!state.tickets.has(ticket)) {
+          prevStages.delete(ticket);
+        }
+      }
+
+      // (b) Hydrate on active-ticket change when that ticket is in
+      // `generate_code` with no live entry yet.
+      const active = state.activeTicket;
+      if (active) {
+        const activeEntry = state.tickets.get(active);
+        const liveMap = useCodegenLiveStore.getState().liveByTicket;
+        if (activeEntry?.stage === 'generate_code' && !liveMap.has(active)) {
+          useCodegenLiveStore.getState().hydrateFromSnapshot(active);
+        }
+      }
+    });
+
+    return unsubscribe;
   }, []);
 }

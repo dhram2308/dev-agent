@@ -1,6 +1,6 @@
 "use strict";
 
-import type { PipelineState } from '@mi/shared';
+import type { PipelineState, QuestionAnswer } from '@mi/shared';
 
 const fs = require("fs");
 const path = require("path");
@@ -12,6 +12,9 @@ const { runAgentsTeam, runSingleAgent } = require("../../lib/agents-team");
 const { localResetRepo, localGetChanges } = require("../../lib/local-repo");
 const { jira, jiraUrl } = require("../../lib/jira");
 const { slack } = require("../../lib/slack");
+const { buildDecisionsBlock } = require("./decisions-block") as {
+  buildDecisionsBlock: (qa: QuestionAnswer[] | undefined | null) => string;
+};
 
 // Parse tasks.md into independent task groups
 function parseTaskGroups(tasksMarkdown: string): Array<{title: string; content: string; files: string[]}> {
@@ -87,6 +90,12 @@ async function runDeveloperAgent(ctx: any): Promise<void> {
   const { state, approvedPlan, devFullContext, extraDocs, extraFeedback, feedback } = ctx;
   const { summary, description, ac, issueType: iType, priority: iPriority } = (state as PipelineState).data.ticket as any;
 
+  // User-confirmed decisions from clarifying-questions loop — bindings for
+  // every downstream prompt (parallel groups, single, retry).
+  const decisionsBlock = buildDecisionsBlock(
+    (state as PipelineState).data._qa_answers as QuestionAnswer[] | undefined,
+  );
+
   // Step 1 — Reset local repo to clean enterprise-ts state
   localResetRepo(cfg.localRepo);
 
@@ -133,6 +142,7 @@ async function runDeveloperAgent(ctx: any): Promise<void> {
         `## Jira ticket: ${TICKET} [${iType || "Task"} / ${iPriority || "Medium"}]\nTitle: ${summary}\nDescription:\n${sanitizeForPrompt(description)}\nAC: ${sanitizeForPrompt(ac)}\n` +
         `${extraDocs}${extraFeedback}${devFullContext}` +
         `${feedback ? `\n## Previous code review feedback (address this):\n${feedback}\n` : ""}` +
+        `${decisionsBlock}` +
         `\n## Instructions\n` +
         `1. Read the files mentioned in YOUR task group to understand existing code\n` +
         `2. Implement ONLY the changes in your assigned task group\n` +
@@ -225,6 +235,7 @@ async function runDeveloperAgent(ctx: any): Promise<void> {
       `${feedback ? `\n## Previous code review feedback (address this):\n${feedback}\n` : ""}` +
       `${(state.data as any).previousAttemptSummary ? `\n## Previous attempt file changes (for reference):\n${(state.data as any).previousAttemptSummary}\n` : ""}` +
       `${(state.data as any).parentBranch ? `\n## Q4: Parent Branch Context\nThis ticket branches from parent feature branch: ${(state.data as any).parentBranch}. Ensure your changes are compatible with parent branch changes.\n` : ""}` +
+      `${decisionsBlock}` +
       `\n## Instructions\n` +
       `1. Read the files mentioned in the plan to understand existing code\n` +
       `2. Pay special attention to API specs, field names, and payloads from Jira comments — use EXACT names\n` +
@@ -270,6 +281,7 @@ async function runDeveloperAgent(ctx: any): Promise<void> {
         `## Ticket: ${TICKET} [${iType || "Task"}]: ${summary}\n${sanitizeForPrompt(description)}\nAC: ${sanitizeForPrompt(ac)}\n` +
         `${devFullContext}` +
         `${feedback ? `Feedback: ${feedback}\n` : ""}` +
+        `${decisionsBlock}` +
         `\n**IMPORTANT**: Enterprise app ONLY — use exact enterprise VITE_PRODUCT_ID, no generic multi-product checks.\n` +
         `\nRead the relevant files, then implement ALL changes from the plan.`,
       timeout: applyComplexityTimeout(DEVELOPER_TIMEOUT_MS, state),

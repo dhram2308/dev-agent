@@ -64,6 +64,8 @@ export interface StateManagerOptions {
   allowUnverified?: boolean;
   /** Warning callback invoked for non-fatal state issues */
   onWarn?: (message: string) => void;
+  /** Debug callback for routine bookkeeping messages (CAS merges, etc.) */
+  onDebug?: (message: string) => void;
 }
 
 /**

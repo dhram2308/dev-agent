@@ -100,6 +100,10 @@ export interface PipelineData {
   _authPaused?: boolean;
   /** OAuth: stage the pipeline was on when auth pause started */
   _authPausedAtStage?: string;
+  /** Clarifying questions raised by the Architect agent — user must answer before Approve */
+  _pending_questions?: import('./codegen').PendingQuestion[];
+  /** User answers to clarifying questions — persists across Refine iterations as binding constraints */
+  _qa_answers?: import('./codegen').QuestionAnswer[];
   [key: string]: unknown;
 }
 

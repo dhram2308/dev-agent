@@ -4,7 +4,7 @@
 // file tree sidebar, diff content, inline comments, plan tabs
 // ===================================================================
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { usePipelineStore } from '../../store/pipeline';
 import { useReviewStore } from '../../store/review';
 import * as api from '../../lib/api';
@@ -13,6 +13,15 @@ import { DiffPane } from './DiffPane';
 import { DiffStatsBar } from './DiffStatsBar';
 import { PlanTabs } from './PlanTabs';
 import type { ReviewData } from '../../types';
+import type { LiveEntry } from '../../store/codegenLive';
+
+// Inject the live-pulse keyframe once. Safe in SSR because guarded by `document`.
+if (typeof document !== 'undefined' && !document.getElementById('mi-live-pulse-style')) {
+  const s = document.createElement('style');
+  s.id = 'mi-live-pulse-style';
+  s.textContent = `@keyframes mi-live-pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.55 } }`;
+  document.head.appendChild(s);
+}
 
 // -- Styles ---------------------------------------------------------
 
@@ -166,15 +175,68 @@ const styles = {
     fontWeight: 600,
     transition: 'background 0.15s',
   },
+  liveBadge: {
+    fontSize: 10,
+    fontWeight: 700,
+    padding: '2px 8px',
+    borderRadius: 'var(--radius-full)',
+    background: 'var(--danger-muted, rgba(239,68,68,0.15))',
+    color: 'var(--danger, #ef4444)',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.04em',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    animation: 'mi-live-pulse 1.4s ease-in-out infinite',
+  },
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: '50%',
+    background: 'currentColor',
+  },
+  agentChip: {
+    fontSize: 10,
+    fontWeight: 600,
+    padding: '2px 8px',
+    borderRadius: 'var(--radius-full)',
+    background: 'var(--bg-elevated)',
+    color: 'var(--text-tertiary)',
+    border: '1px solid var(--border-subtle)',
+    fontFamily: 'var(--font-mono)',
+  },
+  completeLabel: {
+    fontSize: 10,
+    fontWeight: 700,
+    padding: '2px 8px',
+    borderRadius: 'var(--radius-full)',
+    background: 'var(--bg-elevated)',
+    color: 'var(--text-secondary)',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.04em',
+  },
 } as const;
 
 type ViewTab = 'changes' | 'plan';
 
+export interface DiffViewerProps {
+  /** Which data source to render from. Defaults to `'frozen'` for backward compat. */
+  source?: 'live' | 'frozen';
+  /** Live-codegen snapshot. Required when `source === 'live'`; ignored otherwise. */
+  liveData?: LiveEntry | null;
+  /**
+   * When `source === 'frozen'` and this is non-null, render from this data and
+   * skip the internal `/api/review` fetch. Callers that omit this prop keep
+   * today's behaviour (fetch on mount / active-ticket change).
+   */
+  frozenData?: ReviewData | null;
+}
+
 // -- Component ------------------------------------------------------
 
-export function DiffViewer(): JSX.Element {
+export function DiffViewer({ source = 'frozen', liveData = null, frozenData = null }: DiffViewerProps = {}): JSX.Element {
   const activeTicket = usePipelineStore((s) => s.activeTicket);
-  const reviewData = usePipelineStore((s) => s.reviewData);
+  const frozenReviewData = usePipelineStore((s) => s.reviewData);
 
   const viewMode = useReviewStore((s) => s.viewMode);
   const setViewMode = useReviewStore((s) => s.setViewMode);
@@ -185,8 +247,31 @@ export function DiffViewer(): JSX.Element {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch review data on mount or when active ticket changes
+  const isLive = source === 'live';
+
+  // In live mode we derive a ReviewData-shaped view from `liveData`
+  // (converting FileChange's `file_path` -> `file` so downstream
+  // components receive identical props regardless of source).
+  const liveReviewData = useMemo<ReviewData | null>(() => {
+    if (!isLive) return null;
+    if (!liveData) return null;
+    return {
+      gate: 'gate_code_review',
+      changes: (liveData.changes ?? []).map((c) => ({
+        file: c.file_path,
+        action: c.action,
+        content: c.content,
+      })),
+    };
+  }, [isLive, liveData]);
+
+  const reviewData: ReviewData | null = isLive
+    ? liveReviewData
+    : frozenData ?? frozenReviewData;
+
+  // Fetch review data on mount or when active ticket changes (frozen mode only)
   const fetchData = useCallback(async () => {
+    if (isLive) return;
     if (!activeTicket) return;
     setLoading(true);
     setError(null);
@@ -198,11 +283,16 @@ export function DiffViewer(): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [activeTicket]);
+  }, [activeTicket, isLive]);
 
   useEffect(() => {
+    if (isLive || frozenData) {
+      setLoading(false);
+      setError(null);
+      return;
+    }
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, isLive, frozenData]);
 
   // Auto-select first file when review data arrives
   useEffect(() => {
@@ -283,10 +373,26 @@ export function DiffViewer(): JSX.Element {
       <div style={styles.toolbar}>
         <div style={styles.toolbarLeft}>
           <span style={styles.title}>Code Review</span>
-          {reviewData.gate && (
+          {isLive && liveData && !liveData.stale && (
+            <>
+              <span style={styles.liveBadge} aria-label="Live codegen in progress">
+                <span style={styles.liveDot} />
+                LIVE
+              </span>
+              {liveData.activeAgents.map((agent) => (
+                <span key={agent} style={styles.agentChip}>
+                  {agent}
+                </span>
+              ))}
+            </>
+          )}
+          {isLive && liveData?.stale && (
+            <span style={styles.completeLabel}>Codegen complete</span>
+          )}
+          {!isLive && reviewData.gate && (
             <span style={styles.gateBadge}>{reviewData.gate.replace(/_/g, ' ')}</span>
           )}
-          {reviewData.mrUrl && (
+          {!isLive && reviewData.mrUrl && (
             <a
               href={reviewData.mrUrl}
               target="_blank"

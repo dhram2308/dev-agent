@@ -522,8 +522,8 @@ function saveSync(stateFilePath: string, state: PipelineState, opts: StateManage
       const memSeq = state._seq || 0;
       const diskSeq = diskResult.seq || diskResult.state._seq || 0;
       if (memSeq > 0 && diskSeq > 0 && memSeq !== diskSeq) {
-        const warn = opts.onWarn || console.warn.bind(console);
-        warn(`[State CAS] CAS conflict: expected seq ${memSeq}, found ${diskSeq} -- merging`);
+        const debug = opts.onDebug || console.debug.bind(console);
+        debug(`[State CAS] CAS conflict: expected seq ${memSeq}, found ${diskSeq} -- merging`);
         // Re-read and merge: adopt disk state's data, overlay our changes
         mergeUIFieldsFromDisk(state, diskResult.state);
         state._seq = diskSeq; // Adopt disk seq for correct increment
@@ -580,6 +580,51 @@ function updateSync(stateFilePath: string, mutator: (state: PipelineState) => Pi
 
     // Bump seq
     state._seq = readSeq + 1;
+    state.data = state.data || ({} as any);
+    (state.data as any)._lastActivity = new Date().toISOString();
+
+    pruneState(state);
+
+    const secret = stateSecret();
+    const envelope = wrapEnvelope(state, secret);
+    atomicWriteSync(stateFilePath, envelope);
+
+    return state;
+  } finally {
+    lock.release();
+  }
+}
+
+/**
+ * Serialized per-ticket mutator that funnels concurrent writers through the
+ * exclusive lock so multiple agents completing in the same tick do not race
+ * on _seq and trigger CAS-merge paths.
+ *
+ * Semantics: acquire lock -> read latest disk state -> run mutator (mutations
+ * applied to the live disk state object) -> wrap + atomic write -> release.
+ * UI-field merging happens inside the same lock via readStateFromDisk already.
+ */
+function withTicketStateSync(
+  stateFilePath: string,
+  mutator: (state: PipelineState) => void,
+  opts: StateManagerOptions = {},
+): PipelineState {
+  const lock = acquireLockSync(stateFilePath);
+  try {
+    const diskResult = readStateFromDisk(stateFilePath, {
+      allowUnverified: true,
+      onWarn: opts.onWarn || (() => {}),
+    });
+    if (!diskResult) {
+      throw new Error("Cannot update: no state file found");
+    }
+
+    const state = diskResult.state;
+    if (!state._seq) state._seq = diskResult.seq || 1;
+
+    mutator(state);
+
+    state._seq = (state._seq || 0) + 1;
     state.data = state.data || ({} as any);
     (state.data as any)._lastActivity = new Date().toISOString();
 
@@ -680,8 +725,8 @@ async function saveAsync(stateFilePath: string, state: PipelineState, opts: Stat
       const memSeq = state._seq || 0;
       const diskSeq = diskResult.seq || diskResult.state._seq || 0;
       if (memSeq > 0 && diskSeq > 0 && memSeq !== diskSeq) {
-        const warn = opts.onWarn || console.warn.bind(console);
-        warn(`[State CAS] CAS conflict: expected seq ${memSeq}, found ${diskSeq} -- merging`);
+        const debug = opts.onDebug || console.debug.bind(console);
+        debug(`[State CAS] CAS conflict: expected seq ${memSeq}, found ${diskSeq} -- merging`);
         mergeUIFieldsFromDisk(state, diskResult.state);
         state._seq = diskSeq; // Adopt disk seq for correct increment
       } else {
@@ -787,6 +832,7 @@ module.exports = {
   loadSync,
   saveSync,
   updateSync,
+  withTicketStateSync,
   checkUIApprovalSync,
 
   // Async API (server)

@@ -7,7 +7,15 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { useActiveTicketState } from '../store/pipeline';
+import { Markdown } from './Markdown';
+import { ChangesTab } from './write-code/ChangesTab';
 import type { StageName } from '../types';
+
+const POST_CODEGEN_STAGES: ReadonlySet<StageName> = new Set([
+  'gate_code_review', 'deploy_qa', 'test_qa',
+  'gate_preprod_approval', 'create_preprod_mr', 'gate_dual_approval',
+  'deploy_prod', 'done',
+]);
 
 // ── Visibility ────────────────────────────────────────────────
 
@@ -19,10 +27,11 @@ const SHOW_STAGES: StageName[] = [
 
 // ── Tab definitions ───────────────────────────────────────────
 
-type TabKey = 'developer' | 'review' | 'build' | 'runtime' | 'browser' | 'ac' | 'mr';
+type TabKey = 'developer' | 'changes' | 'review' | 'build' | 'runtime' | 'browser' | 'ac' | 'mr';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'developer', label: 'Developer' },
+  { key: 'changes', label: 'Changes' },
   { key: 'review', label: 'Review' },
   { key: 'build', label: 'Build' },
   { key: 'runtime', label: 'Tests' },
@@ -160,8 +169,8 @@ const styles = {
     marginBottom: 'var(--sp-2)',
     maxHeight: 180,
     overflowY: 'auto' as const,
-    whiteSpace: 'pre-wrap' as const,
-    fontFamily: 'var(--font-mono)',
+    fontFamily: 'var(--font-sans)',
+    wordBreak: 'break-word' as const,
   },
   link: {
     color: 'var(--accent)',
@@ -255,17 +264,29 @@ function Row({ label, status, extra }: { label: string; status: CS; extra?: stri
 }
 
 function Collapsible({ text, maxH }: { text: string; maxH?: number }): JSX.Element {
-  return <div style={{ ...styles.collapsible, ...(maxH ? { maxHeight: maxH } : {}) }}>{text}</div>;
+  return (
+    <div style={{ ...styles.collapsible, ...(maxH ? { maxHeight: maxH } : {}) }}>
+      <Markdown>{text}</Markdown>
+    </div>
+  );
 }
 
 // ── Tab status derivation ─────────────────────────────────────
 
-function deriveTabStatus(tab: TabKey, d: Record<string, unknown>, isGen: boolean): CS {
+function deriveTabStatus(tab: TabKey, d: Record<string, unknown>, isGen: boolean, stage?: StageName): CS {
   switch (tab) {
     case 'developer':
       if (d._dev_failed) return 'fail';
       if (d._dev_complete) return 'done';
       return isGen ? 'in_progress' : 'pending';
+    case 'changes': {
+      if (d._dev_failed) return 'fail';
+      const hasChanges = Array.isArray((d.codeChanges as { changes?: unknown[] } | undefined)?.changes)
+        && ((d.codeChanges as { changes: unknown[] }).changes.length > 0);
+      if (stage && POST_CODEGEN_STAGES.has(stage)) return 'done';
+      if (hasChanges) return 'done';
+      return isGen ? 'in_progress' : 'pending';
+    }
     case 'review':
       if (!d._dev_complete) return 'pending';
       if (d._reviewed && d._fixed) return 'done';
@@ -666,7 +687,7 @@ export function WriteCodeDetail(): JSX.Element | null {
       {/* Tab bar */}
       <div style={styles.tabBar}>
         {TABS.map(({ key, label }) => {
-          const ts = deriveTabStatus(key, d, isGen);
+          const ts = deriveTabStatus(key, d, isGen, ticketState?.stage);
           return (
             <button
               key={key}
@@ -683,6 +704,7 @@ export function WriteCodeDetail(): JSX.Element | null {
       {/* Tab content */}
       <div style={styles.content}>
         {activeTab === 'developer' && <DeveloperTab d={d} />}
+        {activeTab === 'changes' && <ChangesTab />}
         {activeTab === 'review' && <ReviewTab d={d} />}
         {activeTab === 'build' && <BuildTab d={d} />}
         {activeTab === 'runtime' && <RuntimeTab d={d} />}

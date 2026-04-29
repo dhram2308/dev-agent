@@ -191,7 +191,11 @@ function localResetRepo(clonePath: string): void {
 
 function localGetChanges(clonePath: string): ChangeEntry[] {
   const { execFileSync } = require("child_process");
-  const output: string = execFileSync("git", ["-C", clonePath, "status", "--porcelain"], { encoding: "utf8", timeout: 15_000 }).trim();
+  // Strip only the trailing newline — `.trim()` would eat the leading
+  // space of the first line, which `git status --porcelain` uses to
+  // encode the worktree column (e.g. " M path" for unstaged-modified).
+  // Losing that space offsets the downstream `substring(3)` path parse.
+  const output: string = execFileSync("git", ["-C", clonePath, "status", "--porcelain"], { encoding: "utf8", timeout: 15_000 }).replace(/\n+$/, "");
   if (!output) return [];
 
   let diffOutput = "";

@@ -116,8 +116,13 @@ const styles = {
     position: 'relative' as const,
   },
   logLine: {
-    whiteSpace: 'pre-wrap' as const,
-    wordBreak: 'break-all' as const,
+    // Virtualized rows have a fixed 22px height. `pre-wrap` let long lines
+    // wrap and overflow into the next row's box, causing visible overlap
+    // (e.g. "Live Output" dense runs). Keep single-line with hidden overflow
+    // and rely on the `title` attribute for full content on hover.
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden' as const,
+    textOverflow: 'ellipsis' as const,
     padding: '0 var(--sp-3)',
   },
   timestamp: {
@@ -313,6 +318,7 @@ export function LogViewer(): JSX.Element {
                       color: LOG_LEVEL_COLORS[log.level] ?? 'var(--text-primary)',
                       height: LINE_HEIGHT,
                     }}
+                    title={`${formatTimestamp(log.timestamp)} ${log.message}`}
                   >
                     <span style={styles.timestamp}>
                       {formatTimestamp(log.timestamp)}

@@ -82,6 +82,14 @@ export interface PipelineStore {
   rejectGate: (ticket: string, gate: string, reason: string) => Promise<void>;
   refineGate: (ticket: string, gate: string, instructions: string) => Promise<void>;
 
+  // Clarifying-questions actions (plan-clarifying-questions)
+  answerQuestions: (
+    ticket: string,
+    answers: Array<{ id: string; choice: number }>,
+    via?: 'user' | 'ai-default',
+  ) => Promise<void>;
+  acceptAllAIPicks: (ticket: string) => Promise<void>;
+
   /**
    * Apply a `review` SSE event (approve/reject/refine). Clears `gateWaiting`
    * on the target ticket so any mounted `GateApproval` unmounts immediately
@@ -363,6 +371,31 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
     }
   },
 
+  // Clarifying-questions — POST answers; the trailing SSE `state` event
+  // refreshes tickets.get(ticket).state.data._pending_questions for us.
+  answerQuestions: async (ticket, answers, via = 'user') => {
+    if (!answers || answers.length === 0) return;
+    try {
+      await api.answerQuestions(ticket, answers, via);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      get().setError(ticket, message);
+    }
+  },
+
+  acceptAllAIPicks: async (ticket) => {
+    const entry = get().tickets.get(ticket);
+    const pending = (entry?.state?.data as any)?._pending_questions as
+      | Array<{ id: string; recommend?: number }>
+      | undefined;
+    if (!pending || pending.length === 0) return;
+    const answers = pending
+      .filter((q) => typeof q.recommend === 'number')
+      .map((q) => ({ id: q.id, choice: q.recommend as number }));
+    if (answers.length === 0) return;
+    await get().answerQuestions(ticket, answers, 'ai-default');
+  },
+
   handleReviewEvent: ({ ticket }) => {
     // Clear the active gate so GateApproval unmounts immediately; a trailing
     // `state` event will re-populate downstream stage data.
@@ -560,6 +593,21 @@ export function useActiveTicketState(): PipelineTicketState | null {
   return usePipelineStore((s) => {
     if (!s.activeTicket) return null;
     return s.tickets.get(s.activeTicket) ?? null;
+  });
+}
+
+/**
+ * Read pending clarifying questions for a ticket.
+ * Returns the array from `state.data._pending_questions`, or `[]` if absent.
+ */
+export function usePendingQuestions(
+  ticket: string | null,
+): import('@mi/shared').PendingQuestion[] {
+  return usePipelineStore((s) => {
+    if (!ticket) return [];
+    const entry = s.tickets.get(ticket);
+    const pending = (entry?.state?.data as any)?._pending_questions;
+    return Array.isArray(pending) ? pending : [];
   });
 }
 

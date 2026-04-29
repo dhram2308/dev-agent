@@ -1,6 +1,6 @@
 "use strict";
 
-import type { PipelineState } from '@mi/shared';
+import type { PipelineState, PendingQuestion, QuestionAnswer } from '@mi/shared';
 
 const fs = require("fs");
 const path = require("path");
@@ -58,6 +58,89 @@ function scaffoldOpenSpec(ticket: string): any {
     logErr(`OpenSpec scaffold failed: ${err.message}`);
     return null;
   }
+}
+
+/**
+ * Extract and validate the `---QUESTIONS---` JSON block from the Architect
+ * agent's output. Returns a list of validated `PendingQuestion` entries.
+ *
+ * Graceful degradation: malformed JSON, missing required fields, and
+ * out-of-bounds `recommend` indices are dropped with a warning. A missing
+ * block simply returns `[]` — the pipeline proceeds as "no questions".
+ *
+ * Hard cap 10 entries; soft cap 3 (warning only).
+ */
+function parseQuestionsBlock(output: string): PendingQuestion[] {
+  // Accept either `---END---` or the next `---SOMETHING---` marker as terminator
+  const blockRe = /---QUESTIONS---\s*\n([\s\S]*?)(?:\n---END---|\n---[A-Z]+---|$)/i;
+  const m = output.match(blockRe);
+  if (!m) return [];
+
+  const body = m[1].trim();
+  if (!body) return [];
+
+  // Strip optional fenced json (e.g. ```json ... ```)
+  const stripped = body
+    .replace(/^```(?:json)?\s*\n/, "")
+    .replace(/\n```\s*$/, "")
+    .trim();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stripped);
+  } catch (err: any) {
+    logWarn(`[architect] malformed QUESTIONS block: ${err.message}`);
+    return [];
+  }
+  if (!Array.isArray(parsed)) {
+    logWarn(`[architect] QUESTIONS block must be an array, got ${typeof parsed}`);
+    return [];
+  }
+
+  const HARD_CAP = 10;
+  const SOFT_CAP = 3;
+  const now = Date.now();
+  const accepted: PendingQuestion[] = [];
+
+  for (const raw of parsed as any[]) {
+    if (accepted.length >= HARD_CAP) {
+      logWarn(`[architect] QUESTIONS block hard-cap reached (${HARD_CAP}); dropping remaining entries`);
+      break;
+    }
+    if (!raw || typeof raw !== "object") {
+      logWarn(`[architect] QUESTIONS entry is not an object — dropped`);
+      continue;
+    }
+    const id = typeof raw.id === "string" ? raw.id.trim() : "";
+    const text = typeof raw.text === "string" ? raw.text.trim() : "";
+    const options = Array.isArray(raw.options) ? raw.options.filter((o: any) => typeof o === "string" && o.trim().length > 0) : [];
+    if (!id) { logWarn(`[architect] QUESTIONS entry missing 'id' — dropped`); continue; }
+    if (!text) { logWarn(`[architect] QUESTIONS entry '${id}' missing 'text' — dropped`); continue; }
+    if (options.length < 2) { logWarn(`[architect] QUESTIONS entry '${id}' needs >= 2 options — dropped`); continue; }
+
+    const entry: PendingQuestion = {
+      id,
+      text,
+      options: options.slice(0, 5),
+      stage: "explore_plan",
+      ts: now,
+    };
+
+    if (typeof raw.recommend === "number" && Number.isInteger(raw.recommend) && raw.recommend >= 0 && raw.recommend < entry.options.length) {
+      entry.recommend = raw.recommend;
+    }
+    if (typeof raw.reason === "string" && raw.reason.trim().length > 0) {
+      entry.reason = raw.reason.trim();
+    }
+
+    accepted.push(entry);
+  }
+
+  if (accepted.length > SOFT_CAP) {
+    logWarn(`[architect] soft cap exceeded: ${accepted.length} questions admitted (max recommended: ${SOFT_CAP})`);
+  }
+
+  return accepted;
 }
 
 function parseAndWriteArtifacts(output: string, scaffoldInfo: any): any {
@@ -494,12 +577,42 @@ async function stageExplorePlan(state: PipelineState): Promise<void> {
       ? `\n## User Refinement Instructions (PRIORITY)\n${state.data._refine_instructions}\n`
       : "";
 
+    // Previously-confirmed clarifying questions — the user already answered these
+    // in a prior run. Do not re-ask them unless the assumption has moved.
+    const priorAnswers = (state.data._qa_answers as QuestionAnswer[] | undefined) || [];
+    const priorAnswersCtx = priorAnswers.length > 0
+      ? `\n## Previously-confirmed decisions\n` +
+        `The user has already answered these clarifying questions. Do NOT re-ask them unless the plan has moved and these answers would no longer be valid:\n` +
+        priorAnswers.map(a => `- ${a.id}: "${a.optionText}"`).join("\n") + "\n"
+      : "";
+
     const architectPrompt =
       `You are the **OpenSpec Architect Agent**. Produce a comprehensive implementation plan as 4 structured artifacts.\n\n` +
       `${archTicketCtx}## Analysis Results\n${trim(analysisResult)}\n\n` +
       `## Z6: VITE_PRODUCT_ID Enforcement\nAll product ID checks MUST use the exact enterprise product ID constant.\n\n` +
       (templateInstructions ? `## OpenSpec Artifact Templates\n${templateInstructions}\n` : "") +
-      `${prevArtifactsCtx}${refineArchCtx}` +
+      `${prevArtifactsCtx}${priorAnswersCtx}${refineArchCtx}` +
+      `## When you are uncertain\n` +
+      `If the ticket or plan has a MATERIAL ambiguity that changes which files/UX/data you modify, append a QUESTIONS block AFTER your \`---TASKS---\` section, in this exact format:\n\n` +
+      `---QUESTIONS---\n` +
+      `[\n` +
+      `  {\n` +
+      `    "id": "short-slug-name",\n` +
+      `    "text": "Full question sentence",\n` +
+      `    "options": ["Option A description", "Option B description"],\n` +
+      `    "recommend": 0,\n` +
+      `    "reason": "One-sentence rationale for option A"\n` +
+      `  }\n` +
+      `]\n` +
+      `---END---\n\n` +
+      `Rules:\n` +
+      `- Maximum 3 questions. If you have more, the ticket itself is too ambiguous — flag this in the proposal instead.\n` +
+      `- Only for decisions that MATERIALLY change implementation (file paths, data shape, UX affordance).\n` +
+      `- NOT for cosmetic preferences, naming micro-choices, or things answered in Jira comments.\n` +
+      `- \`id\` must be unique within this output, kebab-case, ≤ 40 chars.\n` +
+      `- \`options\` must have 2–5 string entries; each a full standalone description.\n` +
+      `- Always include \`recommend\` (0-based index) and a one-sentence \`reason\`.\n` +
+      `- If you have zero questions, DO NOT emit the QUESTIONS block at all.\n\n` +
       `## OUTPUT FORMAT — CRITICAL\nYou MUST output exactly 4 sections:\n\n---PROPOSAL---\n---DESIGN---\n---SPECS---\n---TASKS---\n\nAll 4 markers are REQUIRED.`;
 
     const architectOutput: string = await runSingleAgent({
@@ -528,6 +641,22 @@ async function stageExplorePlan(state: PipelineState): Promise<void> {
       logWarn("OpenSpec artifact parsing failed — using raw architect output");
       state.data.explore_plan = architectOutput;
       state.data.explore_openspec = null;
+    }
+
+    // Extract clarifying questions raised by the Architect. Also clear any
+    // prior answers whose id is being re-raised (user must re-answer since
+    // the underlying assumption may have moved).
+    const pendingQuestions = parseQuestionsBlock(architectOutput);
+    state.data._pending_questions = pendingQuestions;
+    if (pendingQuestions.length > 0) {
+      logInfo(`Architect raised ${pendingQuestions.length} clarifying question(s)`);
+      const newIds = new Set(pendingQuestions.map(q => q.id));
+      const existingAnswers = (state.data._qa_answers as QuestionAnswer[] | undefined) || [];
+      const survivingAnswers = existingAnswers.filter(a => !newIds.has(a.id));
+      if (survivingAnswers.length !== existingAnswers.length) {
+        logInfo(`Cleared ${existingAnswers.length - survivingAnswers.length} stale answer(s) — questions were re-raised`);
+      }
+      state.data._qa_answers = survivingAnswers;
     }
 
     state.data.explore_agents = { analysis: analysisResult };
@@ -669,4 +798,4 @@ function checkUIRefine(state: PipelineState): string | null {
   return null;
 }
 
-export { stageExplorePlan };
+export { stageExplorePlan, parseQuestionsBlock };

@@ -1,0 +1,72 @@
+{
+  "fetch_ticket": {
+    "slack": true,
+    "jira": false,
+    "ui": true,
+    "reminder1h": true,
+    "reminder4h": true,
+    "log": true
+  },
+  "explore_plan": {
+    "slack": true,
+    "jira": false,
+    "ui": true,
+    "reminder1h": true,
+    "reminder4h": true,
+    "log": true
+  },
+  "gate_code_review": {
+    "slack": true,
+    "jira": false,
+    "ui": true,
+    "reminder1h": true,
+    "reminder4h": true,
+    "log": true
+  },
+  "deploy_qa": {
+    "slack": true,
+    "jira": false,
+    "ui": true,
+    "reminder1h": true,
+    "reminder4h": true,
+    "log": true
+  },
+  "test_qa": {
+    "slack": true,
+    "jira": false,
+    "ui": true,
+    "reminder1h": true,
+    "reminder4h": true
+  },
+  "gate_preprod_approval": {
+    "slack": true,
+    "jira": false,
+    "ui": true,
+    "reminder1h": true,
+    "reminder4h": true
+  },
+  "gate_dual_approval": {
+    "slack": true,
+    "jira": false,
+    "ui": true,
+    "reminder1h": true,
+    "reminder4h": true
+  },
+  "deploy_prod": {
+    "slack": true,
+    "jira": false,
+    "ui": true,
+    "reminder1h": true,
+    "reminder4h": true
+  },
+  "done": {
+    "slack": true,
+    "jira": true,
+    "ui": true,
+    "reminder1h": true,
+    "reminder4h": true
+  },
+  "generate_code": {
+    "log": true
+  }
+}

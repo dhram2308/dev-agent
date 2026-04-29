@@ -74,7 +74,17 @@ export interface PipelineData {
   _ui_approve_gate?: string;
   _ui_approve_preprod?: string;
   _ui_approve_dual?: string;
-  _active_agents?: Array<{ name: string; status: string }>;
+  _active_agents?: Array<{ name: string; team?: string; startedAt?: number; phase?: 'running' } | string>;
+  _agents_history?: Array<{
+    name: string;
+    team: string;
+    startedAt: number;
+    durationMs: number;
+    phase: 'complete' | 'failed';
+    outputChars?: number;
+    required: boolean;
+    errorMessage?: string;
+  }>;
   _stage_timings?: Record<string, { start: number; end?: number }>;
   code_mr_url?: string;
   code_mr_iid?: string | number;

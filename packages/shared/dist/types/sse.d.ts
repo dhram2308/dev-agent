@@ -1,7 +1,7 @@
 /**
  * SSE event types broadcast by the server.
  */
-export type SseEventType = 'log' | 'status' | 'state' | 'approval' | 'error';
+export type SseEventType = 'log' | 'status' | 'state' | 'approval' | 'error' | 'codegen:live' | 'codegen:live-stop';
 /**
  * A single SSE message with event type and data.
  */

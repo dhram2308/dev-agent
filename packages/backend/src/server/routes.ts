@@ -704,6 +704,107 @@ export async function handleRequest(
     return true;
   }
 
+  // -- GET /api/changes --
+  // Durable diff-data surface for the Write Code stage card.
+  // Picks the best available source (live/state/git/none) so the UI can
+  // render the same DiffViewer across running, post-run, cached-resume,
+  // and past-gate contexts without stage-gated branches.
+  if (url.pathname === '/api/changes') {
+    const ticket = safeTicket(url.searchParams.get('ticket'));
+    if (!ticket) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end('{"error":"Invalid ticket format"}');
+      return true;
+    }
+    const now = Date.now();
+    const state = await getState(ticket);
+    if (!state) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ source: 'none', changes: [], summary: '', original_files: {}, ts: now, reason: 'no_state' }));
+      return true;
+    }
+
+    try {
+      const d = (state.data || {}) as Record<string, unknown>;
+      const { cfg } = require('@mi/agent/lib/config') as { cfg: { localRepo: string | null } };
+
+      const liveActive = state.stage === 'generate_code' && !!d._active_team;
+      const codeChanges = d.codeChanges as { changes?: unknown[]; summary?: string } | undefined;
+      const hasStateChanges = Array.isArray(codeChanges?.changes) && (codeChanges!.changes as unknown[]).length > 0;
+
+      if (liveActive && cfg.localRepo) {
+        const { buildLiveSnapshot } = require('@mi/agent/lib/agents-team') as {
+          buildLiveSnapshot: (cwd: string, ticket: string, team: string, activeAgents: string[]) => {
+            changes: unknown[]; original_files: Record<string, string>;
+          };
+        };
+        const rawAgents = (d._active_agents as unknown) || [];
+        const activeAgents: string[] = Array.isArray(rawAgents)
+          ? rawAgents.map((a: unknown) => (typeof a === 'string' ? a : (a as { name?: string })?.name)).filter((n): n is string => typeof n === 'string')
+          : [];
+        const teamName = (d._active_team as string) || 'Developer Team';
+        const snap = buildLiveSnapshot(cfg.localRepo, ticket, teamName, activeAgents);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          source: 'live',
+          changes: snap.changes,
+          summary: codeChanges?.summary || '',
+          original_files: snap.original_files,
+          ts: now,
+        }));
+        return true;
+      }
+
+      if (hasStateChanges) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          source: 'state',
+          changes: codeChanges!.changes,
+          summary: codeChanges!.summary || '',
+          original_files: d.original_files || {},
+          ts: now,
+        }));
+        return true;
+      }
+
+      if (cfg.localRepo) {
+        const { localGetChanges, localGetOriginal } = require('@mi/agent/lib/local-repo') as {
+          localGetChanges: (cwd: string) => Array<{ action: string; file_path: string; content: string }>;
+          localGetOriginal: (cwd: string, filePath: string) => string | null;
+        };
+        const SENSITIVE = /^(\.env(\..*)?|\.api-token|\.state-secret|\.debug)$/;
+        const raw = localGetChanges(cfg.localRepo);
+        const filtered = raw.filter((c) => !SENSITIVE.test(c.file_path));
+        if (filtered.length > 0) {
+          const originals: Record<string, string> = {};
+          for (const c of filtered) {
+            if (c.action !== 'update') continue;
+            const orig = localGetOriginal(cfg.localRepo, c.file_path);
+            if (orig !== null) originals[c.file_path] = orig;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            source: 'git',
+            changes: filtered,
+            summary: '',
+            original_files: originals,
+            ts: now,
+          }));
+          return true;
+        }
+      }
+
+      const reason = cfg.localRepo ? 'no_changes_yet' : 'no_local_repo';
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ source: 'none', changes: [], summary: '', original_files: {}, ts: now, reason }));
+    } catch (e: unknown) {
+      const msg = (e instanceof Error ? e.message : String(e)).substring(0, 500);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ source: 'none', changes: [], summary: '', original_files: {}, ts: now, reason: 'error', error: msg }));
+    }
+    return true;
+  }
+
   // -- POST /api/approve --
   // Uses patchUIWithGateAsync for atomic locked write with HMAC
   if (url.pathname === '/api/approve' && request.method === 'POST') {
@@ -1228,7 +1329,10 @@ export async function handleRequest(
       const stageIndex = (STAGES as readonly string[]).indexOf(stage);
       const progress = stageIndex >= 0 ? parseFloat((stageIndex / STAGES.length).toFixed(2)) : 0;
       const d = (state?.data || {}) as Record<string, unknown>;
-      const activeAgents = (d._active_agents as string[]) || [];
+      const rawActive = (d._active_agents as unknown) || [];
+      const activeAgents: string[] = Array.isArray(rawActive)
+        ? rawActive.map((a: unknown) => (typeof a === 'string' ? a : (a as { name?: string })?.name)).filter((n): n is string => typeof n === 'string')
+        : [];
       const startedAt = (d._startedAt as string) || null;
       let needsApproval = GATE_STAGES.has(stage);
       // explore_plan only needs approval when plan is posted

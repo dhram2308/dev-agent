@@ -42,6 +42,23 @@ export interface SSEReviewEvent {
   [key: string]: unknown;
 }
 
+export interface SSEAgentProgressEvent {
+  ticket: string;
+  team: string;
+  agent: string;
+  phase: 'start' | 'complete' | 'failed';
+  ts: number;
+  startedAt: number;
+  required: boolean;
+  durationMs?: number;
+  outputChars?: number;
+  promptChars?: number;
+  timeoutMs?: number;
+  maxTurns?: number | null;
+  errorMessage?: string;
+  [key: string]: unknown;
+}
+
 /** Handler callbacks for SSE events */
 export interface SSEHandlers {
   onLog?: (data: SSELogEvent) => void;
@@ -55,6 +72,9 @@ export interface SSEHandlers {
   onConnectorError?: (data: { provider: string; error?: string; [key: string]: unknown }) => void;
   onAuthRequired?: (data: { provider: string; reason?: string; [key: string]: unknown }) => void;
   onConfigChanged?: (data: { changes: Record<string, string> }) => void;
+  onCodegenLive?: (data: import('@mi/shared').CodegenLivePayload) => void;
+  onCodegenLiveStop?: (data: import('@mi/shared').CodegenLiveStopPayload) => void;
+  onAgentProgress?: (data: SSEAgentProgressEvent) => void;
 }
 
 /** Return type for the useSSE hook */
@@ -269,6 +289,37 @@ export function useSSE(
       try {
         const data = JSON.parse(e.data) as { changes: Record<string, string> };
         handlersRef.current.onConfigChanged?.(data);
+      } catch {
+        // Malformed JSON -- skip
+      }
+    });
+
+    // Listen for "codegen:live" events (live-diff ticks from agents-team
+    // poller during stageGenerateCode).
+    addTracked('codegen:live', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data) as import('@mi/shared').CodegenLivePayload;
+        handlersRef.current.onCodegenLive?.(data);
+      } catch {
+        // Malformed JSON -- skip
+      }
+    });
+
+    // Listen for "codegen:live-stop" events (emitted in finally block of
+    // runAgentsTeam once the team run completes).
+    addTracked('codegen:live-stop', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data) as import('@mi/shared').CodegenLiveStopPayload;
+        handlersRef.current.onCodegenLiveStop?.(data);
+      } catch {
+        // Malformed JSON -- skip
+      }
+    });
+
+    addTracked('agent:progress', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data) as SSEAgentProgressEvent;
+        handlersRef.current.onAgentProgress?.(data);
       } catch {
         // Malformed JSON -- skip
       }

@@ -4,11 +4,14 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { useState, useRef, useEffect } from 'react';
+import type { CSSProperties } from 'react';
 import { usePipelineStore, useActiveTicketState } from '../store/pipeline';
 import { useReviewStore } from '../store/review';
 import { useToast } from '../contexts/ToastContext';
 import { RejectForm } from './approval/RejectForm';
 import { RefineForm } from './approval/RefineForm';
+import { Markdown } from './Markdown';
+import { PendingQuestionsPanel } from './PendingQuestionsPanel';
 import type { StageName, PipelineData } from '../types';
 
 // ── Styles ─────────────────────────────────────────────────────
@@ -53,12 +56,10 @@ const styles = {
     background: 'var(--bg-elevated)',
     borderRadius: 'var(--radius-md)',
     padding: 'var(--sp-4)',
-    fontFamily: 'var(--font-mono)',
     fontSize: 12,
     lineHeight: 1.8,
     maxHeight: 400,
     overflowY: 'auto' as const,
-    whiteSpace: 'pre-wrap' as const,
     wordBreak: 'break-word' as const,
     color: 'var(--text-secondary)',
     marginBottom: 'var(--sp-4)',
@@ -235,8 +236,7 @@ const styles = {
   sugItem: {
     fontSize: 12,
     color: 'var(--text-secondary)',
-    padding: '3px 0 3px 16px',
-    position: 'relative' as const,
+    padding: '2px 0',
     lineHeight: 1.5,
   },
 } as const;
@@ -364,8 +364,12 @@ export function GateApproval(): JSX.Element | null {
 
   // Plan content (for explore_plan gate)
   const planContent = data.explore_plan;
-  const openspecData = data.explore_openspec as Record<string, string> | undefined;
+  const openspecData = data.explore_openspec as Record<string, string | string[]> | undefined;
   const suggestions = data._agent_suggestions as string[] | undefined;
+
+  // Clarifying questions — block Approve until answered (Reject + Refine stay enabled)
+  const pendingQuestionsRaw = (data as any)._pending_questions;
+  const hasPendingQuestions = Array.isArray(pendingQuestionsRaw) && pendingQuestionsRaw.length > 0;
 
   // MR URL (for code review gate)
   const mrUrl = data.code_mr_url as string | undefined;
@@ -383,10 +387,21 @@ export function GateApproval(): JSX.Element | null {
         {/* Description */}
         <div style={styles.description}>{config.description}</div>
 
+        {/* Clarifying questions (explore_plan gate) — mounts above the plan
+            preview and tabs when the Architect raised questions that the
+            user has not yet answered. */}
+        {config.showPlan && hasPendingQuestions && (
+          <PendingQuestionsPanel ticket={ticketState.ticket} />
+        )}
+
         {/* Plan content (explore_plan gate) */}
         {config.showPlan && planContent && (
           <div style={styles.planContent}>
-            {typeof planContent === 'string' ? planContent : JSON.stringify(planContent, null, 2)}
+            {typeof planContent === 'string' ? (
+              <Markdown>{planContent}</Markdown>
+            ) : (
+              <pre>{JSON.stringify(planContent, null, 2)}</pre>
+            )}
           </div>
         )}
 
@@ -399,11 +414,13 @@ export function GateApproval(): JSX.Element | null {
         {suggestions && suggestions.length > 0 && (
           <div style={styles.suggestions}>
             <div style={styles.sugTitle}>Suggestions</div>
-            {suggestions.map((sug, i) => (
-              <div key={i} style={styles.sugItem}>
-                &bull; {sug}
-              </div>
-            ))}
+            <ul style={{ margin: 0, paddingLeft: 20 }}>
+              {suggestions.map((sug, i) => (
+                <li key={i} style={styles.sugItem}>
+                  <Markdown>{String(sug)}</Markdown>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -435,10 +452,11 @@ export function GateApproval(): JSX.Element | null {
         {/* Action buttons */}
         <div style={styles.actions}>
           <button
-            style={{ ...styles.btnApprove, ...(submitting ? styles.disabled : {}) }}
+            style={{ ...styles.btnApprove, ...(submitting || hasPendingQuestions ? styles.disabled : {}) }}
             onClick={() => setConfirmDialog('approve')}
-            disabled={submitting}
+            disabled={submitting || hasPendingQuestions}
             aria-label={config.approveLabel}
+            title={hasPendingQuestions ? 'Answer pending questions to approve' : undefined}
           >
             {config.approveLabel}
           </button>
@@ -529,7 +547,42 @@ export function GateApproval(): JSX.Element | null {
 
 // ── OpenSpec Tabs sub-component ────────────────────────────────
 
-function OpenSpecTabs({ data }: { data: Record<string, string> }): JSX.Element {
+const MONO_PILL_STYLE: CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 11,
+  padding: '4px 8px',
+  background: 'var(--bg-elevated)',
+  borderRadius: 4,
+  color: 'var(--text-secondary)',
+  display: 'inline-block',
+  wordBreak: 'break-all',
+};
+
+function renderTabBody(key: string, value: string | string[] | undefined): JSX.Element {
+  if (value === undefined || value === null) {
+    return <em style={{ color: 'var(--text-ghost)' }}>No content</em>;
+  }
+  if (key === 'suggestions' && Array.isArray(value)) {
+    if (value.length === 0) {
+      return <em style={{ color: 'var(--text-ghost)' }}>No suggestions</em>;
+    }
+    return (
+      <ul style={{ margin: 0, paddingLeft: 20 }}>
+        {value.map((item, i) => (
+          <li key={i} style={{ padding: '2px 0' }}>
+            <Markdown>{String(item)}</Markdown>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  if (key === 'changeName' || key === 'artifactDir') {
+    return <code style={MONO_PILL_STYLE}>{String(value)}</code>;
+  }
+  return <Markdown>{String(value)}</Markdown>;
+}
+
+function OpenSpecTabs({ data }: { data: Record<string, string | string[]> }): JSX.Element {
   const keys = Object.keys(data);
   const [activeTab, setActiveTab] = useState(keys[0] ?? '');
 
@@ -578,16 +631,15 @@ function OpenSpecTabs({ data }: { data: Record<string, string> }): JSX.Element {
         background: 'var(--bg-elevated)',
         borderRadius: '0 var(--radius-md) var(--radius-md) var(--radius-md)',
         padding: 'var(--sp-4)',
-        fontFamily: 'var(--font-mono)',
-        fontSize: 12,
-        lineHeight: 1.8,
+        fontFamily: 'var(--font-sans)',
+        fontSize: 13,
+        lineHeight: 1.7,
         maxHeight: 400,
         overflowY: 'auto' as const,
-        whiteSpace: 'pre-wrap' as const,
         wordBreak: 'break-word' as const,
         color: 'var(--text-secondary)',
       }}>
-        {data[activeTab] ?? ''}
+        {renderTabBody(activeTab, data[activeTab])}
       </div>
     </div>
   );

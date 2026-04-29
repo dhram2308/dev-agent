@@ -8,10 +8,9 @@ BLUE='\033[0;34m'  CYAN='\033[0;36m'  NC='\033[0m'
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-TSC_PID=""  BACKEND_PID=""  VITE_PID=""
+BACKEND_PID=""  VITE_PID=""
 
 # ── Shared API token for backend + frontend ─────────────
-# Both processes use the same token so Vite dev server can auth with the backend.
 export API_TOKEN=$(openssl rand -hex 24)
 export VITE_API_TOKEN="$API_TOKEN"
 
@@ -21,51 +20,43 @@ cleanup() {
   echo -e "${YELLOW}Shutting down dev environment...${NC}"
   [ -n "$VITE_PID" ]    && kill "$VITE_PID"    2>/dev/null
   [ -n "$BACKEND_PID" ] && kill "$BACKEND_PID" 2>/dev/null
-  [ -n "$TSC_PID" ]     && kill "$TSC_PID"     2>/dev/null
   wait 2>/dev/null
   echo -e "${GREEN}All processes stopped.${NC}"
 }
 trap cleanup EXIT INT TERM
 
 # ── Kill existing processes on dev ports ─────────────────
-EXISTING=$(lsof -ti:3000 -ti:5173 2>/dev/null || true)
-if [ -n "$EXISTING" ]; then
-  echo -e "${YELLOW}[setup]${NC} Killing existing processes on :3000/:5173"
-  kill -9 $EXISTING 2>/dev/null || true
-  sleep 1
-fi
+kill_port() {
+  local port=$1
+  local pids=$(lsof -ti:"$port" 2>/dev/null || true)
+  if [ -n "$pids" ]; then
+    echo -e "${YELLOW}[setup]${NC} Killing process on :${port}"
+    kill -9 $pids 2>/dev/null || true
+  fi
+}
+kill_port 3000
+kill_port 5173
+sleep 1
 
-# ── Step 1: Initial build ──────────────────────────────
-# tsc may exit non-zero due to type errors in test files but still emits JS.
-echo -e "${CYAN}[build]${NC} Building shared → agent → backend..."
+# ── Dev is TS-native: no build step ───────────────────────
+# tsx transpiles packages/{backend,agent,shared}/src on the fly.
+# dev-boot.js installs a require hook that maps @mi/agent, @mi/shared,
+# @shared, @native, and relative `/agent/dist/` requests → src paths.
+# Prod (`npm run build && npm start`) is unaffected.
 
-npx tsc -p packages/shared/tsconfig.json 2>&1 | sed "s/^/  ${CYAN}[tsc]${NC} /" || true
-[ ! -f packages/shared/dist/index.js ] && echo -e "${RED}FATAL: shared build failed${NC}" && exit 1
+echo -e "${CYAN}[dev]${NC} TS-native (tsx) — no compile step"
 
-npx tsc -p packages/agent/tsconfig.json 2>&1 | sed "s/^/  ${CYAN}[tsc]${NC} /" || true
-[ ! -f packages/agent/dist/index.js ] && echo -e "${RED}FATAL: agent build failed${NC}" && exit 1
-
-npx tsc -p packages/backend/tsconfig.json 2>&1 | sed "s/^/  ${CYAN}[tsc]${NC} /" || true
-[ ! -f packages/backend/dist/server/http-server.js ] && echo -e "${RED}FATAL: backend build failed${NC}" && exit 1
-
-echo -e "${GREEN}[build]${NC} Build complete."
-
-# ── Step 2: TypeScript watcher ─────────────────────────
-npx tsc -b --watch packages/backend/tsconfig.json packages/agent/tsconfig.json 2>&1 \
-  | sed "s/^/${BLUE}[tsc]${NC} /" &
-TSC_PID=$!
-sleep 2
-
-# ── Step 3: Backend with auto-restart ──────────────────
-node --watch-path=packages/backend/dist \
-     --watch-path=packages/agent/dist \
-     --watch-path=packages/shared/dist \
-     packages/backend/boot.js 2>&1 \
+# ── Backend via tsx watch ─────────────────────────────────
+# tsx watches every TS file it transpiles, so edits to backend/src,
+# agent/src, and shared/src all trigger restart automatically.
+npx tsx watch \
+  --clear-screen=false \
+  packages/backend/dev-boot.js 2>&1 \
   | sed "s/^/${GREEN}[backend]${NC} /" &
 BACKEND_PID=$!
 sleep 2
 
-# ── Step 4: Frontend Vite dev server ───────────────────
+# ── Frontend Vite dev server ──────────────────────────────
 cd packages/frontend
 npx vite --port 5173 2>&1 \
   | sed "s/^/${CYAN}[frontend]${NC} /" &
@@ -81,8 +72,8 @@ echo ""
 echo -e "  ${CYAN}Frontend:${NC}  http://localhost:5173  ${CYAN}← use this${NC}"
 echo -e "  ${GREEN}Backend:${NC}   http://localhost:3000  (API only)"
 echo ""
-echo -e "  Edit .ts  → tsc rebuilds → backend auto-restarts"
-echo -e "  Edit .tsx → Vite HMR → browser updates instantly"
+echo -e "  Edit any .ts  → tsx restarts backend (<1s)"
+echo -e "  Edit any .tsx → Vite HMR → browser updates instantly"
 echo ""
 echo -e "  Press ${YELLOW}CTRL+C${NC} to stop all"
 echo -e "${GREEN}════════════════════════════════════════════════════════${NC}"

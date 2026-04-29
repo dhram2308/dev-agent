@@ -174,6 +174,18 @@ export async function rejectGate(
   });
 }
 
+/** Submit answers to Architect-raised clarifying questions. */
+export async function answerQuestions(
+  ticket: string,
+  answers: Array<{ id: string; choice: number }>,
+  via: 'user' | 'ai-default' = 'user',
+): Promise<{ ok: boolean; remaining?: number; error?: string }> {
+  return apiFetch('/api/answer-questions', {
+    method: 'POST',
+    body: JSON.stringify({ ticket, answers, via }),
+  });
+}
+
 /** Get review data (diff, plan, QA results) for a gate */
 export async function getReviewData(ticket?: string): Promise<ReviewData | null> {
   const query = ticket ? `?ticket=${encodeURIComponent(ticket)}` : '';

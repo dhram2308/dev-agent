@@ -170,6 +170,87 @@ export interface ReviewerFeedback {
     ts: string;
 }
 /**
+ * Payload broadcast via SSE on `codegen:live` while `runAgentsTeam` runs a
+ * team that writes files to disk. Mirrors the shape returned by the
+ * on-demand `/api/codegen/live?ticket=…` snapshot endpoint (minus the
+ * `live: true` envelope). Produced by the poller inside
+ * `packages/agent/src/lib/agents-team.ts`.
+ */
+export interface CodegenLivePayload {
+    /** Ticket id, e.g. "AUT-8457" */
+    ticket: string;
+    /** Team name, e.g. "Developer Team" */
+    team: string;
+    /** Names of agents currently in-flight (copied from state.data._active_agents) */
+    activeAgents: string[];
+    /** Current working-tree changes relative to HEAD, capped at MAX_FILES_LIVE */
+    changes: FileChange[];
+    /** HEAD content for each `update`-action path, same cap applied */
+    original_files: Record<string, string>;
+    /** Timestamp of tick (Date.now()) */
+    ts: number;
+    /** Set only when caps were applied during this tick */
+    truncated?: {
+        /** Number of change entries dropped past MAX_FILES_LIVE */
+        files?: number;
+        /** File paths whose `content` exceeded MAX_FILE_BYTES_LIVE */
+        bytes?: string[];
+    };
+}
+/**
+ * Payload broadcast via SSE on `codegen:live-stop` exactly once per
+ * `runAgentsTeam` invocation where the live poller was started, emitted
+ * in the finally block of Phase 2.
+ */
+export interface CodegenLiveStopPayload {
+    ticket: string;
+    team: string;
+    /** 'success' when failures.length === 0 after Phase 3's required-agent check */
+    outcome: 'success' | 'failure';
+    ts: number;
+}
+/**
+ * A single clarifying question raised by the Architect agent when it
+ * encounters an ambiguity that MATERIALLY changes the implementation.
+ * Parsed out of the `---QUESTIONS---` JSON block that the agent appends
+ * to its output. Stored in `state.data._pending_questions` until the
+ * user answers via `POST /api/answer-questions`.
+ */
+export interface PendingQuestion {
+    /** Short slug, unique within the current Architect run (e.g. "ledger-placement") */
+    id: string;
+    /** The full question sentence shown to the user */
+    text: string;
+    /** 2–5 mutually exclusive option texts — rendered as a radio group */
+    options: string[];
+    /** Index into `options` the AI recommends (if it has an opinion) */
+    recommend?: number;
+    /** One-sentence rationale for the AI's recommendation */
+    reason?: string;
+    /** Which stage raised the question (always `'explore_plan'` in Tier 1) */
+    stage: string;
+    /** Timestamp when the parser admitted this question (Date.now()) */
+    ts: number;
+}
+/**
+ * A user's (or AI-default) answer to a `PendingQuestion`. Populated by
+ * the `POST /api/answer-questions` handler. Persists in `state.data._qa_answers`
+ * across Refine iterations so the Architect and downstream agents can
+ * treat already-confirmed decisions as binding constraints.
+ */
+export interface QuestionAnswer {
+    /** Matches `PendingQuestion.id` */
+    id: string;
+    /** Index into the original `options` array the user picked */
+    choice: number;
+    /** Snapshot of the option text at answer time (survives plan re-renders) */
+    optionText: string;
+    /** 'user' = explicit pick; 'ai-default' = bulk "Accept all AI picks" action */
+    via: 'user' | 'ai-default';
+    /** Timestamp when the answer was recorded */
+    ts: number;
+}
+/**
  * Issue category produced by categorizeIssues() in lib/jira.js.
  * Used by the fixer agent to prioritize fixes.
  */
