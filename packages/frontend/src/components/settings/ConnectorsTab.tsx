@@ -4,7 +4,7 @@
 // with OAuth support for Figma, Google Drive, Postman
 // ═══════════════════════════════════════════════════════════════
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useSettingsStore, CONFIG_GROUPS } from '../../store/settings';
 import { ConnectorCard, type OAuthInfo, type ConnectorConfigField } from './ConnectorCard';
 import { useOAuthLauncher } from '../../hooks/useOAuthLauncher';
@@ -106,8 +106,15 @@ export function ConnectorsTab(): JSX.Element {
   const testResults = useSettingsStore((s) => s.testResults);
   const testConnection = useSettingsStore((s) => s.testConnection);
   const oauthStatuses = useSettingsStore((s) => s.oauthStatuses);
+  const fetchOAuthStatuses = useSettingsStore((s) => s.fetchOAuthStatuses);
 
   const { launch, disconnect, launching } = useOAuthLauncher();
+
+  // Hydrate persisted OAuth/credential statuses from the backend on mount,
+  // so a browser refresh doesn't lose the connected state.
+  useEffect(() => {
+    fetchOAuthStatuses();
+  }, [fetchOAuthStatuses]);
 
   const config = useSettingsStore((s) => s.config);
   const fetchConfig = useSettingsStore((s) => s.fetchConfig);

@@ -315,14 +315,14 @@ export function createDeployProdHandler(deps: DeployProdDeps): StageHandler {
             `git reset --hard ${rollbackSha}\n` +
             `git push --force origin ${cfg.branches.prod}\n\n` +
             `Pre-merge SHA: ${preMergeSha}`,
-            [cfg.slack.ownerSlackId || '', ext.anshitSlackId || ''],
+            [cfg.slack.ownerSlackId || '', ext.qaSlackId || ''],
           );
         } else {
           await slack.send(
             `PRODUCTION SMOKE FAILED -- ${ticket}\n` +
             `Production (${prodUrl}) is not responding after deploy.\n` +
             `No rollback SHA available -- manual investigation required.`,
-            [cfg.slack.ownerSlackId || '', ext.anshitSlackId || ''],
+            [cfg.slack.ownerSlackId || '', ext.qaSlackId || ''],
           );
         }
         addWarning(state, 'deploy_prod', `Production smoke failed -- rollback SHA: ${preMergeSha || 'unavailable'}`);

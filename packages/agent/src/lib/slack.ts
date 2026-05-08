@@ -27,7 +27,7 @@ import type {
 
 const { cfg, JIRA_COMMENTS } = require('./config') as {
   cfg: {
-    slack: { webhook: string; ownerId: string; anshitId: string };
+    slack: { webhook: string; ownerId: string; qaId: string };
     _currentTicket?: string;
     [key: string]: any;
   };

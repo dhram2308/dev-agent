@@ -66,6 +66,7 @@ cleanupTimer.unref();
 function postForm(
   url: string,
   body: Record<string, string>,
+  extraHeaders?: Record<string, string>,
 ): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: Record<string, unknown> }> {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
@@ -81,6 +82,7 @@ function postForm(
         'Content-Type': 'application/x-www-form-urlencoded',
         'Content-Length': Buffer.byteLength(encoded),
         Accept: 'application/json',
+        ...extraHeaders,
       },
     };
 
@@ -249,17 +251,33 @@ export async function handleOAuthCallback(
     code,
     code_verifier: flow.codeVerifier,
     redirect_uri: redirectUri,
-    client_id: provider.clientId,
   };
+  const extraHeaders: Record<string, string> = {};
 
-  if (provider.clientSecret) {
-    body.client_secret = provider.clientSecret;
+  if (provider.tokenAuthMode === 'basic') {
+    // Figma requires client credentials via HTTP Basic auth.
+    const creds = `${provider.clientId}:${provider.clientSecret ?? ''}`;
+    extraHeaders.Authorization = `Basic ${Buffer.from(creds).toString('base64')}`;
+  } else {
+    body.client_id = provider.clientId;
+    if (provider.clientSecret) {
+      body.client_secret = provider.clientSecret;
+    }
   }
 
   // Exchange code for tokens.
   let response: Awaited<ReturnType<typeof postForm>>;
   try {
-    response = await postForm(provider.tokenUrl, body);
+    // eslint-disable-next-line no-console
+    console.log(`[oauth:${flow.provider}] POST ${provider.tokenUrl}`, {
+      bodyKeys: Object.keys(body),
+      authMode: provider.tokenAuthMode ?? 'body',
+      hasAuthHeader: !!extraHeaders.Authorization,
+      clientIdLen: provider.clientId.length,
+      clientSecretLen: (provider.clientSecret ?? '').length,
+      redirectUri,
+    });
+    response = await postForm(provider.tokenUrl, body, extraHeaders);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return {
@@ -271,14 +289,23 @@ export async function handleOAuthCallback(
 
   // Check for HTTP-level errors.
   if (response.status < 200 || response.status >= 300) {
+    // eslint-disable-next-line no-console
+    console.log(`[oauth:${flow.provider}] token exchange failed`, {
+      status: response.status,
+      body: response.body,
+    });
     const errDesc =
       (response.body.error_description as string) ||
-      (response.body.error as string) ||
+      (typeof response.body.error === 'string' ? (response.body.error as string) : null) ||
+      (response.body.message as string) ||
       `HTTP ${response.status}`;
+    // Include the full response body in the error message for diagnostics
+    // (only visible during dev — the message is shown in the UI).
+    const bodyDump = JSON.stringify(response.body).slice(0, 500);
     return {
       success: false,
       provider: flow.provider,
-      error: `Token exchange failed: ${errDesc}`,
+      error: `Token exchange failed [HTTP ${response.status}]: ${errDesc} | body=${bodyDump}`,
     };
   }
 

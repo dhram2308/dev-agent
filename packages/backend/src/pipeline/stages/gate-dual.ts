@@ -2,7 +2,7 @@
 // MI Dev Agent -- Gate: Dual Approval (TypeScript port of stages/gate-dual.js)
 // =====================================================================
 //
-// Stage 9: Require both owner AND Anshit to approve before production.
+// Stage 9: Require both owner AND QA to approve before production.
 //
 // Features:
 //   - T1.10: Validate both approvers are configured and distinct
@@ -38,7 +38,7 @@ export function createGateDualHandler(deps: GateDualDeps): StageHandler {
     const data = state.data as Record<string, unknown>;
     const ticket = state.ticket;
 
-    logStep(9, 'GATE 2b -- Dual Approval (Owner + Anshit)');
+    logStep(9, 'GATE 2b -- Dual Approval (Owner + QA)');
 
     if (!data.gate2b_posted) {
       await jira.addComment(
@@ -47,7 +47,7 @@ export function createGateDualHandler(deps: GateDualDeps): StageHandler {
         `Pre-Prod MR: ${data.preprod_mr_url}\n\n` +
         `BOTH must approve:\n` +
         `1. Owner\n` +
-        `2. Anshit Malhotra\n\n` +
+        `2. QA Malhotra\n\n` +
         `Both: comment "approved" on this ticket.`,
       );
 
@@ -55,7 +55,7 @@ export function createGateDualHandler(deps: GateDualDeps): StageHandler {
         `Dual Approval Required -- ${ticket}\n` +
         `Pre-Prod MR ready. BOTH of you must approve.\n` +
         `Jira: ${jira.issueUrl(ticket)}`,
-        [cfg.slack.ownerSlackId || '', ext.anshitSlackId || ''],
+        [cfg.slack.ownerSlackId || '', ext.qaSlackId || ''],
       );
 
       data.gate2b_posted = true;
@@ -68,19 +68,19 @@ export function createGateDualHandler(deps: GateDualDeps): StageHandler {
 
     // T1.10: Validate both approvers are configured and distinct
     const ownerId = cfg.owner.jiraId;
-    const anshitId = ext.anshitJiraId;
-    if (!ownerId || !anshitId) {
+    const qaId = ext.qaJiraId;
+    if (!ownerId || !qaId) {
       throw new Error(
-        'Dual approval requires both owner and anshit Jira IDs configured (OWNER_JIRA_ID, ANSHIT_JIRA_ID)',
+        'Dual approval requires both owner and qa Jira IDs configured (OWNER_JIRA_ID, QA_JIRA_ID)',
       );
     }
-    if (ownerId === anshitId) {
+    if (ownerId === qaId) {
       throw new Error(
-        'Dual approval requires two different approvers -- OWNER_JIRA_ID and ANSHIT_JIRA_ID are the same',
+        'Dual approval requires two different approvers -- OWNER_JIRA_ID and QA_JIRA_ID are the same',
       );
     }
 
-    const requiredIds = [ownerId, anshitId];
+    const requiredIds = [ownerId, qaId];
     const count = 2; // Always require exactly 2 approvals
 
     const result = await waitForApproval(

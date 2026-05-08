@@ -124,6 +124,7 @@ export interface SettingsStore {
   // OAuth actions
   updateOAuthStatus: (provider: string, info: OAuthStatusInfo) => void;
   removeOAuthStatus: (provider: string) => void;
+  fetchOAuthStatuses: () => Promise<void>;
 }
 
 // ── Config Field Definitions ────────────────────────────────
@@ -142,7 +143,7 @@ export const CONFIG_GROUPS: ConfigGroup[] = [
       { key: 'JIRA_TOKEN', label: 'Jira API Token', type: 'password', description: 'Jira API token (Atlassian personal access token)', required: true, frozen: true },
       { key: 'JIRA_COMMENTS_ENABLED', label: 'Jira Comments', type: 'boolean', description: 'Whether to post comments to Jira tickets', required: false, frozen: false, defaultValue: true },
       { key: 'OWNER_JIRA_ID', label: 'Owner Jira ID', type: 'string', description: 'Jira account ID for owner (approver 1)', required: false, frozen: true },
-      { key: 'ANSHIT_JIRA_ID', label: 'Anshit Jira ID', type: 'string', description: 'Jira account ID for Anshit (approver 2)', required: false, frozen: true },
+      { key: 'QA_JIRA_ID', label: 'QA Jira ID', type: 'string', description: 'Jira account ID for QA (approver 2)', required: false, frozen: true },
       { key: 'ALLOW_ANY_APPROVER', label: 'Allow Any Approver', type: 'boolean', description: 'Allow any Jira user to approve', required: false, frozen: true, defaultValue: false },
     ],
   },
@@ -167,7 +168,7 @@ export const CONFIG_GROUPS: ConfigGroup[] = [
     fields: [
       { key: 'SLACK_WEBHOOK', label: 'Webhook URL', type: 'password', description: 'Slack incoming webhook URL', required: false, frozen: true },
       { key: 'OWNER_SLACK_ID', label: 'Owner Slack ID', type: 'string', description: 'Slack user ID for owner mentions', required: false, frozen: true },
-      { key: 'ANSHIT_SLACK_ID', label: 'Anshit Slack ID', type: 'string', description: 'Slack user ID for Anshit mentions', required: false, frozen: true },
+      { key: 'QA_SLACK_ID', label: 'QA Slack ID', type: 'string', description: 'Slack user ID for QA mentions', required: false, frozen: true },
     ],
   },
   {
@@ -354,6 +355,8 @@ export const CONFIG_GROUPS: ConfigGroup[] = [
     description: 'Figma design file integration (OAuth or PAT)',
     icon: 'figma',
     fields: [
+      { key: 'FIGMA_ENABLED', label: 'Enable Figma Fetch', type: 'boolean', description: 'Auto-fetch Figma URLs found in Jira tickets. When off, the agent ignores Figma links and will not ask for their content.', required: false, frozen: false, defaultValue: false },
+      { key: 'FIGMA_VISION_ENABLED', label: 'Enable Figma Vision OCR', type: 'boolean', description: 'Use Anthropic Vision to OCR Figma images (requires Anthropic API key). Only takes effect when Figma fetch is enabled.', required: false, frozen: false, defaultValue: false },
       { key: 'FIGMA_TOKEN', label: 'Figma Personal Access Token', type: 'password', description: 'Figma PAT for API access (fallback if OAuth not configured)', required: false, frozen: true },
       { key: 'OAUTH_FIGMA_CLIENT_ID', label: 'Figma OAuth Client ID', type: 'string', description: 'Figma OAuth app client ID', required: false, frozen: true },
       { key: 'OAUTH_FIGMA_CLIENT_SECRET', label: 'Figma OAuth Client Secret', type: 'password', description: 'Figma OAuth app client secret', required: false, frozen: true },
@@ -365,6 +368,7 @@ export const CONFIG_GROUPS: ConfigGroup[] = [
     description: 'Google Drive and Docs integration (OAuth or service account)',
     icon: 'drive',
     fields: [
+      { key: 'GDRIVE_ENABLED', label: 'Enable Google Drive Fetch', type: 'boolean', description: 'Auto-fetch Google Docs / Sheets URLs found in Jira tickets. When off, the agent ignores Drive links and will not ask for their content.', required: false, frozen: false, defaultValue: false },
       { key: 'GDRIVE_SERVICE_ACCOUNT_JSON', label: 'Service Account JSON', type: 'password', description: 'Google service account credentials JSON (fallback if OAuth not configured)', required: false, frozen: true },
       { key: 'OAUTH_GOOGLE_CLIENT_ID', label: 'Google OAuth Client ID', type: 'string', description: 'Google OAuth app client ID', required: false, frozen: true },
       { key: 'OAUTH_GOOGLE_CLIENT_SECRET', label: 'Google OAuth Client Secret', type: 'password', description: 'Google OAuth app client secret', required: false, frozen: true },
@@ -376,6 +380,7 @@ export const CONFIG_GROUPS: ConfigGroup[] = [
     description: 'Postman API collection integration',
     icon: 'postman',
     fields: [
+      { key: 'POSTMAN_ENABLED', label: 'Enable Postman Fetch', type: 'boolean', description: 'Auto-fetch Postman collections referenced from Jira tickets. When off, the agent ignores Postman links and will not ask for their content.', required: false, frozen: false, defaultValue: false },
       { key: 'POSTMAN_API_KEY', label: 'Postman API Key', type: 'password', description: 'Postman API key for fetching collections', required: false, frozen: true },
     ],
   },
@@ -731,5 +736,22 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const statuses = { ...get().oauthStatuses };
     delete statuses[provider];
     set({ oauthStatuses: statuses });
+  },
+
+  fetchOAuthStatuses: async () => {
+    try {
+      const { providers } = await api.getOAuthStatuses();
+      const next: Record<string, OAuthStatusInfo> = {};
+      for (const p of providers) {
+        next[p.provider] = {
+          oauthStatus: p.kind === 'pat' ? 'PAT' : p.status,
+          expiresAt: p.expiresAt ?? null,
+          metadata: p.metadata,
+        };
+      }
+      set({ oauthStatuses: next });
+    } catch {
+      // Silent — OAuth disabled or backend unavailable; UI falls back to NOT_CONNECTED.
+    }
   },
 }));

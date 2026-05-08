@@ -9,7 +9,7 @@
 - [x] 1.7 Create `packages/backend/src/lib/utils.ts`: Port utility functions from `lib/utils.js` — `sleep()`, `sanitizeForPrompt()`, `validatePromptSize()`, `isBinaryFile()`, `isBinaryContent()`, `validateClaudeNotEmpty()`, `detectClaudeRefusal()`. Add TypeScript types.
 - [x] 1.8 Create `packages/backend/src/lib/redaction.ts`: Port all 16 redaction patterns from `lib/redaction.js`. Type the pattern registry as `RedactionPattern { name, severity, regex, replacement }`. Export `redact()`, `detectSecrets()`, `redactEnvValues()`.
 - [x] 1.9 Create `packages/backend/src/config/loader.ts`: Port config loading from `lib/config.js`. Use dotenv for .env parsing (replaces lib/env-parser.js). Validate with Zod schema from shared/. Export typed `AppConfig` object. Support hot-reload for fresh fields.
-- [x] 1.10 Create `packages/backend/src/config/validator.ts`: Port validation from `lib/config-validate.js`. Cross-field checks (OWNER != ANSHIT for dual approval, numeric GITLAB_PROJECT_ID, URL format checks). Use Zod `.refine()` for complex rules.
+- [x] 1.10 Create `packages/backend/src/config/validator.ts`: Port validation from `lib/config-validate.js`. Cross-field checks (OWNER != QA for dual approval, numeric GITLAB_PROJECT_ID, URL format checks). Use Zod `.refine()` for complex rules.
 
 ## Phase 2: Rust Native Modules + State Engine
 

@@ -106,11 +106,11 @@ interface CfgObject {
   slack: {
     webhook: string | undefined;
     ownerId: string | undefined;
-    anshitId: string | undefined;
+    qaId: string | undefined;
   };
   ids: {
     owner: string | undefined;
-    anshit: string | undefined;
+    qa: string | undefined;
   };
   urls: {
     qa: string;
@@ -316,11 +316,11 @@ export const cfg: CfgObject = {
   slack: {
     webhook:  _parsed.SLACK_WEBHOOK,
     ownerId:  _parsed.OWNER_SLACK_ID,
-    anshitId: _parsed.ANSHIT_SLACK_ID,
+    qaId: _parsed.QA_SLACK_ID,
   },
   ids: {
     owner:  _parsed.OWNER_JIRA_ID,
-    anshit: _parsed.ANSHIT_JIRA_ID,
+    qa: _parsed.QA_JIRA_ID,
   },
   urls: {
     qa:      _parsed.QA_URL || "https://qa-enterprise.mastersindia-einv.com",

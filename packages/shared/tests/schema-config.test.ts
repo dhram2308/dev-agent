@@ -128,7 +128,7 @@ describe('config schemas', () => {
       const result = validateFlatConfig({
         ...validFlat,
         OWNER_JIRA_ID: 'same-id',
-        ANSHIT_JIRA_ID: 'same-id',
+        QA_JIRA_ID: 'same-id',
       });
       expect(result.success).toBe(false);
     });

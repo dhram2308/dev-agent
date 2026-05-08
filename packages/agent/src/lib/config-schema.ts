@@ -321,7 +321,7 @@ export const CONFIG_SCHEMA: Record<string, ConfigSchemaEntry> = {
     hotReload: false, riskLevel: "DANGEROUS",
   },
   JIRA_COMMENTS_ENABLED: {
-    env: "JIRA_COMMENTS_ENABLED", type: "bool", default: true,
+    env: "JIRA_COMMENTS_ENABLED", type: "bool", default: false,
     required: false, sensitive: false, group: "jira",
     description: "Whether to post comments to Jira tickets", hotReload: true, riskLevel: "SAFE",
   },
@@ -330,9 +330,9 @@ export const CONFIG_SCHEMA: Record<string, ConfigSchemaEntry> = {
     group: "jira", description: "Jira account ID or email for owner (approver 1)",
     hotReload: false, riskLevel: "CAUTION",
   },
-  ANSHIT_JIRA_ID: {
-    env: "ANSHIT_JIRA_ID", type: "string", required: false, sensitive: false,
-    group: "jira", description: "Jira account ID or email for Anshit (approver 2)",
+  QA_JIRA_ID: {
+    env: "QA_JIRA_ID", type: "string", required: false, sensitive: false,
+    group: "jira", description: "Jira account ID or email for QA (approver 2)",
     hotReload: false, riskLevel: "CAUTION",
   },
   ALLOW_ANY_APPROVER: {
@@ -387,9 +387,9 @@ export const CONFIG_SCHEMA: Record<string, ConfigSchemaEntry> = {
     group: "slack", description: "Slack user ID for owner mentions",
     hotReload: true, riskLevel: "SAFE",
   },
-  ANSHIT_SLACK_ID: {
-    env: "ANSHIT_SLACK_ID", type: "string", required: false, sensitive: false,
-    group: "slack", description: "Slack user ID for Anshit mentions",
+  QA_SLACK_ID: {
+    env: "QA_SLACK_ID", type: "string", required: false, sensitive: false,
+    group: "slack", description: "Slack user ID for QA mentions",
     hotReload: true, riskLevel: "SAFE",
   },
 

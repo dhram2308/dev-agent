@@ -74,7 +74,7 @@ async function stageDone(state: PipelineState): Promise<void> {
         `\ud83d\udccb ${jiraUrl(TICKET)}\n` +
         `\ud83d\udd00 ${(state.data as any).prod_mr_url || "\u2014"}\n` +
         `\u23f1 ${elapsed} min`,
-        [cfg.slack.ownerId, cfg.slack.anshitId],
+        [cfg.slack.ownerId, cfg.slack.qaId],
       );
     }
     (state.data as any).final_slack = true;

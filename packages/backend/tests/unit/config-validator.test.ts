@@ -24,7 +24,7 @@ function minimalValidEnv(): Record<string, string> {
     GITLAB_TOKEN: 'glpat-xxxx',
     GITLAB_PROJECT_ID: '42',
     OWNER_JIRA_ID: 'owner-id',
-    ANSHIT_JIRA_ID: 'anshit-id',
+    QA_JIRA_ID: 'qa-id',
     JIRA_BASE_URL: 'https://example.atlassian.net',
     GITLAB_URL: 'https://gitlab.example.com',
   };
@@ -319,29 +319,29 @@ describe('URL format validation', () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe('cross-field validation', () => {
-  it('warns when OWNER_JIRA_ID equals ANSHIT_JIRA_ID', () => {
+  it('warns when OWNER_JIRA_ID equals QA_JIRA_ID', () => {
     const env = minimalValidEnv();
     env.OWNER_JIRA_ID = 'same-id';
-    env.ANSHIT_JIRA_ID = 'same-id';
+    env.QA_JIRA_ID = 'same-id';
 
     const output = validateAllConfig(env);
     const warns = output.results.filter(
-      (r) => r.field === 'OWNER_JIRA_ID/ANSHIT_JIRA_ID' && r.severity === Severity.WARN,
+      (r) => r.field === 'OWNER_JIRA_ID/QA_JIRA_ID' && r.severity === Severity.WARN,
     );
 
     expect(warns.length).toBeGreaterThan(0);
     expect(warns[0].message).toContain('same');
   });
 
-  it('does not warn when OWNER_JIRA_ID differs from ANSHIT_JIRA_ID', () => {
+  it('does not warn when OWNER_JIRA_ID differs from QA_JIRA_ID', () => {
     const env = minimalValidEnv();
     env.OWNER_JIRA_ID = 'owner-123';
-    env.ANSHIT_JIRA_ID = 'anshit-456';
+    env.QA_JIRA_ID = 'qa-456';
 
     const output = validateAllConfig(env);
     const warns = output.results.filter(
       (r) =>
-        r.field === 'OWNER_JIRA_ID/ANSHIT_JIRA_ID' &&
+        r.field === 'OWNER_JIRA_ID/QA_JIRA_ID' &&
         r.severity === Severity.WARN &&
         r.message.includes('same'),
     );
@@ -352,13 +352,13 @@ describe('cross-field validation', () => {
   it('reports FATAL when both approver IDs empty and ALLOW_ANY_APPROVER is false', () => {
     const env = minimalValidEnv();
     delete env.OWNER_JIRA_ID;
-    delete env.ANSHIT_JIRA_ID;
+    delete env.QA_JIRA_ID;
     // Don't set ALLOW_ANY_APPROVER (defaults to false)
 
     const output = validateAllConfig(env);
     const fatals = output.results.filter(
       (r) =>
-        r.field === 'OWNER_JIRA_ID/ANSHIT_JIRA_ID' &&
+        r.field === 'OWNER_JIRA_ID/QA_JIRA_ID' &&
         r.severity === Severity.FATAL,
     );
 
@@ -368,13 +368,13 @@ describe('cross-field validation', () => {
   it('does not report FATAL when ALLOW_ANY_APPROVER=true and both IDs empty', () => {
     const env = minimalValidEnv();
     delete env.OWNER_JIRA_ID;
-    delete env.ANSHIT_JIRA_ID;
+    delete env.QA_JIRA_ID;
     env.ALLOW_ANY_APPROVER = 'true';
 
     const output = validateAllConfig(env);
     const fatals = output.results.filter(
       (r) =>
-        r.field === 'OWNER_JIRA_ID/ANSHIT_JIRA_ID' &&
+        r.field === 'OWNER_JIRA_ID/QA_JIRA_ID' &&
         r.severity === Severity.FATAL,
     );
 

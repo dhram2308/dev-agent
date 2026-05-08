@@ -226,7 +226,7 @@ async function stageDeployProd(state: PipelineState): Promise<void> {
             `Production (${cfg.urls.prod}) is not responding after deploy.\n\n` +
             `*Rollback command:*\n\`\`\`\ngit checkout ${cfg.branch.prod}\ngit reset --hard ${rollbackSha}\ngit push --force origin ${cfg.branch.prod}\n\`\`\`\n` +
             `Pre-merge SHA: \`${(state.data as any)._prod_pre_merge_sha}\``,
-            [cfg.slack.ownerId, cfg.slack.anshitId],
+            [cfg.slack.ownerId, cfg.slack.qaId],
           );
         }
       } else {
@@ -235,7 +235,7 @@ async function stageDeployProd(state: PipelineState): Promise<void> {
             `\ud83d\udea8 *PRODUCTION SMOKE FAILED — ${TICKET}*\n` +
             `Production (${cfg.urls.prod}) is not responding after deploy.\n` +
             `No rollback SHA available — manual investigation required.`,
-            [cfg.slack.ownerId, cfg.slack.anshitId],
+            [cfg.slack.ownerId, cfg.slack.qaId],
           );
         }
       }

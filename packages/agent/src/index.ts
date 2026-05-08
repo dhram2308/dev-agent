@@ -315,13 +315,13 @@ async function main(): Promise<void> {
   }
 
   // E7: Dual approval same-person guard
-  if (cfg.ids.owner && cfg.ids.anshit && cfg.ids.owner === cfg.ids.anshit) {
-    logWarn("OWNER_JIRA_ID and ANSHIT_JIRA_ID are the same — dual approval gate will be ineffective");
+  if (cfg.ids.owner && cfg.ids.qa && cfg.ids.owner === cfg.ids.qa) {
+    logWarn("OWNER_JIRA_ID and QA_JIRA_ID are the same — dual approval gate will be ineffective");
   }
-  if (!cfg.ids.owner && !cfg.ids.anshit) {
+  if (!cfg.ids.owner && !cfg.ids.qa) {
     const allowAny = (process.env.ALLOW_ANY_APPROVER || "false").toLowerCase() === "true";
     if (!allowAny) {
-      logErr("Both OWNER_JIRA_ID and ANSHIT_JIRA_ID are empty — set ALLOW_ANY_APPROVER=true to proceed without specific approvers");
+      logErr("Both OWNER_JIRA_ID and QA_JIRA_ID are empty — set ALLOW_ANY_APPROVER=true to proceed without specific approvers");
       process.exit(1);
     }
     logWarn("Both approver IDs empty but ALLOW_ANY_APPROVER=true — any Jira user can approve");
@@ -332,9 +332,9 @@ async function main(): Promise<void> {
     cfg.ids.owner = await resolveJiraAccountId(cfg.ids.owner);
     logDebug(`C4: Owner Jira ID resolved: ${cfg.ids.owner}`);
   }
-  if (cfg.ids.anshit) {
-    cfg.ids.anshit = await resolveJiraAccountId(cfg.ids.anshit);
-    logDebug(`C4: Anshit Jira ID resolved: ${cfg.ids.anshit}`);
+  if (cfg.ids.qa) {
+    cfg.ids.qa = await resolveJiraAccountId(cfg.ids.qa);
+    logDebug(`C4: QA Jira ID resolved: ${cfg.ids.qa}`);
   }
 
   // Clone/update local repo cache for fast file reads

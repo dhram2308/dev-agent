@@ -159,6 +159,7 @@ interface PostFormResult {
 function postForm(
   url: string,
   body: Record<string, string>,
+  extraHeaders?: Record<string, string>,
 ): Promise<PostFormResult> {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
@@ -174,6 +175,7 @@ function postForm(
         'Content-Type': 'application/x-www-form-urlencoded',
         'Content-Length': Buffer.byteLength(encoded),
         Accept: 'application/json',
+        ...extraHeaders,
       },
     };
 
@@ -460,7 +462,15 @@ async function performRefresh(providerName: string): Promise<TokenSet> {
   try {
     // 3. POST to refreshUrl.
     const body = adapter.buildRefreshBody(current.refreshToken);
-    response = await postForm(refreshUrl, body);
+    const extraHeaders: Record<string, string> = {};
+    if (adapter.tokenAuthMode === 'basic') {
+      // Strip credentials from body and send via HTTP Basic auth (Figma).
+      delete body.client_id;
+      delete body.client_secret;
+      const creds = `${adapter.clientId}:${adapter.clientSecret ?? ''}`;
+      extraHeaders.Authorization = `Basic ${Buffer.from(creds).toString('base64')}`;
+    }
+    response = await postForm(refreshUrl, body, extraHeaders);
   } catch (err) {
     // Network failure -- leave WAL entry for recovery.
     throw err;

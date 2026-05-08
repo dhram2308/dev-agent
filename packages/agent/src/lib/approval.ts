@@ -13,8 +13,8 @@ import type {
 
 const { cfg, TICKET, POLL_INTERVAL, MAX_APPROVAL_TIMEOUT, APPROVAL_REMINDER_1H, APPROVAL_REMINDER_4H, monotonicMs } = require('./config') as {
   cfg: {
-    slack: { ownerId: string; anshitId: string };
-    ids: { owner: string; anshit: string };
+    slack: { ownerId: string; qaId: string };
+    ids: { owner: string; qa: string };
     [key: string]: any;
   };
   TICKET: string;
@@ -105,7 +105,7 @@ async function waitForApproval(
       logWarn("X4: Sending 4h escalation reminder…");
       await slack(
         `\u{1F6A8} *Escalation — ${TICKET}*\nApproval pending for 4 hours! Pipeline is blocked.\n\u{1F4CB} ${jiraUrl(TICKET)}`,
-        [cfg.slack.ownerId, cfg.slack.anshitId],
+        [cfg.slack.ownerId, cfg.slack.qaId],
       );
       state.data[reminderKey4h] = new Date().toISOString();
       save(state);
@@ -167,7 +167,7 @@ async function waitForApproval(
             logInfo(`${authorName} approved but not in required approvers — notifying`);
             const requiredNames = requiredIds.map((id: string) => {
               if (id === cfg.ids.owner) return "Owner";
-              if (id === cfg.ids.anshit) return "Anshit";
+              if (id === cfg.ids.qa) return "QA";
               return id;
             }).join(", ");
             try {

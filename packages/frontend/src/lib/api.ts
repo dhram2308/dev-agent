@@ -330,3 +330,18 @@ export async function saveNotificationConfig(
     body: JSON.stringify({ config }),
   });
 }
+
+export interface OAuthProviderStatus {
+  provider: string;
+  kind: 'oauth' | 'pat' | 'service_account' | 'webhook' | 'api_key';
+  status: 'CONNECTED' | 'REFRESHING' | 'RE_AUTH_REQUIRED' | 'REVOKED' | 'NOT_CONNECTED';
+  hasRefreshToken: boolean;
+  expiresAt?: number;
+  lastRefreshAt?: number;
+  metadata?: Record<string, string>;
+}
+
+/** Fetch the persisted status of all OAuth/credential providers. */
+export async function getOAuthStatuses(): Promise<{ providers: OAuthProviderStatus[] }> {
+  return apiFetch('/api/oauth/status');
+}

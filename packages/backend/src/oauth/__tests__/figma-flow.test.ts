@@ -345,8 +345,9 @@ describe('Figma OAuth flow (integration)', () => {
         expect(body).toContain(
           `redirect_uri=${encodeURIComponent(TEST_REDIRECT_URI)}`,
         );
-        expect(body).toContain(`client_id=${TEST_CLIENT_ID}`);
-        expect(body).toContain(`client_secret=${TEST_CLIENT_SECRET}`);
+        // Figma sends credentials via HTTP Basic auth, not in the body.
+        expect(body).not.toContain('client_id=');
+        expect(body).not.toContain('client_secret=');
 
         return {
           status: 200,
@@ -364,6 +365,15 @@ describe('Figma OAuth flow (integration)', () => {
       expect(result.success).toBe(true);
       expect(result.provider).toBe('figma');
       expect(result.error).toBeUndefined();
+
+      // Verify HTTP Basic auth was used (Figma's token endpoint requirement).
+      const tokenCall = httpsRequestCalls.find(
+        (c) => (c.options as Record<string, unknown>).path === '/v1/oauth/token',
+      );
+      expect(tokenCall).toBeDefined();
+      const callHeaders = (tokenCall!.options as Record<string, unknown>).headers as Record<string, string>;
+      const expectedAuth = `Basic ${Buffer.from(`${TEST_CLIENT_ID}:${TEST_CLIENT_SECRET}`).toString('base64')}`;
+      expect(callHeaders.Authorization).toBe(expectedAuth);
 
       // Verify the TokenSet shape.
       const tokenSet = result.tokenSet!;
@@ -526,10 +536,11 @@ describe('Figma OAuth flow (integration)', () => {
       // Figma's refresh endpoint does NOT use grant_type.
       expect(refreshBody).not.toHaveProperty('grant_type');
 
-      // But it MUST include these three fields.
-      expect(refreshBody.client_id).toBeTruthy();
-      expect(refreshBody.client_secret).toBeTruthy();
+      // Body holds only the refresh_token; client credentials go in
+      // HTTP Basic auth (see tokenAuthMode: 'basic').
       expect(refreshBody.refresh_token).toBe('fig_test_refresh_token_xyz789');
+      expect(refreshBody).not.toHaveProperty('client_id');
+      expect(refreshBody).not.toHaveProperty('client_secret');
     });
 
     it('updates the refresh_token when Figma provides a new one', async () => {
@@ -851,18 +862,18 @@ describe('Figma OAuth flow (integration)', () => {
       expect(partial.expiresAt).toBeUndefined();
     });
 
-    it('buildRefreshBody includes client_id, client_secret, refresh_token but NOT grant_type', () => {
+    it('buildRefreshBody includes only refresh_token (credentials go in Basic auth)', () => {
       const adapter = getProvider('figma')!;
       const body = adapter.buildRefreshBody('fig_refresh_123');
 
       expect(body).toEqual({
-        client_id: expect.any(String),
-        client_secret: expect.any(String),
         refresh_token: 'fig_refresh_123',
       });
 
-      // Critically: no grant_type.
+      // Critically: no grant_type and no client credentials.
       expect(Object.keys(body)).not.toContain('grant_type');
+      expect(Object.keys(body)).not.toContain('client_id');
+      expect(Object.keys(body)).not.toContain('client_secret');
     });
   });
 

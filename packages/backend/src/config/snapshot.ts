@@ -41,9 +41,9 @@ export const FROZEN_FIELDS = new Set<string>([
   'QA1_PASS',
   'SLACK_WEBHOOK',
   'OWNER_SLACK_ID',
-  'ANSHIT_SLACK_ID',
+  'QA_SLACK_ID',
   'OWNER_JIRA_ID',
-  'ANSHIT_JIRA_ID',
+  'QA_JIRA_ID',
   // URLs
   'QA_URL',
   'QA1_URL',
@@ -118,9 +118,9 @@ export interface ConfigSnapshot {
   BRANCH_PROD: string;
   // Frozen: approver IDs
   OWNER_JIRA_ID?: string;
-  ANSHIT_JIRA_ID?: string;
+  QA_JIRA_ID?: string;
   OWNER_SLACK_ID?: string;
-  ANSHIT_SLACK_ID?: string;
+  QA_SLACK_ID?: string;
   // Frozen: QA credentials
   QA_MAIN_USER?: string;
   QA_MAIN_PASS_SET: boolean;
@@ -212,9 +212,9 @@ export function captureConfigSnapshot(
 
     // Frozen: approver IDs
     OWNER_JIRA_ID: cfg.owner.jiraId,
-    ANSHIT_JIRA_ID: env['ANSHIT_JIRA_ID'],
+    QA_JIRA_ID: env['QA_JIRA_ID'],
     OWNER_SLACK_ID: cfg.slack.ownerSlackId,
-    ANSHIT_SLACK_ID: env['ANSHIT_SLACK_ID'],
+    QA_SLACK_ID: env['QA_SLACK_ID'],
 
     // Frozen: QA credentials
     QA_MAIN_USER: env['QA_MAIN_USER'] || 'prateekrai',
@@ -270,7 +270,7 @@ export function detectConfigDrift(
     { field: 'BRANCH_TS', snapshotVal: snapshot.BRANCH_TS, liveVal: cfg.branches.source },
     { field: 'BRANCH_QA', snapshotVal: snapshot.BRANCH_QA, liveVal: cfg.branches.qa },
     { field: 'OWNER_JIRA_ID', snapshotVal: snapshot.OWNER_JIRA_ID, liveVal: cfg.owner.jiraId },
-    { field: 'ANSHIT_JIRA_ID', snapshotVal: snapshot.ANSHIT_JIRA_ID, liveVal: env['ANSHIT_JIRA_ID'] },
+    { field: 'QA_JIRA_ID', snapshotVal: snapshot.QA_JIRA_ID, liveVal: env['QA_JIRA_ID'] },
     { field: 'QA_URL', snapshotVal: snapshot.QA_URL, liveVal: env['QA_URL'] || 'https://qa-enterprise.mastersindia-einv.com' },
     { field: 'QA1_URL', snapshotVal: snapshot.QA1_URL, liveVal: env['QA1_URL'] || 'https://qa1-enterprise.mastersindia-einv.com' },
   ];

@@ -101,7 +101,7 @@ export async function waitForApproval(
       logWarn('Sending 4h escalation reminder...');
       await deps.slack.send(
         `Escalation -- ${ticket}\nApproval pending for 4 hours! Pipeline is blocked.\nJira: ${deps.jira.issueUrl(ticket)}`,
-        [cfg.slack.ownerSlackId || '', ext.anshitSlackId || ''],
+        [cfg.slack.ownerSlackId || '', ext.qaSlackId || ''],
       );
       data[reminderKey4h] = new Date().toISOString();
       save(state);

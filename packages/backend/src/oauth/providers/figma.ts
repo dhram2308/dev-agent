@@ -112,6 +112,9 @@ const figma: ProviderAdapter = {
   get clientId() { return process.env.OAUTH_FIGMA_CLIENT_ID || ''; },
   get clientSecret() { return process.env.OAUTH_FIGMA_CLIENT_SECRET || ''; },
 
+  // Figma's token endpoint requires HTTP Basic auth, not body credentials.
+  tokenAuthMode: 'basic',
+
   /**
    * Parse Figma's token endpoint response into a partial TokenSet.
    *
@@ -145,12 +148,11 @@ const figma: ProviderAdapter = {
    * Build the form body for a Figma refresh token request.
    *
    * Figma's refresh endpoint does NOT use `grant_type` — it expects
-   * only `client_id`, `client_secret`, and `refresh_token`.
+   * only `refresh_token` in the body, with client credentials sent
+   * via HTTP Basic auth (see `tokenAuthMode: 'basic'`).
    */
   buildRefreshBody(refreshToken: string): Record<string, string> {
     return {
-      client_id: figma.clientId,
-      client_secret: figma.clientSecret || '',
       refresh_token: refreshToken,
     };
   },

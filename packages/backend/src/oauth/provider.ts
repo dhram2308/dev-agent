@@ -45,6 +45,13 @@ export interface ProviderAdapter {
   clientSecret?: string;
 
   /**
+   * How client credentials are sent to the token endpoint.
+   *   - `'body'` (default): client_id/client_secret in the form body.
+   *   - `'basic'`: HTTP Basic auth header. Required by Figma.
+   */
+  tokenAuthMode?: 'body' | 'basic';
+
+  /**
    * Extra query parameters to include in the authorization URL.
    * Common examples:
    * - `{ access_type: 'offline' }` for Google (to get refresh tokens)

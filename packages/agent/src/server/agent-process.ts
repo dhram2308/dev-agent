@@ -417,7 +417,7 @@ const STAGE_DATA_MAP: StageDataMap = {
   test_qa: ["qa_test", "qa_test_results"],
   gate_preprod_approval: ["gate2a_posted", "gate2a_ui_approved", "gate2a_ui_rejected", "gate2a_ui_feedback"],
   create_preprod_mr: ["preprod_mr_iid", "preprod_mr_url"],
-  gate_dual_approval: ["gate2b_posted", "gate2b_ui_approved", "gate2b_ui_rejected", "gate2b_ui_feedback", "gate2b_anshit_approved"],
+  gate_dual_approval: ["gate2b_posted", "gate2b_ui_approved", "gate2b_ui_rejected", "gate2b_ui_feedback", "gate2b_qa_approved"],
   deploy_prod: ["prod_deploy_result", "prod_smoke_result"],
   done: [],
 };

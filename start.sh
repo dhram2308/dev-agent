@@ -74,26 +74,26 @@ if [ "$OWNER_JIRA_ID" = "ERROR" ] || [ -z "$OWNER_JIRA_ID" ]; then
 fi
 echo -e "${G}  ✓ Your Jira ID   : ${OWNER_JIRA_ID}${W}"
 
-# ── Step 4: Fetch Anshit's Jira account ID ───────────────────
-ANSHIT_JIRA_ID=$(curl -sf \
+# ── Step 4: Fetch QA's Jira account ID ───────────────────
+QA_JIRA_ID=$(curl -sf \
   -H "Authorization: Basic ${JIRA_AUTH}" \
   -H "Content-Type: application/json" \
   "https://mastersindia-sols.atlassian.net/rest/api/3/user/search?query=anshit" \
   | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const r=JSON.parse(d);console.log(r[0]?.accountId||'NOT_FOUND')}catch{console.log('ERROR')}})")
 
-if [ "$ANSHIT_JIRA_ID" = "NOT_FOUND" ] || [ "$ANSHIT_JIRA_ID" = "ERROR" ] || [ -z "$ANSHIT_JIRA_ID" ]; then
-  echo -e "${Y}  ⚠ Anshit's Jira ID not found — searching by display name...${W}"
-  ANSHIT_JIRA_ID=$(curl -sf \
+if [ "$QA_JIRA_ID" = "NOT_FOUND" ] || [ "$QA_JIRA_ID" = "ERROR" ] || [ -z "$QA_JIRA_ID" ]; then
+  echo -e "${Y}  ⚠ QA's Jira ID not found — searching by display name...${W}"
+  QA_JIRA_ID=$(curl -sf \
     -H "Authorization: Basic ${JIRA_AUTH}" \
     "https://mastersindia-sols.atlassian.net/rest/api/3/user/search?query=malhotra" \
     | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const r=JSON.parse(d);console.log(r[0]?.accountId||'NOT_FOUND')}catch{console.log('NOT_FOUND')}})")
 fi
 
-if [ "$ANSHIT_JIRA_ID" = "NOT_FOUND" ] || [ -z "$ANSHIT_JIRA_ID" ]; then
-  echo -e "${Y}  ⚠ Could not auto-find Anshit's ID. Set ANSHIT_JIRA_ID manually in .env later.${W}"
-  ANSHIT_JIRA_ID="FILL_MANUALLY"
+if [ "$QA_JIRA_ID" = "NOT_FOUND" ] || [ -z "$QA_JIRA_ID" ]; then
+  echo -e "${Y}  ⚠ Could not auto-find QA's ID. Set QA_JIRA_ID manually in .env later.${W}"
+  QA_JIRA_ID="FILL_MANUALLY"
 else
-  echo -e "${G}  ✓ Anshit Jira ID : ${ANSHIT_JIRA_ID}${W}"
+  echo -e "${G}  ✓ QA Jira ID : ${QA_JIRA_ID}${W}"
 fi
 
 # ── Step 5: Fetch GitLab project ID ──────────────────────────
@@ -126,10 +126,10 @@ echo -e "${G}  ✓ Ticket : ${TICKET_TITLE}${W}"
 # ── Step 7: Get Slack member IDs ─────────────────────────────
 echo -e "\n  ${Y}Action needed: get Slack member IDs${W}"
 echo -e "  1. Open Slack → click your avatar → View Profile → ··· → Copy Member ID"
-echo -e "  2. Search Anshit → click his profile → ··· → Copy Member ID"
+echo -e "  2. Search QA → click his profile → ··· → Copy Member ID"
 echo ""
 read -p "  Your Slack member ID (e.g. U0123ABCD): " OWNER_SLACK_ID
-read -p "  Anshit Slack member ID                : " ANSHIT_SLACK_ID
+read -p "  QA Slack member ID                : " QA_SLACK_ID
 
 # ── Step 8: Write .env ───────────────────────────────────────
 echo -e "\n  Writing .env..."
@@ -140,9 +140,9 @@ JIRA_EMAIL=${JIRA_EMAIL}
 GITLAB_TOKEN=${GITLAB_TOKEN}
 GITLAB_PROJECT_ID=${GITLAB_PROJECT_ID}
 OWNER_JIRA_ID=${OWNER_JIRA_ID}
-ANSHIT_JIRA_ID=${ANSHIT_JIRA_ID}
+QA_JIRA_ID=${QA_JIRA_ID}
 OWNER_SLACK_ID=${OWNER_SLACK_ID}
-ANSHIT_SLACK_ID=${ANSHIT_SLACK_ID}
+QA_SLACK_ID=${QA_SLACK_ID}
 SLACK_WEBHOOK=${SLACK_WEBHOOK}
 EOF
 echo -e "${G}  ✓ .env written${W}"

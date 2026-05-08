@@ -470,11 +470,11 @@ export interface ExtendedConfig {
 
   // Jira
   jiraCommentsEnabled: boolean;
-  anshitJiraId?: string;
+  qaJiraId?: string;
   allowAnyApprover: boolean;
 
   // Slack
-  anshitSlackId?: string;
+  qaSlackId?: string;
 
   // Limits
   maxPlanRejections: number;
@@ -552,10 +552,10 @@ export function loadExtendedConfig(): ExtendedConfig {
     pollInterval: envInt(env, 'POLL_INTERVAL', 30_000),
     ciPoll: envInt(env, 'CI_POLL', 60_000),
     ciTimeout: envInt(env, 'CI_TIMEOUT', 1_800_000),
-    jiraCommentsEnabled: envBool(env, 'JIRA_COMMENTS_ENABLED', true),
-    anshitJiraId: env['ANSHIT_JIRA_ID'] || undefined,
+    jiraCommentsEnabled: envBool(env, 'JIRA_COMMENTS_ENABLED', false),
+    qaJiraId: env['QA_JIRA_ID'] || undefined,
     allowAnyApprover: envBool(env, 'ALLOW_ANY_APPROVER', false),
-    anshitSlackId: env['ANSHIT_SLACK_ID'] || undefined,
+    qaSlackId: env['QA_SLACK_ID'] || undefined,
     maxPlanRejections: envInt(env, 'MAX_PLAN_REJECTIONS', 5),
     maxPromptTokens: envInt(env, 'MAX_PROMPT_TOKENS', 180_000),
     fetchConcurrency: envInt(env, 'FETCH_CONCURRENCY', 5),
