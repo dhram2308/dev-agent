@@ -22,6 +22,8 @@ const logger_1 = require("../../lib/logger");
 const client_1 = require("../../http/client");
 const utils_1 = require("../../lib/utils");
 const adf_parser_1 = require("../../lib/adf-parser");
+const gdrive_1 = require("../../lib/gdrive");
+const figma_1 = require("../../lib/figma");
 const state_manager_1 = require("../../state/state-manager");
 const loader_1 = require("../../config/loader");
 const jira_1 = require("../../services/jira");
@@ -37,8 +39,17 @@ const MAX_ATTACHMENT_SIZE = 500_000;
 const MAX_IMAGE_SIZE = 5_000_000;
 /** Maximum images to process with vision per ticket. */
 const MAX_VISION_IMAGES = 5;
-/** Patterns for URLs that cannot be fetched (auth-gated services). */
-const UNFETCHABLE = /figma\.com|docs\.google\.com|sheets\.google\.com|drive\.google\.com|lovable\.app|canva\.com|miro\.com|postman\.com|getpostman\.com|confluence\.|notion\.so|\.sharepoint\.com|swagger\/api-docs/i;
+/**
+ * Patterns for URLs that cannot be fetched (auth-gated services).
+ *
+ * Note: Google Drive and Figma URLs are intentionally NOT in this list --
+ * when the respective OAuth connector is connected, the URL fetch loop
+ * routes them through `lib/gdrive.ts` / `lib/figma.ts` which use the
+ * stored OAuth tokens (or a PAT for Figma). If the connector isn't
+ * connected, the fetcher returns an error and the URL falls through to
+ * auth-required detection like any other failure.
+ */
+const UNFETCHABLE = /lovable\.app|canva\.com|miro\.com|postman\.com|getpostman\.com|confluence\.|notion\.so|\.sharepoint\.com|swagger\/api-docs/i;
 /** Private IP patterns to block SSRF. */
 const PRIVATE_IP = /^(127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|169\.254\.\d+\.\d+|0\.0\.0\.0|localhost)$/i;
 /** Transient error codes for retry. */
@@ -391,8 +402,93 @@ async function stageFetchTicket(state) {
         (0, logger_1.logInfo)(`External URLs found: ${externalUrls.length}`);
         externalUrls.forEach((u) => (0, logger_1.logInfo)(`  -> ${u}`));
     }
+    // ── Connector routing (Google Drive + Figma via OAuth/PAT) ───────
+    // Run BEFORE the generic URL fetch loop. Successful connector fetches
+    // populate ticket.connectorContents (consumed by generate-code). Failures
+    // populate ticket.authRequiredUrls so explore-plan halts and asks the user
+    // to paste the content. The probe-based auth detection below can't classify
+    // these URLs (Drive returns 200 HTML when unauthenticated; Figma always
+    // returns its SPA shell on direct GETs).
+    const connectorContentsExisting = data.ticket.connectorContents;
+    const connectorContents = connectorContentsExisting ?? [];
+    const connectorAuthRequired = [];
+    const gdriveUrls = new Set();
+    const figmaUrls = new Set();
+    if (connectorContents.length === 0) {
+        for (const url of externalUrls) {
+            if ((0, gdrive_1.matchUrl)(url)) {
+                gdriveUrls.add(url);
+                (0, logger_1.logInfo)(`  Connector fetch [gdrive]: ${url}`);
+                const gd = await (0, gdrive_1.fetchByUrl)(url);
+                if (gd && gd.ok && gd.content) {
+                    const title = gd.title ?? `Google Drive ${url}`;
+                    const content = gd.content;
+                    connectorContents.push({
+                        source: 'gdrive',
+                        url,
+                        title,
+                        content,
+                        sizeBytes: content.length,
+                    });
+                    (0, logger_1.logOk)(`  Connector OK [gdrive]: ${title} (${content.length} chars)`);
+                }
+                else {
+                    const reason = (gd && gd.error) || 'Connector fetch returned no result';
+                    connectorAuthRequired.push({
+                        url,
+                        reason,
+                        docType: (0, jira_1.classifyDocUrl)(url),
+                    });
+                    (0, logger_1.logWarn)(`  Connector FAIL [gdrive]: ${reason}`);
+                }
+                continue;
+            }
+            if ((0, figma_1.matchUrl)(url)) {
+                figmaUrls.add(url);
+                (0, logger_1.logInfo)(`  Connector fetch [figma]: ${url}`);
+                const fg = await (0, figma_1.fetchByUrl)(url);
+                if (fg && fg.ok && fg.content) {
+                    const title = fg.title ?? `Figma ${url}`;
+                    const content = fg.content;
+                    connectorContents.push({
+                        source: 'figma',
+                        url,
+                        title,
+                        content,
+                        sizeBytes: content.length,
+                    });
+                    (0, logger_1.logOk)(`  Connector OK [figma]: ${title} (${content.length} chars)`);
+                }
+                else {
+                    const reason = (fg && fg.error) || 'Connector fetch returned no result';
+                    connectorAuthRequired.push({
+                        url,
+                        reason,
+                        docType: (0, jira_1.classifyDocUrl)(url),
+                    });
+                    (0, logger_1.logWarn)(`  Connector FAIL [figma]: ${reason}`);
+                }
+                continue;
+            }
+        }
+        data.ticket.connectorContents = connectorContents;
+    }
+    else {
+        (0, logger_1.logInfo)(`Connector contents already populated (${connectorContents.length} items) -- skipping re-fetch`);
+        // Track URLs that map to a connector so the generic fetch loop doesn't re-probe them.
+        for (const url of externalUrls) {
+            if ((0, gdrive_1.matchUrl)(url))
+                gdriveUrls.add(url);
+            if ((0, figma_1.matchUrl)(url))
+                figmaUrls.add(url);
+        }
+    }
     // ── Fetch accessible external URLs ───────────────────────────────
     const fetchableUrls = externalUrls.filter((url) => {
+        if (gdriveUrls.has(url) || figmaUrls.has(url)) {
+            // Already handled by connector routing above.
+            return false;
+        }
         if (UNFETCHABLE.test(url)) {
             (0, logger_1.logInfo)(`  Skipping unfetchable: ${url}`);
             return false;
@@ -497,6 +593,13 @@ async function stageFetchTicket(state) {
         }
         catch {
             // Probe failed -- ignore, already handled
+        }
+    }
+    // Merge connector-routing failures (gdrive etc.) — these can't be detected
+    // by the probe-based logic above because Google returns 200 HTML for unauth.
+    for (const ar of connectorAuthRequired) {
+        if (!authRequiredUrls.some((u) => u.url === ar.url)) {
+            authRequiredUrls.push(ar);
         }
     }
     data.ticket.authRequiredUrls = authRequiredUrls;

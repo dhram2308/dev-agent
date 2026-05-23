@@ -46,9 +46,18 @@ async function checkQAHealth(qaUrl) {
  */
 async function loginToApp(page, port, credentials) {
     if (!credentials?.email || !credentials?.pass) {
-        return { success: false, reason: "Missing login credentials (email or password not configured)" };
+        return { success: false, reason: "Missing login credentials (VERIFY_LOGIN_EMAIL / VERIFY_LOGIN_PASS or cfg.qa.main.user/pass)" };
     }
-    const loginUrl = `https://localhost:${port}/login?recaptcha_disabled=true`;
+    // H9: Captcha state is configurable. Default still appends
+    // ?recaptcha_disabled=true to preserve existing dev behavior, but if the
+    // operator runs against an env that doesn't recognize the flag (or
+    // refuses to honor it in stricter envs), they can set
+    // VERIFY_LOGIN_DISABLE_RECAPTCHA=false to skip the query string. A
+    // post-load probe surfaces a clear error if a captcha widget is rendered
+    // even after the flag — previously this would just silently fail at the
+    // submit step with a vague "form interaction failed" error.
+    const disableCaptcha = String(process.env.VERIFY_LOGIN_DISABLE_RECAPTCHA || "true").toLowerCase() !== "false";
+    const loginUrl = `https://localhost:${port}/login${disableCaptcha ? "?recaptcha_disabled=true" : ""}`;
     logInfo(`Login: Navigating to ${loginUrl}`);
     try {
         await page.goto(loginUrl, { waitUntil: "networkidle", timeout: 30_000 });
@@ -56,6 +65,19 @@ async function loginToApp(page, port, credentials) {
     catch (e) {
         return { success: false, reason: `Login page failed to load: ${e.message.substring(0, 200)}` };
     }
+    // H9: Surface captcha presence with a clear error before fighting the
+    // form fields. Match the common reCAPTCHA / hCaptcha selectors.
+    try {
+        const captchaPresent = await page.locator('iframe[src*="recaptcha"], iframe[src*="hcaptcha"], .g-recaptcha, [data-sitekey]').first().isVisible({ timeout: 1500 }).catch(() => false);
+        if (captchaPresent) {
+            return {
+                success: false,
+                reason: "Captcha widget is rendered on the login page — automation cannot proceed. " +
+                    "If you have a backend bypass, ensure VERIFY_LOGIN_DISABLE_RECAPTCHA=true and the env honors the flag.",
+            };
+        }
+    }
+    catch { /* probe failure is non-fatal */ }
     try {
         // Step 1: Fill email/username
         const usernameInput = page.locator('input[name="username"]');
@@ -104,10 +126,21 @@ async function handlePostLoginScreens(page) {
             return { success: true };
         }
         if (pathname === "/reset-password") {
-            return { success: false, reason: "Account requires password reset -- cannot proceed" };
+            // H9: Surface clear, actionable guidance instead of a generic failure.
+            return {
+                success: false,
+                reason: "Login account requires password reset (forced rotation). " +
+                    "Update VERIFY_LOGIN_PASS / cfg.qa.main.pass with the rotated password, then re-run.",
+            };
         }
         if (pathname === "/otp-verify") {
-            return { success: false, reason: "Account requires OTP verification -- cannot automate" };
+            // H9: MFA cannot be automated headlessly. Document the workaround so
+            // operators can disable MFA on the verification account.
+            return {
+                success: false,
+                reason: "Login account has MFA/OTP enabled — Playwright cannot proceed. " +
+                    "Disable MFA for the verification account or use a dedicated account without MFA.",
+            };
         }
         if (pathname === "/business-info") {
             return { success: false, reason: "Account requires business info onboarding -- cannot proceed" };

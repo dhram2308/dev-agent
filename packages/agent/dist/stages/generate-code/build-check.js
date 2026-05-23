@@ -3,11 +3,31 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.runBuildCheck = runBuildCheck;
 const fs = require("fs");
 const path = require("path");
-const { cfg, DEVELOPER_TIMEOUT_MS, BUILD_INSTALL_TIMEOUT, BUILD_TSC_TIMEOUT, BUILD_ESLINT_TIMEOUT, applyComplexityTimeout } = require("../../lib/config");
+const { cfg, DEVELOPER_TIMEOUT_MS, BUILD_INSTALL_TIMEOUT, BUILD_TSC_TIMEOUT, BUILD_ESLINT_TIMEOUT, BUILD_FIXER_MAX_TURNS, applyComplexityTimeout } = require("../../lib/config");
 const { logInfo, logOk, logWarn } = require("../../lib/logging");
 const { save } = require("../../lib/state");
 const { runSingleAgent } = require("../../lib/agents-team");
 const { localGetChanges, localGetOriginal } = require("../../lib/local-repo");
+const { _validateDevChanges } = require("./developer");
+// M3: Smarter context truncation for fixer prompts. Taking the first 3000
+// chars can hide the root-cause error (e.g. the missing import that
+// cascaded into 200 type errors). Instead, keep the first N error-lines
+// and the last N — root cause + final summary.
+function truncateErrorOutput(output, headLines = 80, tailLines = 40) {
+    const lines = (output || "").split(/\r?\n/);
+    if (lines.length <= headLines + tailLines)
+        return lines.join("\n");
+    const head = lines.slice(0, headLines).join("\n");
+    const tail = lines.slice(-tailLines).join("\n");
+    const omitted = lines.length - headLines - tailLines;
+    return `${head}\n\n[... ${omitted} lines omitted ...]\n\n${tail}`;
+}
+// H5: Hard cap on Build Fixer attempts. Previously a single boolean
+// `_build_fix_attempted` prevented re-entry within one run, but if tsc kept
+// emitting new errors after each fix the wrapper was bounded only by the
+// per-stage timeout. We now count attempts persistently in state and refuse
+// to spawn a new fixer once the cap is hit.
+const BUILD_FIXER_ATTEMPT_CAP = 3;
 /**
  * Q5: Build verification — tsc + eslint + Build Fixer Agent.
  */
@@ -36,7 +56,9 @@ async function runBuildCheck(state, fileChanges, originalFiles) {
             state.data._build_tsc = "PASS";
         }
         catch (tscErr) {
-            const tscOutput = (tscErr.stdout || tscErr.stderr || "").toString().substring(0, 3000);
+            // M3: head+tail truncation preserves root-cause errors that bare
+            // `.substring(0, 3000)` could drop.
+            const tscOutput = truncateErrorOutput((tscErr.stdout || tscErr.stderr || "").toString());
             logWarn(`  TypeScript errors found:\n${tscOutput.substring(0, 500)}`);
             buildErrors.push({ type: "typescript", output: tscOutput });
             state.data._build_tsc = "FAIL";
@@ -53,7 +75,7 @@ async function runBuildCheck(state, fileChanges, originalFiles) {
                 state.data._build_eslint = "PASS";
             }
             catch (eslintErr) {
-                const eslintOutput = (eslintErr.stdout || eslintErr.stderr || "").toString().substring(0, 3000);
+                const eslintOutput = truncateErrorOutput((eslintErr.stdout || eslintErr.stderr || "").toString());
                 logWarn(`  ESLint errors found`);
                 buildErrors.push({ type: "eslint", output: eslintOutput });
                 state.data._build_eslint = "FAIL";
@@ -62,10 +84,13 @@ async function runBuildCheck(state, fileChanges, originalFiles) {
         else {
             state.data._build_eslint = "SKIP";
         }
-        // If build errors → pass to Fixer Agent for one more attempt
-        if (buildErrors.length > 0 && !state.data._build_fix_attempted) {
-            logInfo("Q5: Build errors found — sending to Fixer Agent…");
-            state.data._build_fix_attempted = true;
+        // If build errors → pass to Fixer Agent. H5: bounded by an attempt
+        // counter so cascading errors can't loop forever.
+        const buildFixAttempts = state.data._build_fix_attempts || 0;
+        if (buildErrors.length > 0 && buildFixAttempts < BUILD_FIXER_ATTEMPT_CAP) {
+            logInfo(`Q5: Build errors found — sending to Fixer Agent (attempt ${buildFixAttempts + 1}/${BUILD_FIXER_ATTEMPT_CAP})…`);
+            state.data._build_fix_attempts = buildFixAttempts + 1;
+            state.data._build_fix_attempted = true; // back-compat for any reader
             save(state);
             const buildIssues = buildErrors.map((e) => `## [BUILD-${e.type.toUpperCase()}]\n\`\`\`\n${e.output}\n\`\`\``).join("\n\n");
             const fixResult = await runSingleAgent({
@@ -76,7 +101,7 @@ async function runBuildCheck(state, fileChanges, originalFiles) {
                     `## Changed files:\n${fileChanges.map((c) => `- ${c.action}: ${c.file_path}`).join("\n")}\n\n` +
                     `Read the erroring files, fix the build issues, and confirm what you changed.`,
                 timeout: applyComplexityTimeout(DEVELOPER_TIMEOUT_MS, state),
-                opts: { cwd: cfg.localRepo, maxTurns: 15, allowedTools: ["Read", "Write", "Edit", "Grep", "Glob"] },
+                opts: { cwd: cfg.localRepo, maxTurns: BUILD_FIXER_MAX_TURNS, allowedTools: ["Read", "Write", "Edit", "Grep", "Glob"] },
                 state,
                 checkpointKey: "_build_fix_result",
                 required: false,
@@ -91,10 +116,17 @@ async function runBuildCheck(state, fileChanges, originalFiles) {
                             originalFiles[c.file_path] = orig;
                     }
                 }
+                // H2: validate the fixer's output — a Build Fixer can introduce
+                // unresolved imports or write to forbidden paths just like any
+                // other agent.
+                _validateDevChanges(state);
             }
             else {
                 logWarn("Build Fixer Agent failed — proceeding with build errors");
             }
+        }
+        else if (buildErrors.length > 0 && buildFixAttempts >= BUILD_FIXER_ATTEMPT_CAP) {
+            logWarn(`Q5: Build errors persist after ${BUILD_FIXER_ATTEMPT_CAP} fixer attempts — giving up on automated fixes`);
         }
     }
     catch (buildErr) {

@@ -8,7 +8,7 @@ type SseLike = {
 export declare function setSseModule(mod: SseLike): void;
 interface TokenManagerLike {
     getAccessTokenSync(provider: string): string | null;
-    refresh(provider: string): Promise<unknown>;
+    refresh(provider: string, trigger?: string): Promise<unknown>;
 }
 /** Inject the TokenManager so agent-process can fetch fresh tokens before spawn */
 export declare function setTokenManager(tm: TokenManagerLike): void;

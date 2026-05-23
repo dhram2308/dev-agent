@@ -112,7 +112,14 @@ async function _callClaudeOnce(prompt: string, timeoutMs: number, opts: ClaudeCa
         clearInterval(heartbeat);
         try { process.kill(-proc.pid!, "SIGTERM"); } catch { try { proc.kill("SIGTERM"); } catch {} }
         killTimer = setTimeout(() => { try { process.kill(-proc.pid!, "SIGKILL"); } catch { try { proc.kill("SIGKILL"); } catch {} } }, 10_000);
-        reject(new Error(`Claude CLI timed out after ${timeoutMs / 1000}s`));
+        // Fix F: attach diagnostic properties so the caller can tell a
+        // "startup-killed" failure (stdoutLength === 0) from a "ran out
+        // of turns inside a long run" failure (stdoutLength > 0).
+        const err: any = new Error(`Claude CLI timed out after ${timeoutMs / 1000}s`);
+        err.isTimeout = true;
+        err.stdoutLength = stdout.length;
+        err.stderrLength = stderr.length;
+        reject(err);
       }
     }, timeoutMs);
 
@@ -158,7 +165,14 @@ async function _callClaudeOnce(prompt: string, timeoutMs: number, opts: ClaudeCa
 
       if (code !== 0) {
         const errDetail = stderr.trim() || stdout.substring(0, 500).trim() || "(no output)";
-        reject(new Error(`Claude CLI error (${code}): ${errDetail}`));
+        // Fix F: attach exit code + output sizes so the caller can detect
+        // a "startup-killed" pattern (exit 143 + zero stdout). Used by
+        // agents-team.ts to scale the wall-clock timeout on retry.
+        const err: any = new Error(`Claude CLI error (${code}): ${errDetail}`);
+        err.exitCode = code;
+        err.stdoutLength = stdout.length;
+        err.stderrLength = stderr.length;
+        reject(err);
       } else {
         if (stderr.trim()) {
           logInfo(`[${agentName}] stderr (${stderr.length} chars): ${stderr.slice(-500)}`);

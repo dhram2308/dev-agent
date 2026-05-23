@@ -311,18 +311,35 @@ export function AgentStatus(): JSX.Element | null {
       {/* Live agent activity (pulsing dot + one-line status) */}
       <AgentActivityBar />
 
-      {/* Stage pills grid */}
+      {/* Stage pills grid — clickable: each pill scrolls to its detail anchor */}
       <div style={styles.stageGrid} role="tablist" aria-label="Pipeline stages">
         {STAGE_INFO.map((info, idx) => {
           const status = getStageStatus(idx, currentIdx, isRunning, hasError && idx === currentIdx);
+          const handleActivate = (): void => {
+            const target = document.getElementById(`stage-section-${info.stage}`);
+            if (target) {
+              target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              // Brief highlight pulse so the operator sees where they landed
+              target.classList.add('mi-stage-highlight');
+              window.setTimeout(() => target.classList.remove('mi-stage-highlight'), 1500);
+            }
+          };
           return (
             <div
               key={info.stage}
-              style={{ ...styles.stagePill, ...getPillStyle(status) }}
+              style={{ ...styles.stagePill, ...getPillStyle(status), cursor: 'pointer' }}
               role="tab"
               aria-selected={idx === currentIdx}
+              aria-controls={`stage-section-${info.stage}`}
               tabIndex={0}
-              title={`${info.label} - ${status}`}
+              onClick={handleActivate}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleActivate();
+                }
+              }}
+              title={`${info.label} — ${status} (click to view details)`}
             >
               <div style={{ ...styles.dot, background: getDotColor(status) }} />
               <div style={styles.pillNum}>{idx + 1}</div>

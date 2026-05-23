@@ -10,5 +10,20 @@
  * - Caller-defined `merge()` callback for combining results
  * - Integrates with existing `callClaude()` -- no changes to lib/claude.js
  */
-export {};
+export interface ActiveAgent {
+    name: string;
+    team: string;
+    startedAt: number;
+    phase: 'running';
+}
+export interface HistoryAgent {
+    name: string;
+    team: string;
+    startedAt: number;
+    durationMs: number;
+    phase: 'complete' | 'failed';
+    outputChars?: number;
+    required: boolean;
+    errorMessage?: string;
+}
 //# sourceMappingURL=agents-team.d.ts.map

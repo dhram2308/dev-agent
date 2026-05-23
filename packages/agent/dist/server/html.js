@@ -3249,7 +3249,7 @@ const STEPS = [
   { num: 9,  stage: "test_qa",               who: "agent", title: "Agent tests all 7 modules on QA",      what: "Dashboard, GST Return, Reports, Config, Import, IMS, Reconcile", detail: "The agent checks that all 7 modules load and work correctly on QA. If anything fails it stops.",                                                                                                     icon: "\uD83E\uDDEA" },
   { num: 10, stage: "gate_preprod_approval",  who: "you",   title: "GATE 2a \u2014 Approve pre-prod",             what: "QA verified \u2192 approve promotion to Pre-Prod",                   detail: "Agent pauses. QA test results shown below. Click Approve to promote to Pre-Prod.",                                                                                                                icon: "\u23F8",  youDo: "Review QA results \u2192 click Approve" },
   { num: 11, stage: "create_preprod_mr",     who: "agent", title: "Agent creates Pre-Prod MR",             what: "enterprise-qa \u2192 enterprise-pre-pro",                             detail: "Agent creates a Merge Request on GitLab from enterprise-qa to enterprise-pre-pro.",                                                                                                                icon: "\uD83D\uDD00" },
-  { num: 12, stage: "gate_dual_approval",    who: "both",  title: "GATE 2b \u2014 You AND Anshit approve",     what: "Both must approve to proceed",                                   detail: "BOTH you and Anshit Malhotra need to approve. Click Approve below or comment on Jira.",                                                                                                           icon: "\u23F8",  youDo: "Click Approve below" },
+  { num: 12, stage: "gate_dual_approval",    who: "both",  title: "GATE 2b \u2014 You AND QA approve",     what: "Both must approve to proceed",                                   detail: "BOTH you and QA Malhotra need to approve. Click Approve below or comment on Jira.",                                                                                                           icon: "\u23F8",  youDo: "Click Approve below" },
   { num: 13, stage: "deploy_prod",           who: "agent", title: "Agent deploys Pre-Prod + Production",   what: "CI \u2192 Pre-Prod \u2192 smoke tests \u2192 Production",                   detail: "After both approvals the agent merges the Pre-Prod MR, waits for CI, runs smoke tests, then deploys to Production.",                                                                               icon: "\uD83C\uDF0D" },
   { num: 14, stage: "done",                  who: "agent", title: "Done \u2014 Jira closed + Slack notification", what: "Ticket \u2192 Done. Everyone gets notified.",                       detail: "Jira ticket is moved to Done with a full summary. Everyone gets a Slack message with links.",                                                                                                      icon: "\u2705" },
 ];
@@ -3640,7 +3640,8 @@ function renderSubStageProgress() {
   var ssKey = (activeStepObj && activeStepObj.substageKey) ? activeStepObj.substageKey : currentStage;
   var ss = SUBSTAGES[ssKey];
   if (!ss) { el.innerHTML = ""; return; }
-  var activeAgents = lastStateData._active_agents || [];
+  var activeAgentsRaw = lastStateData._active_agents || [];
+  var activeAgents = activeAgentsRaw.map(function(a) { return typeof a === 'string' ? a : (a && a.name) || ''; });
   var html = '<div class="substage-bar">';
   var foundActive = false;
   for (var i = 0; i < ss.length; i++) {
@@ -3710,10 +3711,10 @@ function renderApprovalStatus() {
   var rejected = lastStateData[gate + "_ui_rejected"];
   if (reviewData.gate === "gate_dual_approval") {
     var yogApproved = lastStateData["gate2b_ui_approved"];
-    var anshitApproved = lastStateData["gate2b_anshit_approved"];
+    var qaApproved = lastStateData["gate2b_qa_approved"];
     var parts = [];
     parts.push("Yogendra: " + (yogApproved ? '<span class="approved">Approved</span>' : '<span class="pending">Pending</span>'));
-    parts.push("Anshit: " + (anshitApproved ? '<span class="approved">Approved</span>' : '<span class="pending">Pending</span>'));
+    parts.push("QA: " + (qaApproved ? '<span class="approved">Approved</span>' : '<span class="pending">Pending</span>'));
     el.innerHTML = parts.join(" &middot; ");
   } else if (rejected) {
     // T7: Check rejected FIRST — reject takes priority in race conditions
@@ -6705,7 +6706,8 @@ async function pollAllTickets() {
 function renderAgentActivity() {
   var bar = document.getElementById("agentActivityBar");
   if (!bar) return;
-  var agents = (lastStateData && lastStateData._active_agents) || [];
+  var agentsRaw = (lastStateData && lastStateData._active_agents) || [];
+  var agents = agentsRaw.map(function(a) { return typeof a === 'string' ? a : (a && a.name) || ''; });
   if (agents.length === 0) { bar.style.display = "none"; return; }
   bar.style.display = "flex";
   bar.innerHTML = agents.map(function(a) {

@@ -20,6 +20,7 @@ import * as querystring from 'querystring';
 import { getProvider } from './provider';
 import { getCredentialStore } from '../credentials';
 import type { TokenSet } from '../credentials/types';
+import { logInfo, logWarn } from '../lib/logger';
 
 // ═══════════════════════════════════════════════════════════════
 // Constants
@@ -30,6 +31,29 @@ const EXPIRY_BUFFER_MS = 30_000;
 
 /** How far before expiry to proactively refresh (5 minutes). */
 const PROACTIVE_REFRESH_LEAD_MS = 5 * 60 * 1000;
+
+/**
+ * Map of providers that have a `kind: 'pat'` credential to the env var the
+ * agent's connector libs read at runtime. Single source of truth so the
+ * route handler, init-from-store loop, and disconnect path all stay in sync.
+ * Extending: add a row here when wiring a new provider's PAT to the keychain.
+ * See `pat-in-credential-store` change (task 1.1).
+ */
+export const PAT_PROVIDER_ENV_MAP: Readonly<Record<string, string>> = Object.freeze({
+  figma: 'FIGMA_TOKEN',
+  postman: 'POSTMAN_API_KEY',
+});
+
+/**
+ * Maximum delay accepted by Node.js `setTimeout`. The runtime silently coerces
+ * any value larger than 2^31 − 1 ms (~24.85 days) to `1`, so a naive
+ * `setTimeout(fn, 90 * 24 * 3600 * 1000)` fires immediately and (with our
+ * proactive-refresh design) immediately again, looping until the provider
+ * rejects with `invalid_grant`. Clamp to a value safely below the limit and
+ * re-schedule from inside the wakeup callback when the real target is further
+ * out. See `oauth-connectors` task 11.12.
+ */
+const MAX_SAFE_TIMEOUT_MS = 2_000_000_000; // ~23.1 days; well below 2^31 − 1.
 
 /** Maximum entries in the per-provider clock skew rolling window. */
 const CLOCK_SKEW_WINDOW_SIZE = 10;
@@ -59,6 +83,54 @@ const refreshTimers = new Map<string, NodeJS.Timeout>();
 
 /** Per-provider clock skew samples (rolling window). */
 const clockSkew = new Map<string, number[]>();
+
+/**
+ * Trigger source for a refresh attempt. Used for diagnostic logging and
+ * the refresh-history ring buffer. See `oauth-connectors` task 11.12.
+ */
+export type RefreshTrigger =
+  | 'lazy-stale'       // getAccessToken found a cached-but-stale token
+  | 'expired-stored'   // getAccessToken found an expired token in the store
+  | 'proactive-timer'  // scheduleProactiveRefresh fired its setTimeout
+  | 'wal-recovery'     // recoverWAL retried an interrupted refresh on startup
+  | 'exit-78'          // agent-process detected EXIT_AUTH_REFRESH and respawned
+  | 'manual'           // an explicit external caller (e.g. debug endpoint)
+  | 'unknown';         // caller did not specify (back-compat / external SDKs)
+
+/** Refresh-history ring buffer for diagnostic introspection. */
+export interface RefreshHistoryEntry {
+  provider: string;
+  trigger: RefreshTrigger;
+  startedAt: number;       // ms epoch
+  durationMs: number;
+  outcome: 'success' | 'terminal' | 'transient' | 'no-refresh-token';
+  errorCode?: string;      // OAuth error short code, e.g. 'invalid_grant'
+  errorDesc?: string;      // OAuth error_description or thrown message
+  responseSnippet?: string; // First 500 chars of the provider's response body
+  cachedExpiresAtBefore?: number; // expiresAt of the cached entry at refresh time
+}
+
+const REFRESH_HISTORY_CAP = 20;
+const refreshHistory: RefreshHistoryEntry[] = [];
+
+function pushRefreshHistory(entry: RefreshHistoryEntry): void {
+  refreshHistory.push(entry);
+  if (refreshHistory.length > REFRESH_HISTORY_CAP) refreshHistory.shift();
+}
+
+/** Read the in-memory refresh-history ring buffer (capped at 20). */
+export function getRefreshHistory(): RefreshHistoryEntry[] {
+  return refreshHistory.slice();
+}
+
+/** Format a millisecond duration as a humane string ("5.0s", "2.3h", "89.9d"). */
+function humanizeMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  if (ms < 3_600_000) return `${(ms / 60_000).toFixed(1)}m`;
+  if (ms < 86_400_000) return `${(ms / 3_600_000).toFixed(1)}h`;
+  return `${(ms / 86_400_000).toFixed(1)}d`;
+}
 
 // ═══════════════════════════════════════════════════════════════
 // WAL (Write-Ahead Log) Helpers
@@ -264,11 +336,18 @@ function getClockSkewAvg(provider: string): number {
 
 /**
  * Check whether a cached token is still valid.
- * Accounts for expiry buffer and estimated clock skew.
+ * Accounts for expiry buffer, estimated clock skew, and provider-rejection
+ * metadata: a token marked `_status: 'RE_AUTH_REQUIRED'` or `'REVOKED'`
+ * is treated as invalid even if its nominal expiry is still in the future.
+ * Without this guard, a token whose refresh failed with a terminal error
+ * (e.g. `invalid_grant`) would still be served from cache to consumers
+ * because its `expiresAt` was untouched.
  */
 function isCacheValid(provider: string): boolean {
   const cached = tokenCache.get(provider);
   if (!cached) return false;
+  const status = cached.tokenSet.metadata?._status;
+  if (status === 'RE_AUTH_REQUIRED' || status === 'REVOKED') return false;
   if (!cached.expiresAt) return true; // Non-expiring token.
   const skew = getClockSkewAvg(provider);
   return cached.expiresAt - EXPIRY_BUFFER_MS > Date.now() + skew;
@@ -303,19 +382,45 @@ export function scheduleProactiveRefresh(provider: string, expiresAt: number): v
 
   if (!expiresAt) return; // Non-expiring token; nothing to schedule.
 
-  const delay = Math.max(expiresAt - PROACTIVE_REFRESH_LEAD_MS - Date.now(), 1000);
+  const targetDelay = Math.max(expiresAt - PROACTIVE_REFRESH_LEAD_MS - Date.now(), 1000);
+
+  // [oauth-connectors task 11.12] Log the wall-clock time the timer will fire.
+  logInfo(
+    `[token-manager] Proactive refresh scheduled: provider=${provider} ` +
+    `fireAt=${new Date(Date.now() + targetDelay).toISOString()} (in ${humanizeMs(targetDelay)}) ` +
+    `expiresAt=${new Date(expiresAt).toISOString()}`,
+  );
+
+  // [oauth-connectors task 11.12] If the real delay is beyond Node's setTimeout
+  // limit (2^31 − 1 ms, ~24.85 days), naive `setTimeout(fn, delay)` silently
+  // coerces to 1 ms and the timer fires immediately. For long-lived tokens
+  // (Figma: 90 days, GitLab refresh tokens: indefinite) this caused an immediate
+  // refresh loop that rotated through Figma's refresh-token chain in seconds
+  // until `invalid_grant`. Chain a wakeup that re-schedules once we're inside
+  // the safe window.
+  if (targetDelay > MAX_SAFE_TIMEOUT_MS) {
+    const wakeup = setTimeout(() => {
+      refreshTimers.delete(provider);
+      // Re-evaluate using the original `expiresAt` — Date.now() has advanced,
+      // so the next `targetDelay` will be ~MAX_SAFE_TIMEOUT_MS smaller.
+      scheduleProactiveRefresh(provider, expiresAt);
+    }, MAX_SAFE_TIMEOUT_MS);
+    wakeup.unref();
+    refreshTimers.set(provider, wakeup);
+    return;
+  }
 
   const timer = setTimeout(async () => {
     refreshTimers.delete(provider);
     try {
-      await refresh(provider);
+      await refresh(provider, 'proactive-timer');
     } catch (err) {
       // Log but don't crash. The next getAccessToken call will
       // trigger a blocking refresh if needed.
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[token-manager] Proactive refresh failed for ${provider}: ${msg}`);
+      logWarn(`[token-manager] Proactive refresh failed for ${provider}: ${msg}`);
     }
-  }, delay);
+  }, targetDelay);
 
   // Allow process exit even with pending timers.
   timer.unref();
@@ -335,9 +440,57 @@ export function cancelRefresh(provider: string): void {
   }
 }
 
+/**
+ * Notify the token manager that a fresh TokenSet was just persisted to the
+ * credential store (e.g. after a successful OAuth callback). Updates the
+ * in-memory cache and (re)schedules the proactive refresh timer so the cache
+ * stays in sync with the store. Without this call, a freshly-OAuth'd token
+ * sits in the store but `getAccessToken` keeps serving the prior cached
+ * (possibly RE_AUTH_REQUIRED) entry until the next process restart.
+ *
+ * Idempotent and side-effect-free if the provider has no expiry.
+ */
+export function notifyTokenStored(provider: string, tokenSet: TokenSet): void {
+  updateCache(provider, tokenSet);
+  if (tokenSet.expiresAt) {
+    scheduleProactiveRefresh(provider, tokenSet.expiresAt);
+  } else {
+    cancelRefresh(provider);
+  }
+}
+
+/**
+ * Drop the in-memory cache entry and any scheduled refresh timer for a
+ * provider. Call this after `store.delete(provider)` so the cache reflects
+ * the disconnected state immediately. Without this call, a `disconnect →
+ * test` sequence still serves the deleted provider's last token from cache
+ * until the next process restart.
+ */
+export function clearProviderCache(provider: string): void {
+  cancelRefresh(provider);
+  tokenCache.delete(provider);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Core Token Operations
 // ═══════════════════════════════════════════════════════════════
+
+/**
+ * Synchronous variant of `getAccessToken` for hot paths where awaiting an
+ * async refresh would add unbounded latency (e.g., child-process spawn time).
+ *
+ * Returns the cached access token only if it is still safely valid (outside
+ * the 30s pre-expiry guard, accounting for clock skew). Never refreshes,
+ * never reads the credential store, never blocks. Cache must already be
+ * warmed via `initFromStore()` for this to return non-null.
+ *
+ * Callers must tolerate `null` and rely on the exit-78 protocol if the
+ * captured token expires mid-pipeline.
+ */
+export function getAccessTokenSync(provider: string): string | null {
+  if (!isCacheValid(provider)) return null;
+  return tokenCache.get(provider)!.tokenSet.accessToken;
+}
 
 /**
  * Get a valid access token for a provider.
@@ -361,7 +514,7 @@ export async function getAccessToken(provider: string): Promise<string | null> {
   const cached = tokenCache.get(provider);
   if (cached) {
     try {
-      const refreshed = await refresh(provider);
+      const refreshed = await refresh(provider, 'lazy-stale');
       return refreshed.accessToken;
     } catch (err) {
       // If refresh fails with a terminal error, return null.
@@ -392,7 +545,7 @@ export async function getAccessToken(provider: string): Promise<string | null> {
   // 4. Stored token is expired; attempt refresh.
   if (stored.refreshToken) {
     try {
-      const refreshed = await refresh(provider);
+      const refreshed = await refresh(provider, 'expired-stored');
       return refreshed.accessToken;
     } catch {
       return null;
@@ -420,13 +573,18 @@ export async function getAccessToken(provider: string): Promise<string | null> {
  * @returns The refreshed TokenSet.
  * @throws On terminal errors (e.g. `invalid_grant`) or network failures.
  */
-export async function refresh(provider: string): Promise<TokenSet> {
+export async function refresh(
+  provider: string,
+  trigger: RefreshTrigger = 'unknown',
+): Promise<TokenSet> {
   // 1. Join existing single-flight if one is in progress.
+  // Note: existing in-flight refresh keeps its original trigger; the new
+  // caller's trigger is intentionally dropped to avoid spurious history rows.
   const existing = singleFlightMap.get(provider);
   if (existing) return existing;
 
   // Create the refresh promise and store it for deduplication.
-  const refreshPromise = performRefresh(provider);
+  const refreshPromise = performRefresh(provider, trigger);
   singleFlightMap.set(provider, refreshPromise);
 
   try {
@@ -440,16 +598,47 @@ export async function refresh(provider: string): Promise<TokenSet> {
 
 /**
  * Internal: perform the actual token refresh.
+ *
+ * Records every outcome in the refresh-history ring buffer (success | terminal
+ * | transient | no-refresh-token) and emits a structured log line at entry
+ * (`[token-manager] refresh start: ...`) so we can attribute each refresh to
+ * its trigger source. See `oauth-connectors` task 11.12.
  */
-async function performRefresh(providerName: string): Promise<TokenSet> {
+async function performRefresh(
+  providerName: string,
+  trigger: RefreshTrigger,
+): Promise<TokenSet> {
+  const startedAt = Date.now();
+  const cachedExpiresAtBefore = tokenCache.get(providerName)?.expiresAt;
+
+  logInfo(
+    `[token-manager] refresh start: provider=${providerName} trigger=${trigger} ` +
+    `cachedExpiresAt=${cachedExpiresAtBefore ? new Date(cachedExpiresAtBefore).toISOString() : 'none'} ` +
+    `now=${new Date(startedAt).toISOString()}`,
+  );
+
+  const finishedTransient = (errorDesc: string, responseSnippet?: string): void => {
+    pushRefreshHistory({
+      provider: providerName, trigger, startedAt,
+      durationMs: Date.now() - startedAt, outcome: 'transient',
+      errorDesc, responseSnippet, cachedExpiresAtBefore,
+    });
+  };
+
   const adapter = getProvider(providerName);
   if (!adapter) {
+    finishedTransient(`Provider "${providerName}" is not registered`);
     throw new Error(`Provider "${providerName}" is not registered`);
   }
 
   const store = await getCredentialStore();
   const current = await store.get(providerName);
   if (!current?.refreshToken) {
+    pushRefreshHistory({
+      provider: providerName, trigger, startedAt,
+      durationMs: Date.now() - startedAt, outcome: 'no-refresh-token',
+      cachedExpiresAtBefore,
+    });
     throw new Error(`No refresh token available for provider "${providerName}"`);
   }
 
@@ -473,6 +662,7 @@ async function performRefresh(providerName: string): Promise<TokenSet> {
     response = await postForm(refreshUrl, body, extraHeaders);
   } catch (err) {
     // Network failure -- leave WAL entry for recovery.
+    finishedTransient(err instanceof Error ? err.message : String(err));
     throw err;
   }
 
@@ -485,6 +675,7 @@ async function performRefresh(providerName: string): Promise<TokenSet> {
   if (response.status >= 400) {
     const errorCode = response.body.error as string | undefined;
     const errorDesc = response.body.error_description as string | undefined;
+    const responseSnippet = JSON.stringify(response.body).slice(0, 500);
 
     // Clean up WAL on terminal errors (no point retrying).
     if (errorCode && TERMINAL_ERRORS.has(errorCode)) {
@@ -508,9 +699,22 @@ async function performRefresh(providerName: string): Promise<TokenSet> {
         // Best effort.
       }
 
+      logWarn(
+        `[token-manager] refresh terminal: provider=${providerName} trigger=${trigger} ` +
+        `errorCode=${errorCode} errorDesc=${errorDesc ?? '<none>'} ` +
+        `cachedExpiresAt=${cachedExpiresAtBefore ? new Date(cachedExpiresAtBefore).toISOString() : 'none'} ` +
+        `httpStatus=${response.status} body=${responseSnippet}`,
+      );
+      pushRefreshHistory({
+        provider: providerName, trigger, startedAt,
+        durationMs: Date.now() - startedAt, outcome: 'terminal',
+        errorCode, errorDesc, responseSnippet, cachedExpiresAtBefore,
+      });
+
       throw new Error(errorCode);
     }
 
+    finishedTransient(errorDesc || errorCode || `HTTP ${response.status}`, responseSnippet);
     throw new Error(
       `Token refresh failed for ${providerName}: ${errorDesc || errorCode || `HTTP ${response.status}`}`,
     );
@@ -520,6 +724,7 @@ async function performRefresh(providerName: string): Promise<TokenSet> {
   const partial = adapter.parseTokenResponse(response.body);
 
   if (!partial.accessToken) {
+    finishedTransient(`Token refresh for ${providerName} returned no access token`);
     throw new Error(`Token refresh for ${providerName} returned no access token`);
   }
 
@@ -556,6 +761,17 @@ async function performRefresh(providerName: string): Promise<TokenSet> {
     scheduleProactiveRefresh(providerName, newTokenSet.expiresAt);
   }
 
+  logInfo(
+    `[token-manager] refresh success: provider=${providerName} trigger=${trigger} ` +
+    `durationMs=${Date.now() - startedAt} ` +
+    `newExpiresAt=${newTokenSet.expiresAt ? new Date(newTokenSet.expiresAt).toISOString() : 'none'}`,
+  );
+  pushRefreshHistory({
+    provider: providerName, trigger, startedAt,
+    durationMs: Date.now() - startedAt, outcome: 'success',
+    cachedExpiresAtBefore,
+  });
+
   return newTokenSet;
 }
 
@@ -577,17 +793,30 @@ export async function initFromStore(): Promise<void> {
   const statuses = await store.list();
 
   for (const status of statuses) {
-    if (status.kind !== 'oauth') continue;
+    if (status.kind === 'oauth') {
+      const tokenSet = await store.get(status.provider);
+      if (!tokenSet) continue;
 
-    const tokenSet = await store.get(status.provider);
-    if (!tokenSet) continue;
+      // Populate cache.
+      updateCache(status.provider, tokenSet);
 
-    // Populate cache.
-    updateCache(status.provider, tokenSet);
+      // Schedule proactive refresh.
+      if (tokenSet.expiresAt) {
+        scheduleProactiveRefresh(status.provider, tokenSet.expiresAt);
+      }
+    } else if (status.kind === 'pat') {
+      // [pat-in-credential-store task 1.2] Stage stored PATs into process.env
+      // so connector libs (figma.ts, postman.ts) and any in-process callers see
+      // them without a `.env` file. Spawned agent children inherit these via
+      // the `{ ...process.env, ...loadEnv() }` merge in agent-process.ts.
+      const envKey = PAT_PROVIDER_ENV_MAP[status.provider];
+      if (!envKey) continue; // Provider has a PAT but no env-key mapping — ignore.
 
-    // Schedule proactive refresh.
-    if (tokenSet.expiresAt) {
-      scheduleProactiveRefresh(status.provider, tokenSet.expiresAt);
+      const tokenSet = await store.get(status.provider);
+      if (!tokenSet?.accessToken) continue;
+
+      process.env[envKey] = tokenSet.accessToken;
+      logInfo(`[token-manager] Staged PAT into env: provider=${status.provider} envKey=${envKey}`);
     }
   }
 
@@ -625,7 +854,7 @@ export async function recoverWAL(): Promise<void> {
     if (isExpired && tokenSet.refreshToken) {
       // Attempt a refresh to recover.
       try {
-        await refresh(entry.provider);
+        await refresh(entry.provider, 'wal-recovery');
         continue; // Success -- WAL entry cleaned by refresh().
       } catch {
         // Refresh failed -- fall through to mark RE_AUTH_REQUIRED.

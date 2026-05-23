@@ -17,8 +17,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.VITE_PREVIEW_PORT_END = exports.VITE_PREVIEW_PORT_START = exports.NX_SERVE_PORT_RANGE_END = exports.NX_SERVE_PORT_RANGE_START = exports.NX_SERVE_TIMEOUT = exports.MAX_VERIFY_RETRIES = exports.BROWSER_VERIFY = exports.PLAYWRIGHT_BROWSER = exports.TEST_ARTIFACTS_DIR = exports.CONSOLE_WARNING_THRESHOLD = exports.MAX_E2E_TEST_RETRIES = exports.MAX_UNIT_TEST_RETRIES = exports.VITE_BUILD_TIMEOUT = exports.VITE_PREVIEW_TIMEOUT = exports.E2E_TESTS_TIMEOUT = exports.UNIT_TESTS_TIMEOUT = exports.RUN_RUNTIME_TESTS = exports.MAX_COMMIT_FILE_SIZE = exports.GIT_CLONE_DEPTH = exports.APPROVAL_REMINDER_4H = exports.APPROVAL_REMINDER_1H = exports.BUILD_ESLINT_TIMEOUT = exports.BUILD_TSC_TIMEOUT = exports.BUILD_INSTALL_TIMEOUT = exports.RUN_BUILD_CHECK = exports.SKIP_SMOKE_CHECK = exports.MERGE_POLL_TIMEOUT = exports.QA_SMOKE_LEVEL = exports.MAX_STATE_SIZE = exports.MAX_TOTAL_URL_CONTENT = exports.MAX_TOTAL_ATTACHMENTS = exports.MAX_TOTAL_COMMENTS = exports.URL_FETCH_TIMEOUT = exports.FETCH_CONCURRENCY = exports.MAX_PROMPT_TOKENS = exports.TEST_FIXER_TIMEOUT_MS = exports.REVIEWER_TIMEOUT_MS = exports.DEVELOPER_TIMEOUT_MS = exports.ANALYSIS_TIMEOUT_MS = exports.MAX_PLAN_REJECTIONS = exports.MAX_CONTINUE_WAIT = exports.MAX_PIPELINE_DURATION = exports.MAX_REJECTIONS = exports.MAX_APPROVAL_TIMEOUT = exports.JIRA_COMMENTS = exports.CI_TIMEOUT = exports.CI_POLL = exports.POLL_INTERVAL = exports.STATE_FILE = exports.TICKET = void 0;
-exports.cfg = exports.LOG_FORMAT = exports.SAVE_DEBUG_OUTPUT = exports.LOG_LEVEL = exports.QA_HEALTH_TIMEOUT = exports.EVIDENCE_MAX_SIZE = exports.VERIFICATION_TIMEOUT = void 0;
+exports.MAX_VERIFY_RETRIES = exports.BROWSER_VERIFY = exports.PLAYWRIGHT_BROWSER = exports.TEST_ARTIFACTS_DIR = exports.CONSOLE_WARNING_THRESHOLD = exports.MAX_E2E_TEST_RETRIES = exports.MAX_UNIT_TEST_RETRIES = exports.VITE_BUILD_TIMEOUT = exports.VITE_PREVIEW_TIMEOUT = exports.E2E_TESTS_TIMEOUT = exports.UNIT_TESTS_TIMEOUT = exports.RUN_RUNTIME_TESTS = exports.MAX_COMMIT_FILE_SIZE = exports.GIT_CLONE_DEPTH = exports.APPROVAL_REMINDER_4H = exports.APPROVAL_REMINDER_1H = exports.BUILD_ESLINT_TIMEOUT = exports.BUILD_TSC_TIMEOUT = exports.BUILD_INSTALL_TIMEOUT = exports.RUN_BUILD_CHECK = exports.SKIP_SMOKE_CHECK = exports.MERGE_POLL_TIMEOUT = exports.QA_SMOKE_LEVEL = exports.MAX_STATE_SIZE = exports.MAX_TOTAL_URL_CONTENT = exports.MAX_TOTAL_ATTACHMENTS = exports.MAX_TOTAL_COMMENTS = exports.URL_FETCH_TIMEOUT = exports.FETCH_CONCURRENCY = exports.MAX_PROMPT_TOKENS = exports.TEST_FIXER_TIMEOUT_MS = exports.SECURITY_TIMEOUT_MS = exports.REVIEWER_TIMEOUT_MS = exports.BUILD_FIXER_MAX_TURNS = exports.FIXER_MAX_TURNS = exports.REVIEWER_MAX_TURNS = exports.DEVELOPER_MAX_TURNS = exports.DEVELOPER_TIMEOUT_MS = exports.ANALYSIS_TIMEOUT_MS = exports.MAX_PLAN_REJECTIONS = exports.MAX_CONTINUE_WAIT = exports.MAX_PIPELINE_DURATION = exports.MAX_REJECTIONS = exports.MAX_APPROVAL_TIMEOUT = exports.JIRA_COMMENTS = exports.CI_TIMEOUT = exports.CI_POLL = exports.POLL_INTERVAL = exports.STATE_FILE = exports.TICKET = void 0;
+exports.cfg = exports.LOG_FORMAT = exports.SAVE_DEBUG_OUTPUT = exports.LOG_LEVEL = exports.QA_HEALTH_TIMEOUT = exports.EVIDENCE_MAX_SIZE = exports.VERIFICATION_TIMEOUT = exports.VITE_PREVIEW_PORT_END = exports.VITE_PREVIEW_PORT_START = exports.NX_SERVE_PORT_RANGE_END = exports.NX_SERVE_PORT_RANGE_START = exports.NX_SERVE_TIMEOUT = void 0;
 exports.applyComplexityTimeout = applyComplexityTimeout;
 exports.monotonicMs = monotonicMs;
 exports.validateMRTarget = validateMRTarget;
@@ -82,7 +82,15 @@ exports.MAX_PLAN_REJECTIONS = _parsed.MAX_PLAN_REJECTIONS;
 // ── Named timeouts for each agent ─────────────────────────────────
 exports.ANALYSIS_TIMEOUT_MS = _parsed.ANALYSIS_TIMEOUT;
 exports.DEVELOPER_TIMEOUT_MS = _parsed.DEVELOPER_TIMEOUT;
+exports.DEVELOPER_MAX_TURNS = _parsed.DEVELOPER_MAX_TURNS;
+exports.REVIEWER_MAX_TURNS = _parsed.REVIEWER_MAX_TURNS;
+exports.FIXER_MAX_TURNS = _parsed.FIXER_MAX_TURNS;
+exports.BUILD_FIXER_MAX_TURNS = _parsed.BUILD_FIXER_MAX_TURNS;
 exports.REVIEWER_TIMEOUT_MS = _parsed.REVIEWER_TIMEOUT;
+// M23: Security audits do deeper grep/read work than reviewer pattern checks
+// and deserve their own budget. Falls back to REVIEWER_TIMEOUT to preserve
+// existing behavior when SECURITY_TIMEOUT isn't set in the env.
+exports.SECURITY_TIMEOUT_MS = _parsed.SECURITY_TIMEOUT || _parsed.REVIEWER_TIMEOUT;
 exports.TEST_FIXER_TIMEOUT_MS = _parsed.TEST_FIXER_TIMEOUT;
 // ── Complexity-aware timeout multiplier ───────────────────────────
 // TODO: tighten type — state has a complex shape
@@ -170,11 +178,11 @@ exports.cfg = {
     slack: {
         webhook: _parsed.SLACK_WEBHOOK,
         ownerId: _parsed.OWNER_SLACK_ID,
-        anshitId: _parsed.ANSHIT_SLACK_ID,
+        qaId: _parsed.QA_SLACK_ID,
     },
     ids: {
         owner: _parsed.OWNER_JIRA_ID,
-        anshit: _parsed.ANSHIT_JIRA_ID,
+        qa: _parsed.QA_JIRA_ID,
     },
     urls: {
         qa: _parsed.QA_URL || "https://qa-enterprise.mastersindia-einv.com",

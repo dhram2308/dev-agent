@@ -289,7 +289,7 @@ exports.CONFIG_SCHEMA = {
         hotReload: false, riskLevel: "DANGEROUS",
     },
     JIRA_COMMENTS_ENABLED: {
-        env: "JIRA_COMMENTS_ENABLED", type: "bool", default: true,
+        env: "JIRA_COMMENTS_ENABLED", type: "bool", default: false,
         required: false, sensitive: false, group: "jira",
         description: "Whether to post comments to Jira tickets", hotReload: true, riskLevel: "SAFE",
     },
@@ -298,9 +298,9 @@ exports.CONFIG_SCHEMA = {
         group: "jira", description: "Jira account ID or email for owner (approver 1)",
         hotReload: false, riskLevel: "CAUTION",
     },
-    ANSHIT_JIRA_ID: {
-        env: "ANSHIT_JIRA_ID", type: "string", required: false, sensitive: false,
-        group: "jira", description: "Jira account ID or email for Anshit (approver 2)",
+    QA_JIRA_ID: {
+        env: "QA_JIRA_ID", type: "string", required: false, sensitive: false,
+        group: "jira", description: "Jira account ID or email for QA (approver 2)",
         hotReload: false, riskLevel: "CAUTION",
     },
     ALLOW_ANY_APPROVER: {
@@ -353,9 +353,9 @@ exports.CONFIG_SCHEMA = {
         group: "slack", description: "Slack user ID for owner mentions",
         hotReload: true, riskLevel: "SAFE",
     },
-    ANSHIT_SLACK_ID: {
-        env: "ANSHIT_SLACK_ID", type: "string", required: false, sensitive: false,
-        group: "slack", description: "Slack user ID for Anshit mentions",
+    QA_SLACK_ID: {
+        env: "QA_SLACK_ID", type: "string", required: false, sensitive: false,
+        group: "slack", description: "Slack user ID for QA mentions",
         hotReload: true, riskLevel: "SAFE",
     },
     // ── Git Author ─────────────────────────────────────────────────
@@ -499,6 +499,30 @@ exports.CONFIG_SCHEMA = {
         required: false, sensitive: false, group: "timeouts",
         description: "Developer agent timeout (ms)", hotReload: true, riskLevel: "SAFE",
         min: 60_000, max: 3_600_000,
+    },
+    DEVELOPER_MAX_TURNS: {
+        env: "DEVELOPER_MAX_TURNS", type: "int", default: 25,
+        required: false, sensitive: false, group: "timeouts",
+        description: "Developer agent Claude CLI max turns budget", hotReload: true, riskLevel: "SAFE",
+        min: 5, max: 200,
+    },
+    REVIEWER_MAX_TURNS: {
+        env: "REVIEWER_MAX_TURNS", type: "int", default: 15,
+        required: false, sensitive: false, group: "timeouts",
+        description: "Reviewer / Security agent Claude CLI max turns budget", hotReload: true, riskLevel: "SAFE",
+        min: 5, max: 200,
+    },
+    FIXER_MAX_TURNS: {
+        env: "FIXER_MAX_TURNS", type: "int", default: 20,
+        required: false, sensitive: false, group: "timeouts",
+        description: "Fixer agent Claude CLI max turns budget", hotReload: true, riskLevel: "SAFE",
+        min: 5, max: 200,
+    },
+    BUILD_FIXER_MAX_TURNS: {
+        env: "BUILD_FIXER_MAX_TURNS", type: "int", default: 15,
+        required: false, sensitive: false, group: "timeouts",
+        description: "Build Fixer agent Claude CLI max turns budget", hotReload: true, riskLevel: "SAFE",
+        min: 5, max: 200,
     },
     REVIEWER_TIMEOUT: {
         env: "REVIEWER_TIMEOUT", type: "int", default: 600_000,

@@ -11,12 +11,45 @@ const { buildDecisionsBlock } = require("./decisions-block") as {
   buildDecisionsBlock: (qa: QuestionAnswer[] | undefined | null) => string;
 };
 const { localGetChanges, localGetOriginal } = require("../../lib/local-repo");
+const { _validateDevChanges } = require("./developer");
 
 /**
  * Q6: AC Verification Agent — compares code changes against acceptance criteria.
  */
+// M8: Bullet-aware AC truncation. When ticket AC is very large (50KB+ of
+// detailed bullet points is common in enterprise tickets), an arbitrary
+// character cutoff splits a bullet mid-sentence and confuses the agent.
+// Truncate at the last complete bullet boundary, log a warning, and
+// preserve the original in state for the MR description.
+function truncateAcByBullets(ac: string, maxBytes: number): { text: string; truncated: boolean; originalSize: number } {
+  if (!ac || ac.length <= maxBytes) return { text: ac, truncated: false, originalSize: ac.length };
+  const lines = ac.split("\n");
+  let acc = "";
+  let cutIdx = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (acc.length + lines[i].length + 1 > maxBytes) break;
+    acc += lines[i] + "\n";
+    cutIdx = i + 1;
+  }
+  // Snap back to the last bullet boundary (line beginning with -, *, digit.)
+  for (let i = cutIdx; i > 0; i--) {
+    if (/^\s*(?:[-*]|\d+[.)])\s+/.test(lines[i - 1])) break;
+    cutIdx = i - 1;
+  }
+  const text = lines.slice(0, cutIdx).join("\n") +
+    `\n\n[... ${lines.length - cutIdx} more line(s) of AC truncated; original size ${ac.length} bytes ...]`;
+  return { text, truncated: true, originalSize: ac.length };
+}
+
 async function runACVerification(state: PipelineState, fileChanges: any[], originalFiles: Record<string, string>, changes: any): Promise<any[]> {
-  const ac = (state.data as any).ticket.ac || "";
+  const acRaw = (state.data as any).ticket.ac || "";
+  const acTruncation = truncateAcByBullets(acRaw, 20_000);
+  if (acTruncation.truncated) {
+    logWarn(`Q6: AC text (${acTruncation.originalSize} bytes) truncated at last bullet boundary for verification prompt`);
+    (state.data as any)._ac_truncated = true;
+    (state.data as any)._ac_truncated_from_bytes = acTruncation.originalSize;
+  }
+  const ac = acTruncation.text;
 
   if ((state.data as any)._ac_verified || (state.data as any).ticket.ac_missing || !ac || !ac.trim()) {
     if ((state.data as any).ticket.ac_missing) {
@@ -124,6 +157,9 @@ async function runACVerification(state: PipelineState, fileChanges: any[], origi
       (state.data as any).codeChanges = changes;
       save(state);
       logOk("Developer Agent fixed AC failures — re-extracted changes");
+      // H2: Re-validate after the AC fixer ran. Same GQ7/F3 risk surface
+      // as any other code-writing agent.
+      _validateDevChanges(state);
     } else {
       logWarn("AC fix attempt failed — proceeding with current code");
     }

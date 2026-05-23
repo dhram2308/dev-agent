@@ -23,6 +23,7 @@ const utils_1 = require("../../lib/utils");
 const state_manager_1 = require("../../state/state-manager");
 const loader_1 = require("../../config/loader");
 const gate_code_review_1 = require("./gate-code-review");
+const notification_gates_1 = require("../../lib/notification-gates");
 // ── Monotonic clock helper ──────────────────────────────────────
 function monotonicMs() {
     const [sec, nsec] = process.hrtime();
@@ -43,10 +44,12 @@ function createDeployQaHandler(deps) {
             data.deploy_qa_at = new Date().toISOString();
             (0, state_manager_1.save)(state);
             const mrIid = data.code_mr_iid;
-            await slack.send(`Review & Approve Merge to QA -- ${ticket}\n` +
-                `MR !${mrIid} is ready for merge into \`${cfg.branches.qa}\`.\n` +
-                `MR: ${data.code_mr_url}\n` +
-                `Please review the diff in the Web UI and click Approve & Merge or Reject.`, [cfg.slack.ownerSlackId || '']);
+            if ((0, notification_gates_1.isChannelEnabled)('deploy_qa', 'slack')) {
+                await slack.send(`Review & Approve Merge to QA -- ${ticket}\n` +
+                    `MR !${mrIid} is ready for merge into \`${cfg.branches.qa}\`.\n` +
+                    `MR: ${data.code_mr_url}\n` +
+                    `Please review the diff in the Web UI and click Approve & Merge or Reject.`, [cfg.slack.ownerSlackId || '']);
+            }
             (0, logger_1.logWait)('Waiting for user approval to merge into QA (Web UI)...');
         }
         // Poll for user approval before merging
@@ -60,7 +63,9 @@ function createDeployQaHandler(deps) {
             while (true) {
                 if (monotonicMs() - deployQaPollStart > maxApprovalTimeout) {
                     (0, logger_1.logErr)(`Deploy QA approval timeout after ${maxApprovalTimeout / 3_600_000}h`);
-                    await slack.send(`Timeout -- Deploy QA -- ${ticket}\nPipeline halted.`, [cfg.slack.ownerSlackId || '']);
+                    if ((0, notification_gates_1.isChannelEnabled)('deploy_qa', 'slack')) {
+                        await slack.send(`Timeout -- Deploy QA -- ${ticket}\nPipeline halted.`, [cfg.slack.ownerSlackId || '']);
+                    }
                     (0, state_manager_1.save)(state);
                     throw new Error(`Deploy QA approval timeout after ${maxApprovalTimeout / 3_600_000}h`);
                 }
@@ -79,9 +84,11 @@ function createDeployQaHandler(deps) {
                         catch (err) {
                             const errMsg = err instanceof Error ? err.message : String(err);
                             (0, logger_1.logErr)(`Merge failed after approval (${errMsg}) -- polling GitLab for manual merge`);
-                            await slack.send(`Merge Failed -- ${ticket}\n` +
-                                `API merge of MR !${mrIid} failed: ${errMsg}\n` +
-                                `Please merge manually on GitLab: ${data.code_mr_url}`, [cfg.slack.ownerSlackId || '']);
+                            if ((0, notification_gates_1.isChannelEnabled)('deploy_qa', 'slack')) {
+                                await slack.send(`Merge Failed -- ${ticket}\n` +
+                                    `API merge of MR !${mrIid} failed: ${errMsg}\n` +
+                                    `Please merge manually on GitLab: ${data.code_mr_url}`, [cfg.slack.ownerSlackId || '']);
+                            }
                             // E2: Start merge poll timeout tracking
                             data._merge_poll_start = Date.now();
                             (0, state_manager_1.save)(state);
@@ -136,10 +143,12 @@ function createDeployQaHandler(deps) {
                     const mergePollStart = data._merge_poll_start;
                     if (mergePollStart && Date.now() - mergePollStart > mergePollTimeout) {
                         (0, logger_1.logErr)(`Merge poll timeout after ${mergePollTimeout / 60_000}min -- MR !${mrIid} was not merged`);
-                        await slack.send(`Merge Poll Timeout -- ${ticket}\n` +
-                            `MR !${mrIid} was not merged within ${mergePollTimeout / 60_000}min after merge failure.\n` +
-                            `MR: ${data.code_mr_url}\n` +
-                            `Please merge manually and re-run the agent.`, [cfg.slack.ownerSlackId || '']);
+                        if ((0, notification_gates_1.isChannelEnabled)('deploy_qa', 'slack')) {
+                            await slack.send(`Merge Poll Timeout -- ${ticket}\n` +
+                                `MR !${mrIid} was not merged within ${mergePollTimeout / 60_000}min after merge failure.\n` +
+                                `MR: ${data.code_mr_url}\n` +
+                                `Please merge manually and re-run the agent.`, [cfg.slack.ownerSlackId || '']);
+                        }
                         (0, state_manager_1.save)(state);
                         throw new Error(`Merge poll timeout after ${mergePollTimeout / 60_000}min -- MR !${mrIid} was not merged`);
                     }

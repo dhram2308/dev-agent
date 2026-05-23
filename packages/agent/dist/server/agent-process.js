@@ -237,6 +237,22 @@ function startAgent(ticket) {
                 console.warn(`[Worktree] Cleanup failed for ${ticket}: ${e.message}`);
             }
             addLog(`Agent for ${ticket} exited with code ${code}`, "system", ticket);
+            // [OAuth] Exit-78 but no TokenManager wired: surface the diagnostic
+            // instead of silently failing. See oauth-connectors design.md Decision 10
+            // and tasks.md 11.5. This branch is reached if the backend never called
+            // setTokenManager (e.g., legacy boot path or build mismatch).
+            if (code === EXIT_AUTH_REFRESH && !_tokenManager) {
+                const state = getState(ticket);
+                const provider = state?.data?._authFailure?.provider || 'unknown';
+                const msg = `[OAuth] Agent for ${ticket} exited with code 78 (AUTH_REFRESH_NEEDED) for provider ${provider}, but TokenManager is not wired into agent-process. Refresh+respawn cannot run. Check that the backend HTTP server called setTokenManager() at startup.`;
+                addLog(msg, "system", ticket);
+                console.warn(msg);
+                broadcast("authRequired", { provider, reason: "token-manager-not-wired", ticket });
+                broadcast("status", { running: false, code, ticket });
+                clearTicketLogs(ticket);
+                delete agentProcs[ticket];
+                return;
+            }
             // [OAuth] Exit-78: agent requests auth refresh + respawn
             if (code === EXIT_AUTH_REFRESH && _tokenManager) {
                 delete agentProcs[ticket];
@@ -256,7 +272,7 @@ function startAgent(ticket) {
                         return;
                     }
                     addLog(`[OAuth] Exit-78 for ${provider}. Refreshing token and respawning (attempt ${respawnCount}/${MAX_AUTH_RESPAWNS_PER_PROVIDER})...`, "system", ticket);
-                    _tokenManager.refresh(provider).then(() => {
+                    _tokenManager.refresh(provider, 'exit-78').then(() => {
                         addLog(`[OAuth] Token refreshed for ${provider}. Respawning agent for ${ticket}...`, "system", ticket);
                         startAgent(ticket);
                     }).catch((err) => {
@@ -392,7 +408,7 @@ const STAGE_DATA_MAP = {
     test_qa: ["qa_test", "qa_test_results"],
     gate_preprod_approval: ["gate2a_posted", "gate2a_ui_approved", "gate2a_ui_rejected", "gate2a_ui_feedback"],
     create_preprod_mr: ["preprod_mr_iid", "preprod_mr_url"],
-    gate_dual_approval: ["gate2b_posted", "gate2b_ui_approved", "gate2b_ui_rejected", "gate2b_ui_feedback", "gate2b_anshit_approved"],
+    gate_dual_approval: ["gate2b_posted", "gate2b_ui_approved", "gate2b_ui_rejected", "gate2b_ui_feedback", "gate2b_qa_approved"],
     deploy_prod: ["prod_deploy_result", "prod_smoke_result"],
     done: [],
 };

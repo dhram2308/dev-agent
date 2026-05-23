@@ -383,8 +383,16 @@ export async function handleRequest(
   html?: string,
 ): Promise<boolean> {
 
-  // OAuth routes: handle before auth check (callback has no auth)
-  if (handleOAuthRoute && (url.pathname.startsWith('/oauth/') || url.pathname.startsWith('/api/oauth/'))) {
+  // OAuth + connector-credential routes: handle before auth check
+  // (OAuth callback has no auth; PAT save/remove apply x-api-token internally).
+  if (
+    handleOAuthRoute &&
+    (
+      url.pathname.startsWith('/oauth/') ||
+      url.pathname.startsWith('/api/oauth/') ||
+      url.pathname.startsWith('/api/connectors/')
+    )
+  ) {
     const handled = await handleOAuthRoute(url, request, res, apiToken);
     if (handled) return true;
   }
@@ -1132,6 +1140,102 @@ export async function handleRequest(
     return true;
   }
 
+  // -- POST /api/answer-questions --
+  // Accepts user answers to Architect-raised clarifying questions.
+  // Appends to state.data._qa_answers and removes answered entries from
+  // state.data._pending_questions, then broadcasts so the UI re-enables
+  // Approve and hides answered rows. Ported from the legacy agent server
+  // (packages/agent/src/server/routes.ts) — handler was missing from the
+  // backend dispatcher and returned 404 in production.
+  if (url.pathname === '/api/answer-questions' && request.method === 'POST') {
+    try {
+      const raw = await parseBody(request, getBodySizeLimit('/api/answer-questions'));
+      const ticketIn = raw.ticket;
+      const answersIn = raw.answers;
+      const t = typeof ticketIn === 'string' ? safeTicket(ticketIn) : null;
+      if (!t) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Invalid ticket format' }));
+        return true;
+      }
+      if (!Array.isArray(answersIn) || answersIn.length === 0) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: "'answers' must be a non-empty array" }));
+        return true;
+      }
+      for (const a of answersIn) {
+        if (!a || typeof a !== 'object'
+            || typeof (a as { id?: unknown }).id !== 'string'
+            || typeof (a as { choice?: unknown }).choice !== 'number') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'Each answer must be {id: string, choice: number}' }));
+          return true;
+        }
+      }
+      const via: 'user' | 'ai-default' = (raw.via === 'ai-default') ? 'ai-default' : 'user';
+
+      let remaining = 0;
+      let validationError: { code: number; message: string } | null = null;
+
+      await updateAsync(t, async (state) => {
+        const data = (state.data ?? {}) as Record<string, unknown>;
+        const pending = Array.isArray(data._pending_questions) ? (data._pending_questions as Array<{ id: string; options?: string[] }>) : [];
+        const answers = Array.isArray(data._qa_answers) ? (data._qa_answers as Array<unknown>) : [];
+
+        for (const a of answersIn) {
+          const ans = a as { id: string; choice: number };
+          const q = pending.find((p) => p.id === ans.id);
+          if (!q) { validationError = { code: 400, message: `Unknown question id: ${ans.id}` }; return state; }
+          if (!Array.isArray(q.options) || ans.choice < 0 || ans.choice >= q.options.length) {
+            validationError = {
+              code: 400,
+              message: `Choice out of range for '${ans.id}': got ${ans.choice}, have ${q.options?.length ?? 0} options`,
+            };
+            return state;
+          }
+        }
+
+        const now = Date.now();
+        const answeredIds = new Set<string>();
+        for (const a of answersIn) {
+          const ans = a as { id: string; choice: number };
+          const q = pending.find((p) => p.id === ans.id)!;
+          answers.push({ id: ans.id, choice: ans.choice, optionText: q.options![ans.choice], via, ts: now });
+          answeredIds.add(ans.id);
+        }
+
+        data._qa_answers = answers;
+        data._pending_questions = pending.filter((p) => !answeredIds.has(p.id));
+        remaining = (data._pending_questions as Array<unknown>).length;
+        // Reassign via cast since PipelineData is loosely structured at this level.
+        (state as { data: unknown }).data = data;
+        return state;
+      });
+
+      if (validationError) {
+        const err = validationError as { code: number; message: string };
+        res.writeHead(err.code, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: err.message }));
+        return true;
+      }
+
+      const updated = await getState(t);
+      if (updated) {
+        broadcast('state', { ticket: t, stage: updated.stage, data: updated.data });
+      }
+
+      addLog(`[qa] ${answersIn.length} answer(s) applied for ${t} (remaining pending: ${remaining})`, 'system', t);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, remaining }));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const status = msg.includes('no state file') ? 404 : 400;
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: msg }));
+    }
+    return true;
+  }
+
   // -- POST /api/inject-context --
   // Uses updateAsync for atomic locked read-modify-write with HMAC
   if (url.pathname === '/api/inject-context' && request.method === 'POST') {
@@ -1521,7 +1625,15 @@ export async function handleRequest(
   if (url.pathname === '/api/config/test' && request.method === 'POST') {
     try {
       const raw = await parseBody(request, getBodySizeLimit('/api/config/test'));
-      const { service } = sanitizeBody('/api/config/test', raw) as { service?: string };
+      const rawService = (sanitizeBody('/api/config/test', raw) as { service?: string }).service;
+      // Frontend uses connector IDs (e.g. 'google-drive') that don't always
+      // match the backend's connector lib filename (e.g. 'gdrive'). Alias here
+      // so both forms are accepted and downstream lookups (require lib path,
+      // OAuth env-var staging) use the canonical name.
+      const SERVICE_ALIASES: Record<string, string> = {
+        'google-drive': 'gdrive',
+      };
+      const service = rawService ? (SERVICE_ALIASES[rawService] ?? rawService) : undefined;
       const allowed = [
         'jira', 'gitlab', 'slack',
         'gdrive', 'figma', 'postman',
@@ -1666,7 +1778,35 @@ export async function handleRequest(
           result = { ok: true, message: `Playwright configured: ${browser}` };
         }
       } else {
-        // gdrive / figma / postman — load agent lib via relative require
+        // gdrive / figma / postman — load agent lib via relative require.
+        // [oauth-connectors Decision 10 follow-up] The connector libs read
+        // OAuth tokens from process.env, which works for spawned agent children
+        // (env injected at spawn time via setTokenManager) but NOT for in-process
+        // callers like this Test button — the backend process never has those
+        // env vars set. Pull from token-manager and stage in process.env before
+        // calling the lib, so the in-process Test path mirrors the spawn path.
+        const OAUTH_ENV_MAP: Record<string, { provider: string; envKey: string }> = {
+          gdrive: { provider: 'google', envKey: 'GOOGLE_OAUTH_ACCESS_TOKEN' },
+          figma: { provider: 'figma', envKey: 'FIGMA_OAUTH_ACCESS_TOKEN' },
+        };
+        const oauthMap = OAUTH_ENV_MAP[service];
+        if (oauthMap) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const tm = require('../oauth/token-manager') as {
+              getAccessToken: (provider: string) => Promise<string | null>;
+            };
+            const token = await tm.getAccessToken(oauthMap.provider);
+            if (token) {
+              process.env[oauthMap.envKey] = token;
+            } else {
+              // Clear any stale env var left behind by a previous test run, so
+              // a disconnect-then-test sequence reflects current state instead
+              // of resurrecting the last good token.
+              delete process.env[oauthMap.envKey];
+            }
+          } catch { /* token-manager unavailable — fall back to whatever env had */ }
+        }
         try {
           // eslint-disable-next-line @typescript-eslint/no-var-requires
           const lib = require(`../../../agent/dist/lib/${service}`);

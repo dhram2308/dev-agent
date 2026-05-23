@@ -363,19 +363,33 @@ async function main(): Promise<void> {
     fs.writeFileSync(LOCK_FILE, String(process.pid), { flag: "wx", mode: 0o600 });
   } catch (lockErr: any) {
     if (lockErr.code === "EEXIST") {
-      // Lock file exists — check if owning process is still alive
+      // Lock file exists — check if owning process is still alive.
+      // C6: PID is not enough — the kernel reuses PIDs, so process.kill(pid,0)
+      // succeeding can mean "an unrelated process now has that PID". Combine
+      // with a lock-file mtime check: if the lock is older than LOCK_STALE_MS
+      // and no process exists with that PID running our binary, treat as stale.
+      const LOCK_STALE_MS = 5 * 60 * 1000; // 5 minutes — longer than any healthy heartbeat cadence
       try {
         const lockPid = parseInt(fs.readFileSync(LOCK_FILE, "utf8").trim(), 10);
-        try {
-          process.kill(lockPid, 0);
-          logErr(`Another agent running for ${TICKET} (PID ${lockPid}). Aborting.`);
+        let lockMtimeMs = 0;
+        try { lockMtimeMs = fs.statSync(LOCK_FILE).mtimeMs; } catch {}
+        const lockAgeMs = lockMtimeMs > 0 ? Date.now() - lockMtimeMs : Infinity;
+        let pidAlive = false;
+        try { process.kill(lockPid, 0); pidAlive = true; } catch { pidAlive = false; }
+
+        if (pidAlive && lockAgeMs <= LOCK_STALE_MS) {
+          logErr(`Another agent running for ${TICKET} (PID ${lockPid}, lock age ${Math.round(lockAgeMs / 1000)}s). Aborting.`);
           process.exit(1);
-        } catch {
-          // Process dead — stale lock
-          logWarn(`Stale lock file found (PID ${lockPid} not running) — removing`);
-          fs.unlinkSync(LOCK_FILE);
-          fs.writeFileSync(LOCK_FILE, String(process.pid), { flag: "wx", mode: 0o600 });
         }
+        if (pidAlive && lockAgeMs > LOCK_STALE_MS) {
+          // PID alive but lock is ancient — almost certainly a recycled PID
+          // belonging to another process. Treat as stale.
+          logWarn(`Lock file held by PID ${lockPid} but ${Math.round(lockAgeMs / 1000)}s old — assuming recycled PID, removing`);
+        } else {
+          logWarn(`Stale lock file found (PID ${lockPid} not running) — removing`);
+        }
+        fs.unlinkSync(LOCK_FILE);
+        fs.writeFileSync(LOCK_FILE, String(process.pid), { flag: "wx", mode: 0o600 });
       } catch (innerErr: any) {
         // Can't read lock file or re-create — try to force
         try { fs.unlinkSync(LOCK_FILE); } catch {}
@@ -395,6 +409,18 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   setCurrentState(state);
+
+  // C7: Reap ghost _active_agents from a prior crashed run. Any entry here
+  // was owned by a Node process that no longer exists (this is `main()` —
+  // we've just acquired the lock, so no parallel run is in flight). Leaving
+  // ghost entries would corrupt the UI's live-agents view and confuse the
+  // checkpoint/resume snapshot.
+  if (Array.isArray(state.data._active_agents) && state.data._active_agents.length > 0) {
+    const ghostNames = state.data._active_agents.map((a: any) => (a && a.name) || String(a)).join(", ");
+    logWarn(`[Resume] Clearing ${state.data._active_agents.length} ghost active agent(s) from prior run: ${ghostNames}`);
+    state.data._active_agents = [];
+    try { save(state); } catch {}
+  }
 
   // [Component 5] Agent Restart Protection — check crash loop & apply backoff
   const restartResult = await applyRestartProtection(state, state.data._lastError ? "error_recovery" : "startup");

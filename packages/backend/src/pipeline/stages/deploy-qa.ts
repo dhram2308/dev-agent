@@ -24,6 +24,7 @@ import { GitLabService } from '../../services/gitlab';
 import { SlackService } from '../../services/slack';
 import { incrementRejectionCounter } from './gate-code-review';
 import type { PipelineState, StageHandler } from '@shared/types';
+import { isChannelEnabled } from '../../lib/notification-gates';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -59,13 +60,15 @@ export function createDeployQaHandler(deps: DeployQaDeps): StageHandler {
       save(state);
 
       const mrIid = data.code_mr_iid as number;
-      await slack.send(
-        `Review & Approve Merge to QA -- ${ticket}\n` +
-        `MR !${mrIid} is ready for merge into \`${cfg.branches.qa}\`.\n` +
-        `MR: ${data.code_mr_url}\n` +
-        `Please review the diff in the Web UI and click Approve & Merge or Reject.`,
-        [cfg.slack.ownerSlackId || ''],
-      );
+      if (isChannelEnabled('deploy_qa', 'slack')) {
+        await slack.send(
+          `Review & Approve Merge to QA -- ${ticket}\n` +
+          `MR !${mrIid} is ready for merge into \`${cfg.branches.qa}\`.\n` +
+          `MR: ${data.code_mr_url}\n` +
+          `Please review the diff in the Web UI and click Approve & Merge or Reject.`,
+          [cfg.slack.ownerSlackId || ''],
+        );
+      }
       logWait('Waiting for user approval to merge into QA (Web UI)...');
     }
 
@@ -82,7 +85,9 @@ export function createDeployQaHandler(deps: DeployQaDeps): StageHandler {
       while (true) {
         if (monotonicMs() - deployQaPollStart > maxApprovalTimeout) {
           logErr(`Deploy QA approval timeout after ${maxApprovalTimeout / 3_600_000}h`);
-          await slack.send(`Timeout -- Deploy QA -- ${ticket}\nPipeline halted.`, [cfg.slack.ownerSlackId || '']);
+          if (isChannelEnabled('deploy_qa', 'slack')) {
+            await slack.send(`Timeout -- Deploy QA -- ${ticket}\nPipeline halted.`, [cfg.slack.ownerSlackId || '']);
+          }
           save(state);
           throw new Error(`Deploy QA approval timeout after ${maxApprovalTimeout / 3_600_000}h`);
         }
@@ -101,12 +106,14 @@ export function createDeployQaHandler(deps: DeployQaDeps): StageHandler {
             } catch (err: unknown) {
               const errMsg = err instanceof Error ? err.message : String(err);
               logErr(`Merge failed after approval (${errMsg}) -- polling GitLab for manual merge`);
-              await slack.send(
-                `Merge Failed -- ${ticket}\n` +
-                `API merge of MR !${mrIid} failed: ${errMsg}\n` +
-                `Please merge manually on GitLab: ${data.code_mr_url}`,
-                [cfg.slack.ownerSlackId || ''],
-              );
+              if (isChannelEnabled('deploy_qa', 'slack')) {
+                await slack.send(
+                  `Merge Failed -- ${ticket}\n` +
+                  `API merge of MR !${mrIid} failed: ${errMsg}\n` +
+                  `Please merge manually on GitLab: ${data.code_mr_url}`,
+                  [cfg.slack.ownerSlackId || ''],
+                );
+              }
               // E2: Start merge poll timeout tracking
               data._merge_poll_start = Date.now();
               save(state);
@@ -161,13 +168,15 @@ export function createDeployQaHandler(deps: DeployQaDeps): StageHandler {
           const mergePollStart = data._merge_poll_start as number | undefined;
           if (mergePollStart && Date.now() - mergePollStart > mergePollTimeout) {
             logErr(`Merge poll timeout after ${mergePollTimeout / 60_000}min -- MR !${mrIid} was not merged`);
-            await slack.send(
-              `Merge Poll Timeout -- ${ticket}\n` +
-              `MR !${mrIid} was not merged within ${mergePollTimeout / 60_000}min after merge failure.\n` +
-              `MR: ${data.code_mr_url}\n` +
-              `Please merge manually and re-run the agent.`,
-              [cfg.slack.ownerSlackId || ''],
-            );
+            if (isChannelEnabled('deploy_qa', 'slack')) {
+              await slack.send(
+                `Merge Poll Timeout -- ${ticket}\n` +
+                `MR !${mrIid} was not merged within ${mergePollTimeout / 60_000}min after merge failure.\n` +
+                `MR: ${data.code_mr_url}\n` +
+                `Please merge manually and re-run the agent.`,
+                [cfg.slack.ownerSlackId || ''],
+              );
+            }
             save(state);
             throw new Error(`Merge poll timeout after ${mergePollTimeout / 60_000}min -- MR !${mrIid} was not merged`);
           }

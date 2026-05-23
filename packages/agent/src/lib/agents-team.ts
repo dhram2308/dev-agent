@@ -86,6 +86,118 @@ const LIVE_TICK_MS = 1500;
 const MAX_FILES_LIVE = 40;
 const MAX_FILE_BYTES_LIVE = 200_000;
 
+// ── Adaptive max-turns on retry (Fix B from AUT-8648 post-mortem) ─
+//
+// When an agent fails with "Reached max turns" and the pipeline retries
+// the stage, the SAME max-turns cap fires again — wasting another full
+// timeout window on a guaranteed-fail attempt. AUT-8648 burned ~30 min
+// on identical Dev-Agent retries at 09:38 / 09:39 / 09:40.
+//
+// On each subsequent invocation of a checkpointKey that previously hit
+// max-turns, we scale the per-agent turn cap by MULTIPLIER. After
+// FAILURE_LIMIT consecutive max-turns failures, the agent is short-
+// circuited (required → team failure; optional → silent skip) so we
+// stop burning time on it without operator intervention or task
+// subdivision.
+//
+// Counter is per-(ticket, checkpointKey) and lives at
+// state.data._max_turns_failures[checkpointKey]. It clears on the next
+// successful run of the same checkpointKey, so a follow-up ticket
+// starts fresh.
+const MAX_TURNS_RETRY_MULTIPLIER = 1.5;
+const MAX_TURNS_HARD_CAP = 200;
+const MAX_TURNS_FAILURE_LIMIT = 3;
+
+function _isMaxTurnsError(err: Error | undefined | null): boolean {
+  if (!err || !err.message) return false;
+  return /Reached max turns|max[\s-]turns?\s+exceeded|max[\s-]turns?\s+reached/i.test(err.message);
+}
+
+function _getMaxTurnsFailures(state: any, checkpointKey: string): number {
+  const map = state?.data?._max_turns_failures;
+  const v = map && map[checkpointKey];
+  return typeof v === 'number' && v > 0 ? v : 0;
+}
+
+function _scaleMaxTurnsForRetry(originalMaxTurns: number | undefined, failures: number): number | undefined {
+  if (!originalMaxTurns || originalMaxTurns <= 0) return originalMaxTurns;
+  if (failures <= 0) return originalMaxTurns;
+  const scaled = Math.ceil(originalMaxTurns * Math.pow(MAX_TURNS_RETRY_MULTIPLIER, failures));
+  return Math.min(scaled, MAX_TURNS_HARD_CAP);
+}
+
+function _recordMaxTurnsFailure(state: any, checkpointKey: string): number {
+  if (!state.data._max_turns_failures) state.data._max_turns_failures = {};
+  state.data._max_turns_failures[checkpointKey] = (state.data._max_turns_failures[checkpointKey] || 0) + 1;
+  return state.data._max_turns_failures[checkpointKey];
+}
+
+function _clearMaxTurnsFailure(state: any, checkpointKey: string): void {
+  if (state?.data?._max_turns_failures && state.data._max_turns_failures[checkpointKey]) {
+    delete state.data._max_turns_failures[checkpointKey];
+  }
+}
+
+// ── Adaptive startup-kill timeout (Fix F from AUT-8648 post-mortem) ─
+//
+// Distinct from Fix B: this catches the "agent never produced any
+// output before SIGTERM/timeout fired" pattern. AUT-8648 had 10 such
+// transcripts — exit 143 + zero stdout means the Claude CLI was killed
+// before it could start streaming. Cause is usually a too-tight wall-
+// clock budget on cold starts (large context, slow API), NOT a max-
+// turns problem.
+//
+// Strategy: when an agent fails with isTimeout=true && stdoutLength=0,
+// increment a per-checkpoint counter and scale the OUTER agent.timeout
+// on the next invocation. After STARTUP_KILL_FAILURE_LIMIT consecutive
+// startup kills, fail-fast (operator likely has a network or auth
+// problem; throwing more time at it won't help).
+//
+// Counter lives at state.data._startup_kill_failures[checkpointKey],
+// clears on success.
+const STARTUP_KILL_RETRY_MULTIPLIER = 1.5;
+const STARTUP_KILL_TIMEOUT_CAP = 30 * 60 * 1000; // 30 minutes
+const STARTUP_KILL_FAILURE_LIMIT = 3;
+const STARTUP_KILL_STDOUT_THRESHOLD = 100; // chars; anything less means "didn't actually start"
+
+function _isStartupKill(err: any): boolean {
+  if (!err) return false;
+  // Primary signal: callClaude attached isTimeout + stdoutLength via Fix F.
+  if (err.isTimeout && typeof err.stdoutLength === 'number' && err.stdoutLength < STARTUP_KILL_STDOUT_THRESHOLD) {
+    return true;
+  }
+  // Secondary signal: exit-code path (e.g. 143 SIGTERM) with empty stdout.
+  if (typeof err.exitCode === 'number' && err.exitCode !== 0 && typeof err.stdoutLength === 'number' && err.stdoutLength < STARTUP_KILL_STDOUT_THRESHOLD) {
+    return true;
+  }
+  return false;
+}
+
+function _getStartupKills(state: any, checkpointKey: string): number {
+  const map = state?.data?._startup_kill_failures;
+  const v = map && map[checkpointKey];
+  return typeof v === 'number' && v > 0 ? v : 0;
+}
+
+function _scaleTimeoutForStartupKills(originalTimeout: number | undefined, failures: number): number | undefined {
+  if (!originalTimeout || originalTimeout <= 0) return originalTimeout;
+  if (failures <= 0) return originalTimeout;
+  const scaled = Math.ceil(originalTimeout * Math.pow(STARTUP_KILL_RETRY_MULTIPLIER, failures));
+  return Math.min(scaled, STARTUP_KILL_TIMEOUT_CAP);
+}
+
+function _recordStartupKill(state: any, checkpointKey: string): number {
+  if (!state.data._startup_kill_failures) state.data._startup_kill_failures = {};
+  state.data._startup_kill_failures[checkpointKey] = (state.data._startup_kill_failures[checkpointKey] || 0) + 1;
+  return state.data._startup_kill_failures[checkpointKey];
+}
+
+function _clearStartupKill(state: any, checkpointKey: string): void {
+  if (state?.data?._startup_kill_failures && state.data._startup_kill_failures[checkpointKey]) {
+    delete state.data._startup_kill_failures[checkpointKey];
+  }
+}
+
 /**
  * Tiny xor/rolling hash for de-duping live poller broadcasts.
  * No crypto deps — same input produces same hash; different inputs
@@ -281,7 +393,81 @@ async function runAgentsTeam({ teamName, agents, state, merge }: TeamOptions): P
 
       const promises = pending.map((agent) => {
         const agentStart = Date.now();
-        logInfo(`  [${agent.name}] Starting… (timeout: ${Math.round(agent.timeout / 1000)}s)`);
+
+        // Fix B: Adaptive max-turns. Read prior max-turns failures for
+        // this checkpointKey, fail-fast if the cap is reached, otherwise
+        // scale opts.maxTurns for this attempt.
+        const priorFailures = _getMaxTurnsFailures(state, agent.checkpointKey);
+        const originalMaxTurns = (agent.opts || {}).maxTurns as number | undefined;
+        const effectiveMaxTurns = _scaleMaxTurnsForRetry(originalMaxTurns, priorFailures);
+
+        // Fix F: Adaptive timeout for startup-killed agents. Orthogonal
+        // to Fix B — if the prior failure was a SIGTERM before any
+        // output (cold start, slow API), scale agent.timeout (wall
+        // clock) on the retry instead of maxTurns.
+        const startupKills = _getStartupKills(state, agent.checkpointKey);
+        const originalTimeout = agent.timeout;
+        const effectiveTimeout = _scaleTimeoutForStartupKills(originalTimeout, startupKills) || originalTimeout;
+
+        if (priorFailures >= MAX_TURNS_FAILURE_LIMIT) {
+          const requiredAgent = agent.required !== false;
+          const msg = `[${agent.name}] Skipped — exceeded max-turns failure limit (${priorFailures}/${MAX_TURNS_FAILURE_LIMIT}). Task likely too large for one agent; manual subdivision required.`;
+          logWarn(`  ${msg}`);
+          broadcast('agent:progress', {
+            ticket: TICKET,
+            team: teamName,
+            agent: agent.name,
+            phase: 'failed',
+            ts: Date.now(),
+            startedAt: agentStart,
+            durationMs: 0,
+            required: requiredAgent,
+            errorMessage: msg,
+          });
+          return Promise.resolve({
+            name: agent.name,
+            output: null,
+            status: 'rejected' as const,
+            error: new Error(msg),
+            required: requiredAgent,
+          });
+        }
+
+        if (startupKills >= STARTUP_KILL_FAILURE_LIMIT) {
+          const requiredAgent = agent.required !== false;
+          const msg = `[${agent.name}] Skipped — exceeded startup-kill failure limit (${startupKills}/${STARTUP_KILL_FAILURE_LIMIT}). Agent is being SIGTERM'd before producing output; likely a network/auth issue, more time won't help.`;
+          logWarn(`  ${msg}`);
+          broadcast('agent:progress', {
+            ticket: TICKET,
+            team: teamName,
+            agent: agent.name,
+            phase: 'failed',
+            ts: Date.now(),
+            startedAt: agentStart,
+            durationMs: 0,
+            required: requiredAgent,
+            errorMessage: msg,
+          });
+          return Promise.resolve({
+            name: agent.name,
+            output: null,
+            status: 'rejected' as const,
+            error: new Error(msg),
+            required: requiredAgent,
+          });
+        }
+
+        if (priorFailures > 0 && effectiveMaxTurns !== originalMaxTurns) {
+          logInfo(`  [${agent.name}] Prior max-turns failure(s)=${priorFailures} — scaling maxTurns ${originalMaxTurns} → ${effectiveMaxTurns}`);
+        }
+        if (startupKills > 0 && effectiveTimeout !== originalTimeout) {
+          logInfo(`  [${agent.name}] Prior startup-kill(s)=${startupKills} — scaling timeout ${Math.round(originalTimeout / 1000)}s → ${Math.round(effectiveTimeout / 1000)}s`);
+        }
+
+        const effectiveOpts: ClaudeCallOptions = { ...(agent.opts || {}) };
+        if (effectiveMaxTurns !== undefined) effectiveOpts.maxTurns = effectiveMaxTurns;
+
+        logInfo(`  [${agent.name}] Starting… (timeout: ${Math.round(effectiveTimeout / 1000)}s)`);
         broadcast('agent:progress', {
           ticket: TICKET,
           team: teamName,
@@ -291,12 +477,12 @@ async function runAgentsTeam({ teamName, agents, state, merge }: TeamOptions): P
           startedAt: agentStart,
           required: agent.required !== false,
           promptChars: agent.prompt.length,
-          timeoutMs: agent.timeout,
-          maxTurns: agent.opts?.maxTurns ?? null,
+          timeoutMs: effectiveTimeout,
+          maxTurns: effectiveOpts.maxTurns ?? null,
         });
-        return callClaude(agent.prompt, agent.timeout, {
+        return callClaude(agent.prompt, effectiveTimeout, {
           agentName: agent.name,
-          ...(agent.opts || {}),
+          ...effectiveOpts,
         })
           .then((output: string) => {
             const elapsed = ((Date.now() - agentStart) / 1000).toFixed(1);
@@ -304,6 +490,12 @@ async function runAgentsTeam({ teamName, agents, state, merge }: TeamOptions): P
             logOk(`  [${agent.name}] Complete (${elapsed}s, ${output.length} chars)`);
             validateClaudeNotEmpty(output, agent.name);
             detectClaudeRefusal(output, agent.name);
+            // Fix B: clear the max-turns failure counter on success so a
+            // future re-invocation of this checkpointKey starts fresh.
+            _clearMaxTurnsFailure(state, agent.checkpointKey);
+            // Fix F: same for startup-kill counter — a clean run means
+            // the prior timeout-before-output condition has resolved.
+            _clearStartupKill(state, agent.checkpointKey);
             // Mirror updates into in-memory state too so a later caller save() does not
             // overwrite disk with stale values from this process's memory copy.
             state.data._active_agents = normalizeActiveAgents(state.data._active_agents).filter(
@@ -353,6 +545,27 @@ async function runAgentsTeam({ teamName, agents, state, merge }: TeamOptions): P
             const elapsed = ((Date.now() - agentStart) / 1000).toFixed(1);
             const durationMs = Date.now() - agentStart;
             logWarn(`  [${agent.name}] Failed (${elapsed}s): ${err.message.substring(0, 200)}`);
+
+            // Fix B: If the failure is specifically "Reached max turns",
+            // bump the per-checkpoint counter so the next invocation
+            // gets a scaled cap. Non-max-turns failures don't change
+            // the counter (no point boosting turns for a network error).
+            if (_isMaxTurnsError(err)) {
+              const newCount = _recordMaxTurnsFailure(state, agent.checkpointKey);
+              const nextScaled = _scaleMaxTurnsForRetry(originalMaxTurns, newCount);
+              logWarn(`  [${agent.name}] Max-turns failure recorded (${newCount}/${MAX_TURNS_FAILURE_LIMIT}). Next attempt will use ${nextScaled} turns (was ${originalMaxTurns}).`);
+            }
+            // Fix F: If the failure is a startup kill (SIGTERM/timeout
+            // before any output), bump a separate per-checkpoint counter
+            // so the next invocation gets a longer wall-clock budget.
+            // This is independent of Fix B — the agent never started,
+            // so its turn budget wasn't the problem.
+            if (_isStartupKill(err)) {
+              const newCount = _recordStartupKill(state, agent.checkpointKey);
+              const nextScaled = _scaleTimeoutForStartupKills(originalTimeout, newCount);
+              logWarn(`  [${agent.name}] Startup-kill recorded (${newCount}/${STARTUP_KILL_FAILURE_LIMIT}, stdoutLength=${(err as any).stdoutLength ?? '?'}). Next attempt will use ${Math.round((nextScaled || 0) / 1000)}s timeout (was ${Math.round(originalTimeout / 1000)}s).`);
+            }
+
             state.data._active_agents = normalizeActiveAgents(state.data._active_agents).filter(
               (a) => a.name !== agent.name,
             );
@@ -471,4 +684,28 @@ async function runSingleAgent({ name, prompt, timeout, opts, state, checkpointKe
   }
 }
 
-module.exports = { runAgentsTeam, runSingleAgent, buildLiveSnapshot, simpleHash };
+module.exports = {
+  runAgentsTeam,
+  runSingleAgent,
+  buildLiveSnapshot,
+  simpleHash,
+  // Fix B helpers — exported for unit tests only.
+  _isMaxTurnsError,
+  _getMaxTurnsFailures,
+  _scaleMaxTurnsForRetry,
+  _recordMaxTurnsFailure,
+  _clearMaxTurnsFailure,
+  MAX_TURNS_RETRY_MULTIPLIER,
+  MAX_TURNS_HARD_CAP,
+  MAX_TURNS_FAILURE_LIMIT,
+  // Fix F helpers — exported for unit tests only.
+  _isStartupKill,
+  _getStartupKills,
+  _scaleTimeoutForStartupKills,
+  _recordStartupKill,
+  _clearStartupKill,
+  STARTUP_KILL_RETRY_MULTIPLIER,
+  STARTUP_KILL_TIMEOUT_CAP,
+  STARTUP_KILL_FAILURE_LIMIT,
+  STARTUP_KILL_STDOUT_THRESHOLD,
+};

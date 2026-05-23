@@ -201,7 +201,15 @@ export let MAX_PLAN_REJECTIONS: number      = _parsed.MAX_PLAN_REJECTIONS;
 
 export let ANALYSIS_TIMEOUT_MS: number      = _parsed.ANALYSIS_TIMEOUT;
 export let DEVELOPER_TIMEOUT_MS: number     = _parsed.DEVELOPER_TIMEOUT;
+export let DEVELOPER_MAX_TURNS: number      = _parsed.DEVELOPER_MAX_TURNS;
+export let REVIEWER_MAX_TURNS: number       = _parsed.REVIEWER_MAX_TURNS;
+export let FIXER_MAX_TURNS: number          = _parsed.FIXER_MAX_TURNS;
+export let BUILD_FIXER_MAX_TURNS: number    = _parsed.BUILD_FIXER_MAX_TURNS;
 export let REVIEWER_TIMEOUT_MS: number      = _parsed.REVIEWER_TIMEOUT;
+// M23: Security audits do deeper grep/read work than reviewer pattern checks
+// and deserve their own budget. Falls back to REVIEWER_TIMEOUT to preserve
+// existing behavior when SECURITY_TIMEOUT isn't set in the env.
+export let SECURITY_TIMEOUT_MS: number      = (_parsed as any).SECURITY_TIMEOUT || _parsed.REVIEWER_TIMEOUT;
 export let TEST_FIXER_TIMEOUT_MS: number    = _parsed.TEST_FIXER_TIMEOUT;
 
 // ── Complexity-aware timeout multiplier ───────────────────────────

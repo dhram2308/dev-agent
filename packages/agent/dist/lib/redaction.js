@@ -172,7 +172,7 @@ function redactEnvValues(input) {
     let result = input;
     const envKeys = [
         "JIRA_TOKEN", "GITLAB_TOKEN", "SLACK_WEBHOOK", "ANTHROPIC_API_KEY",
-        "QA_MAIN_PASS", "QA1_PASS", "OWNER_SLACK_ID", "ANSHIT_SLACK_ID",
+        "QA_MAIN_PASS", "QA1_PASS", "OWNER_SLACK_ID", "QA_SLACK_ID",
     ];
     for (const key of envKeys) {
         const val = process.env[key];

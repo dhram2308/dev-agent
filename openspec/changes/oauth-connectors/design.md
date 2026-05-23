@@ -162,6 +162,61 @@ Clock skew is compensated by tracking the rolling average of `(serverDate − lo
 
 **Rationale:** The pipeline already has pause semantics; adding one more terminal-pause phase is the minimal change that preserves work and communicates intent.
 
+### Decision 10 — Wire `setTokenManager` into agent-process at backend HTTP startup
+
+**Choice:** In `packages/backend/src/server/http-server.ts`, after the existing OAuth-handler injection block (around line 250), call `agentProcess.setTokenManager({ getAccessTokenSync, refresh })` with a thin adapter exposing the backend's `TokenManager` to the agent-spawning module. At the same site, call `await tokenManager.initFromStore()` and `await tokenManager.recoverWAL()` once at startup so the in-memory token cache is warm before the first agent spawn.
+
+The adapter requires a new export on `token-manager.ts`: `getAccessTokenSync(provider): string | null`. This reads only the existing in-memory `tokenCache` Map (already maintained by the proactive-refresh timer from Decision 6) and returns `null` if the entry is missing or inside the 30-second pre-expiry guard. It never blocks, never refreshes, never returns a Promise.
+
+**Alternatives considered:**
+
+- **Make `agent-process.startAgent()` async and `await tokenManager.getAccessToken()` per spawn.** Rejected: every caller of `startAgent` must change (UI POST handler, OAuth resume handler, internal respawn-on-exit-78 path), and per-spawn refresh adds latency to a hot path. The cache + exit-78 fallback already covers staleness.
+- **Mid-pipeline IPC (child reaches back to parent for fresh tokens).** Rejected — same reasoning as Decision 1.
+
+**Rationale:**
+
+- The `setTokenManager(tm)` hook in `packages/agent/src/server/agent-process.ts:95` was always intended to be called by the parent process. The original implementation work (tasks 4.4 / 5.7 / 6.4) added the receiver but never added the caller. Decision 10 documents the missing line.
+- Keeping `startAgent` synchronous preserves the existing fire-and-forget pattern at all call sites (verified: UI HTTP route awaits the wrapper, OAuth resume handler ignores the return, internal respawn happens in an async context).
+- Sync access is correct because the cache is *already* the source of truth — the proactive timer keeps it within `expiresAt − 5min`, the lazy-guard returns null near expiry, and exit-78 handles the case where the captured token expires mid-pipeline.
+
+**Cross-reference:** Tasks 4.4 (Google), 5.7 (Figma), 6.4 (GitLab) describe per-provider env-injection but the actual `setTokenManager` call was never wired. Section 11 of `tasks.md` adds the concrete steps that complete those three tasks.
+
+### Decision 11 — Connector enable-flag falls back to OAuth-token presence
+
+**Choice:** Change the per-URL routing gate in `packages/agent/src/stages/fetch-ticket.ts:359-372` so that an unset enable flag (the default) is interpreted as "enabled iff an OAuth token is present in env":
+
+```
+// before
+parseBoolean(process.env.GDRIVE_ENABLED) && gdrive.matchUrl(url)
+
+// after
+(parseBoolean(process.env.GDRIVE_ENABLED) ?? !!process.env.GOOGLE_OAUTH_ACCESS_TOKEN) && gdrive.matchUrl(url)
+```
+
+…and the equivalent for `FIGMA_ENABLED` / `FIGMA_OAUTH_ACCESS_TOKEN`. Postman is unchanged — its provider does not offer OAuth.
+
+**Semantics:**
+
+| `*_ENABLED` value | OAuth token in env | Routing decision |
+|-------------------|--------------------|------------------|
+| `true` (explicit) | any                | enabled          |
+| `false` (explicit)| any                | disabled (kill switch preserved) |
+| unset             | present            | enabled (new fallback) |
+| unset             | absent             | disabled (today's behavior preserved) |
+
+**Alternatives considered:**
+
+- **Option A — OAuth callback flips the enable flag to `true`.** Rejected: couples authorization to fetching, persists silent settings changes the user did not explicitly request, complicates the "is the connector enabled?" question in a future multi-tenant model. Magic.
+- **Option C — status quo: user must Connect *and* toggle the boolean.** Rejected: this is the five-click UX path that produced the AUT-7121 escalation. Users complete OAuth and reasonably assume the connector is now usable; they should not have to discover a separate Manage modal toggle.
+
+**Rationale:**
+
+- Completing browser OAuth is the strongest possible signal of intent to use a connector. Treating that signal as an implicit enable removes a step that is visibly broken in real user flows.
+- Explicit `true` and explicit `false` both still win, so power users keep their kill switch and their pre-OAuth-era explicit-enable workflows.
+- The fallback fires when `GOOGLE_OAUTH_ACCESS_TOKEN` is in the spawned agent's env — which only happens when Decision 10 is wired. So Decision 10 and 11 deploy together; deploying Decision 11 alone does nothing.
+
+**Cross-reference:** This decision exists *only* because Decision 10 reveals the trap. With Decision 10 wired but Decision 11 absent, the agent has fresh tokens it never uses. Both must ship.
+
 ## Risks / Trade-offs
 
 - **[Risk] Port 3000 conflict prevents OAuth start.** → Mitigation: startup health check; OAuth start endpoint returns a human-friendly error naming the conflicting process. Callback URL is documented as part of server identity, not ephemeral.
@@ -175,6 +230,9 @@ Clock skew is compensated by tracking the rolling average of `(serverDate − lo
 - **[Risk] Exit-78 infinite loop (refresh keeps failing, child keeps exiting).** → Mitigation: parent limits respawns to 3 per provider per pipeline run; further exit-78s transition pipeline to `FAILED` with clear error.
 - **[Trade-off] Docker / cloud deploys can't use OS keychain.** → Accepted: `EncryptedFileBackend` or `EnvVarBackend` handles these; operator responsibility to inject `$CRED_ENC_KEY` or pre-populated tokens.
 - **[Trade-off] OAuth requires a browser open on the machine running the server.** → Accepted: for strictly-headless installs, PAT remains the supported path.
+- **[Risk] Token captured at agent spawn becomes stale mid-pipeline.** → Mitigation: the exit-78 protocol (Decision 2) handles this once Decision 10 is wired. Section 11 task 11.5 adds a diagnostic SSE event + warning log so a future regression where `_tokenManager` is null does not silently swallow the recovery.
+- **[Risk] Decision 11 fallback fires for OAuth tokens injected by an operator (CI / Docker pre-loaded env) without going through the in-process OAuth flow.** → Accepted as desired behavior: operator-injected token implies operator-authorized fetch. The single-user installation model (see Context) makes this safe; multi-tenant operators set explicit `*_ENABLED=false` to opt out.
+- **[Risk] `setTokenManager` is not exposed by some loaded agent-process module variant (e.g., very old build).** → Mitigation: the wire in Decision 10 is guarded by `typeof agentProcess.setTokenManager === 'function'`; missing exposure logs a startup warning (task 11.6) and the agent falls back to PAT/service-account paths the connectors already support.
 
 ## Migration Plan
 

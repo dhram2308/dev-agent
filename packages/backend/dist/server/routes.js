@@ -354,8 +354,12 @@ function tryServeStaticFile(url, res, apiToken) {
  * @returns true if the route was handled
  */
 async function handleRequest(url, request, res, apiToken, html) {
-    // OAuth routes: handle before auth check (callback has no auth)
-    if (handleOAuthRoute && (url.pathname.startsWith('/oauth/') || url.pathname.startsWith('/api/oauth/'))) {
+    // OAuth + connector-credential routes: handle before auth check
+    // (OAuth callback has no auth; PAT save/remove apply x-api-token internally).
+    if (handleOAuthRoute &&
+        (url.pathname.startsWith('/oauth/') ||
+            url.pathname.startsWith('/api/oauth/') ||
+            url.pathname.startsWith('/api/connectors/'))) {
         const handled = await handleOAuthRoute(url, request, res, apiToken);
         if (handled)
             return true;
@@ -662,6 +666,96 @@ async function handleRequest(url, request, res, apiToken, html) {
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
+        return true;
+    }
+    // -- GET /api/changes --
+    // Durable diff-data surface for the Write Code stage card.
+    // Picks the best available source (live/state/git/none) so the UI can
+    // render the same DiffViewer across running, post-run, cached-resume,
+    // and past-gate contexts without stage-gated branches.
+    if (url.pathname === '/api/changes') {
+        const ticket = safeTicket(url.searchParams.get('ticket'));
+        if (!ticket) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end('{"error":"Invalid ticket format"}');
+            return true;
+        }
+        const now = Date.now();
+        const state = await (0, state_io_1.getState)(ticket);
+        if (!state) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ source: 'none', changes: [], summary: '', original_files: {}, ts: now, reason: 'no_state' }));
+            return true;
+        }
+        try {
+            const d = (state.data || {});
+            const { cfg } = require('@mi/agent/lib/config');
+            const liveActive = state.stage === 'generate_code' && !!d._active_team;
+            const codeChanges = d.codeChanges;
+            const hasStateChanges = Array.isArray(codeChanges?.changes) && codeChanges.changes.length > 0;
+            if (liveActive && cfg.localRepo) {
+                const { buildLiveSnapshot } = require('@mi/agent/lib/agents-team');
+                const rawAgents = d._active_agents || [];
+                const activeAgents = Array.isArray(rawAgents)
+                    ? rawAgents.map((a) => (typeof a === 'string' ? a : a?.name)).filter((n) => typeof n === 'string')
+                    : [];
+                const teamName = d._active_team || 'Developer Team';
+                const snap = buildLiveSnapshot(cfg.localRepo, ticket, teamName, activeAgents);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    source: 'live',
+                    changes: snap.changes,
+                    summary: codeChanges?.summary || '',
+                    original_files: snap.original_files,
+                    ts: now,
+                }));
+                return true;
+            }
+            if (hasStateChanges) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    source: 'state',
+                    changes: codeChanges.changes,
+                    summary: codeChanges.summary || '',
+                    original_files: d.original_files || {},
+                    ts: now,
+                }));
+                return true;
+            }
+            if (cfg.localRepo) {
+                const { localGetChanges, localGetOriginal } = require('@mi/agent/lib/local-repo');
+                const SENSITIVE = /^(\.env(\..*)?|\.api-token|\.state-secret|\.debug)$/;
+                const raw = localGetChanges(cfg.localRepo);
+                const filtered = raw.filter((c) => !SENSITIVE.test(c.file_path));
+                if (filtered.length > 0) {
+                    const originals = {};
+                    for (const c of filtered) {
+                        if (c.action !== 'update')
+                            continue;
+                        const orig = localGetOriginal(cfg.localRepo, c.file_path);
+                        if (orig !== null)
+                            originals[c.file_path] = orig;
+                    }
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        source: 'git',
+                        changes: filtered,
+                        summary: '',
+                        original_files: originals,
+                        ts: now,
+                    }));
+                    return true;
+                }
+            }
+            const reason = cfg.localRepo ? 'no_changes_yet' : 'no_local_repo';
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ source: 'none', changes: [], summary: '', original_files: {}, ts: now, reason }));
+        }
+        catch (e) {
+            const msg = (e instanceof Error ? e.message : String(e)).substring(0, 500);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ source: 'none', changes: [], summary: '', original_files: {}, ts: now, reason: 'error', error: msg }));
+        }
         return true;
     }
     // -- POST /api/approve --
@@ -972,6 +1066,97 @@ async function handleRequest(url, request, res, apiToken, html) {
         }
         return true;
     }
+    // -- POST /api/answer-questions --
+    // Accepts user answers to Architect-raised clarifying questions.
+    // Appends to state.data._qa_answers and removes answered entries from
+    // state.data._pending_questions, then broadcasts so the UI re-enables
+    // Approve and hides answered rows. Ported from the legacy agent server
+    // (packages/agent/src/server/routes.ts) — handler was missing from the
+    // backend dispatcher and returned 404 in production.
+    if (url.pathname === '/api/answer-questions' && request.method === 'POST') {
+        try {
+            const raw = await parseBody(request, getBodySizeLimit('/api/answer-questions'));
+            const ticketIn = raw.ticket;
+            const answersIn = raw.answers;
+            const t = typeof ticketIn === 'string' ? safeTicket(ticketIn) : null;
+            if (!t) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: false, error: 'Invalid ticket format' }));
+                return true;
+            }
+            if (!Array.isArray(answersIn) || answersIn.length === 0) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: false, error: "'answers' must be a non-empty array" }));
+                return true;
+            }
+            for (const a of answersIn) {
+                if (!a || typeof a !== 'object'
+                    || typeof a.id !== 'string'
+                    || typeof a.choice !== 'number') {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ ok: false, error: 'Each answer must be {id: string, choice: number}' }));
+                    return true;
+                }
+            }
+            const via = (raw.via === 'ai-default') ? 'ai-default' : 'user';
+            let remaining = 0;
+            let validationError = null;
+            await (0, state_io_1.updateAsync)(t, async (state) => {
+                const data = (state.data ?? {});
+                const pending = Array.isArray(data._pending_questions) ? data._pending_questions : [];
+                const answers = Array.isArray(data._qa_answers) ? data._qa_answers : [];
+                for (const a of answersIn) {
+                    const ans = a;
+                    const q = pending.find((p) => p.id === ans.id);
+                    if (!q) {
+                        validationError = { code: 400, message: `Unknown question id: ${ans.id}` };
+                        return state;
+                    }
+                    if (!Array.isArray(q.options) || ans.choice < 0 || ans.choice >= q.options.length) {
+                        validationError = {
+                            code: 400,
+                            message: `Choice out of range for '${ans.id}': got ${ans.choice}, have ${q.options?.length ?? 0} options`,
+                        };
+                        return state;
+                    }
+                }
+                const now = Date.now();
+                const answeredIds = new Set();
+                for (const a of answersIn) {
+                    const ans = a;
+                    const q = pending.find((p) => p.id === ans.id);
+                    answers.push({ id: ans.id, choice: ans.choice, optionText: q.options[ans.choice], via, ts: now });
+                    answeredIds.add(ans.id);
+                }
+                data._qa_answers = answers;
+                data._pending_questions = pending.filter((p) => !answeredIds.has(p.id));
+                remaining = data._pending_questions.length;
+                // Reassign via cast since PipelineData is loosely structured at this level.
+                state.data = data;
+                return state;
+            });
+            if (validationError) {
+                const err = validationError;
+                res.writeHead(err.code, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: false, error: err.message }));
+                return true;
+            }
+            const updated = await (0, state_io_1.getState)(t);
+            if (updated) {
+                (0, sse_1.broadcast)('state', { ticket: t, stage: updated.stage, data: updated.data });
+            }
+            (0, sse_1.addLog)(`[qa] ${answersIn.length} answer(s) applied for ${t} (remaining pending: ${remaining})`, 'system', t);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, remaining }));
+        }
+        catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            const status = msg.includes('no state file') ? 404 : 400;
+            res.writeHead(status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: msg }));
+        }
+        return true;
+    }
     // -- POST /api/inject-context --
     // Uses updateAsync for atomic locked read-modify-write with HMAC
     if (url.pathname === '/api/inject-context' && request.method === 'POST') {
@@ -1159,7 +1344,10 @@ async function handleRequest(url, request, res, apiToken, html) {
             const stageIndex = constants_1.STAGES.indexOf(stage);
             const progress = stageIndex >= 0 ? parseFloat((stageIndex / constants_1.STAGES.length).toFixed(2)) : 0;
             const d = (state?.data || {});
-            const activeAgents = d._active_agents || [];
+            const rawActive = d._active_agents || [];
+            const activeAgents = Array.isArray(rawActive)
+                ? rawActive.map((a) => (typeof a === 'string' ? a : a?.name)).filter((n) => typeof n === 'string')
+                : [];
             const startedAt = d._startedAt || null;
             let needsApproval = GATE_STAGES.has(stage);
             // explore_plan only needs approval when plan is posted
@@ -1346,7 +1534,15 @@ async function handleRequest(url, request, res, apiToken, html) {
     if (url.pathname === '/api/config/test' && request.method === 'POST') {
         try {
             const raw = await parseBody(request, getBodySizeLimit('/api/config/test'));
-            const { service } = sanitizeBody('/api/config/test', raw);
+            const rawService = sanitizeBody('/api/config/test', raw).service;
+            // Frontend uses connector IDs (e.g. 'google-drive') that don't always
+            // match the backend's connector lib filename (e.g. 'gdrive'). Alias here
+            // so both forms are accepted and downstream lookups (require lib path,
+            // OAuth env-var staging) use the canonical name.
+            const SERVICE_ALIASES = {
+                'google-drive': 'gdrive',
+            };
+            const service = rawService ? (SERVICE_ALIASES[rawService] ?? rawService) : undefined;
             const allowed = [
                 'jira', 'gitlab', 'slack',
                 'gdrive', 'figma', 'postman',
@@ -1508,7 +1704,35 @@ async function handleRequest(url, request, res, apiToken, html) {
                 }
             }
             else {
-                // gdrive / figma / postman — load agent lib via relative require
+                // gdrive / figma / postman — load agent lib via relative require.
+                // [oauth-connectors Decision 10 follow-up] The connector libs read
+                // OAuth tokens from process.env, which works for spawned agent children
+                // (env injected at spawn time via setTokenManager) but NOT for in-process
+                // callers like this Test button — the backend process never has those
+                // env vars set. Pull from token-manager and stage in process.env before
+                // calling the lib, so the in-process Test path mirrors the spawn path.
+                const OAUTH_ENV_MAP = {
+                    gdrive: { provider: 'google', envKey: 'GOOGLE_OAUTH_ACCESS_TOKEN' },
+                    figma: { provider: 'figma', envKey: 'FIGMA_OAUTH_ACCESS_TOKEN' },
+                };
+                const oauthMap = OAUTH_ENV_MAP[service];
+                if (oauthMap) {
+                    try {
+                        // eslint-disable-next-line @typescript-eslint/no-var-requires
+                        const tm = require('../oauth/token-manager');
+                        const token = await tm.getAccessToken(oauthMap.provider);
+                        if (token) {
+                            process.env[oauthMap.envKey] = token;
+                        }
+                        else {
+                            // Clear any stale env var left behind by a previous test run, so
+                            // a disconnect-then-test sequence reflects current state instead
+                            // of resurrecting the last good token.
+                            delete process.env[oauthMap.envKey];
+                        }
+                    }
+                    catch { /* token-manager unavailable — fall back to whatever env had */ }
+                }
                 try {
                     // eslint-disable-next-line @typescript-eslint/no-var-requires
                     const lib = require(`../../../agent/dist/lib/${service}`);

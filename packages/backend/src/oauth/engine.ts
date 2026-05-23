@@ -21,6 +21,7 @@ import { getProvider } from './provider';
 import { generateVerifier, challengeFromVerifier, generateState } from './pkce';
 import { getCredentialStore } from '../credentials';
 import type { TokenSet } from '../credentials/types';
+import { notifyTokenStored, clearProviderCache, PAT_PROVIDER_ENV_MAP } from './token-manager';
 
 // ═══════════════════════════════════════════════════════════════
 // Pending Flow Storage
@@ -348,6 +349,12 @@ export async function handleOAuthCallback(
     };
   }
 
+  // Sync the in-memory cache and reschedule the proactive refresh timer.
+  // Without this, `getAccessToken` would keep serving any prior cached entry
+  // (possibly marked RE_AUTH_REQUIRED) for this provider until the next
+  // process restart, even though a fresh token now lives in the store.
+  notifyTokenStored(flow.provider, tokenSet);
+
   return {
     success: true,
     provider: flow.provider,
@@ -381,6 +388,22 @@ export async function disconnectProvider(providerName: string): Promise<void> {
     }
   }
 
+  // Capture kind before delete so we know whether to also clear an env-staged PAT.
+  const wasPat = existing?.kind === 'pat';
+
   // Delete credentials from the store regardless of revocation outcome.
   await store.delete(providerName);
+
+  // Drop the in-memory cache entry and cancel any pending refresh timer so
+  // a disconnect → test sequence reflects the disconnected state immediately
+  // rather than serving the just-deleted provider's last token from cache.
+  clearProviderCache(providerName);
+
+  // [pat-in-credential-store task 1.5] If the deleted entry was a PAT staged
+  // into process.env at startup, clear it now so subsequent in-process callers
+  // and freshly-spawned agents don't pick up a deleted credential.
+  if (wasPat) {
+    const envKey = PAT_PROVIDER_ENV_MAP[providerName];
+    if (envKey) delete process.env[envKey];
+  }
 }

@@ -1,6 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.DISCOVERY_CACHE_VERSION = void 0;
 exports.stageExplorePlan = stageExplorePlan;
+exports.parseQuestionsBlock = parseQuestionsBlock;
+exports._computeDiscoveryCacheKey = _computeDiscoveryCacheKey;
+exports._tryRestoreFromDiscoveryCache = _tryRestoreFromDiscoveryCache;
+exports._writeDiscoveryCache = _writeDiscoveryCache;
+exports._isCachedPlanStructurallyValid = _isCachedPlanStructurallyValid;
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
@@ -19,6 +25,162 @@ const { runAgentsTeam, runSingleAgent } = require("../lib/agents-team");
 const { isShuttingDown } = require("../lib/graceful-shutdown");
 const { isChannelEnabled } = require("../lib/notification-config");
 const PROJECT_ROOT = path.join(__dirname, "../..");
+// ── Discovery cache (fix A from AUT-8648 post-mortem) ─────────────
+//
+// Front-loaded discovery work (Requirements/Explorer/Risk/Architect) is
+// expensive — typically 10–15 minutes per pipeline cycle. Without this
+// cache, every `explore_plan` re-entry (caused by rollback after a failed
+// generate_code, or by STAGE_CLEARS firing on a plain restart) replays
+// that work from scratch, even when the ticket inputs and repo HEAD have
+// not changed.
+//
+// Cache key is content-addressed over the inputs the architect actually
+// sees: ticket fields + supplementary docs + plan feedback + refine
+// instructions + repo HEAD SHA. When ANY of those change (user refines,
+// architect prompt bumped, parent branch advanced), the key changes and
+// we naturally re-run. When NONE change (a pure restart), the cache hits
+// and we skip the four agents.
+//
+// Cache is intentionally NOT listed in STAGE_CLEARS so it survives the
+// stage rollback that triggers re-entry. The cache stores ONE entry at a
+// time — older entries are overwritten when the architect succeeds.
+const DISCOVERY_CACHE_VERSION = 1;
+exports.DISCOVERY_CACHE_VERSION = DISCOVERY_CACHE_VERSION;
+function _computeDiscoveryCacheKey(state) {
+    const crypto = require("crypto");
+    const t = state.data.ticket || {};
+    const parts = [
+        `v${DISCOVERY_CACHE_VERSION}`,
+        `summary:${(t.summary || "").trim()}`,
+        `desc:${(t.description || "").trim()}`,
+        `ac:${(t.ac || "").trim()}`,
+        `supp:${(t.supplementaryDocs || "").trim()}`,
+        `feedback:${(t.planFeedback || "").trim()}`,
+        `refine:${(state.data._refine_instructions || "").trim()}`,
+    ];
+    // Repo HEAD SHA pins the cache to a code state. A `git pull` that
+    // changes HEAD will invalidate the cache and force a fresh exploration
+    // — the architect's plan may depend on what's now on disk.
+    if (cfg.localRepo) {
+        try {
+            const { execFileSync } = require("child_process");
+            const sha = execFileSync("git", ["-C", cfg.localRepo, "rev-parse", "HEAD"], { encoding: "utf8", timeout: 5_000 }).toString().trim();
+            parts.push(`sha:${sha}`);
+        }
+        catch { /* no HEAD yet — leave key sha-less */ }
+    }
+    return crypto.createHash("sha256").update(parts.join("|")).digest("hex");
+}
+// Gap H: validate a cached explore_plan against Fix C's size constraints
+// before restoring. The architect is non-deterministic across runs —
+// if Fix A locked in a bad plan (kitchen-sink groups exceeding
+// TASK_GROUP_FILES_HARD), every restart would inherit that bad plan
+// and burn Dev-Agent budgets on it. Discarding the cache when this
+// happens forces a fresh architect run, giving Fix C a chance to
+// produce a better plan.
+//
+// Lazy require to avoid a circular import between explore-plan.ts and
+// developer.ts (both are stage modules in the same package).
+function _isCachedPlanStructurallyValid(plan) {
+    if (!plan || typeof plan !== 'string' || !plan.trim()) {
+        return { ok: false, hardCount: 0, warnCount: 0 };
+    }
+    try {
+        const { parseTaskGroups, TASK_GROUP_FILES_HARD, TASK_GROUP_FILES_WARN } = require('./generate-code/developer');
+        const groups = parseTaskGroups(plan);
+        let hardCount = 0;
+        let warnCount = 0;
+        for (const g of groups) {
+            if (g.files.length >= TASK_GROUP_FILES_HARD)
+                hardCount++;
+            else if (g.files.length >= TASK_GROUP_FILES_WARN)
+                warnCount++;
+        }
+        // Reject only on hard violations. Warn-level groups are acceptable
+        // (Fix B's adaptive max-turns can rescue them); hard violations
+        // (≥ 10 files in one group) are kitchen-sink groups that should
+        // be re-architected.
+        return { ok: hardCount === 0, hardCount, warnCount };
+    }
+    catch (e) {
+        // If the validation pipeline itself fails (unusual), prefer to
+        // restore from cache rather than block on a check-side bug.
+        logWarn(`[Discovery cache] plan validation threw: ${e.message.substring(0, 200)} — accepting cached plan defensively`);
+        return { ok: true, hardCount: 0, warnCount: 0 };
+    }
+}
+function _tryRestoreFromDiscoveryCache(state, currentKey) {
+    const cache = state.data._discovery_cache;
+    if (!cache || !cache.key)
+        return false;
+    if (cache.version !== DISCOVERY_CACHE_VERSION) {
+        logInfo(`[Discovery cache] schema version mismatch (cache=v${cache.version}, code=v${DISCOVERY_CACHE_VERSION}) — ignoring`);
+        return false;
+    }
+    if (cache.key !== currentKey)
+        return false;
+    if (!cache.explore_plan)
+        return false;
+    // Gap H: structural validation. Re-architect rather than locking in a
+    // bad cached plan.
+    const validation = _isCachedPlanStructurallyValid(cache.explore_plan);
+    if (!validation.ok) {
+        logWarn(`[Discovery cache] REJECTING cached plan — ${validation.hardCount} kitchen-sink group(s) ` +
+            `exceed TASK_GROUP_FILES_HARD threshold. Invalidating cache; architect will re-run with ` +
+            `Fix C's sizing constraints (which may produce a smaller plan).`);
+        // Drop the cache so subsequent restarts also force a re-architect
+        // until a structurally valid plan is produced.
+        state.data._discovery_cache = null;
+        return false;
+    }
+    if (validation.warnCount > 0) {
+        logInfo(`[Discovery cache] Cached plan has ${validation.warnCount} warn-level oversized group(s) but no hard violations — accepting (Fix B handles via adaptive max-turns).`);
+    }
+    // Restore. Each field is best-effort — a partial cache still gives some
+    // savings (e.g. analysisResult may be cached even if openspec parse
+    // failed). The existing `if (!state.data.explore_plan)` guard at the
+    // top of the agents block keys off `explore_plan` specifically, so as
+    // long as we set that, the heavy work is skipped.
+    state.data._agent_analysis = cache.analysisResult;
+    state.data._architect_result = cache.architectOutput;
+    state.data.explore_plan = cache.explore_plan;
+    state.data.explore_openspec = cache.explore_openspec;
+    state.data.explore_agents = cache.explore_agents;
+    state.data._pending_questions = cache.pendingQuestions || [];
+    state.data._agent_suggestions = cache.suggestions || [];
+    if (cache.agentCheckpoints) {
+        if (cache.agentCheckpoints._agent_requirements)
+            state.data._agent_requirements = cache.agentCheckpoints._agent_requirements;
+        if (cache.agentCheckpoints._agent_explorer)
+            state.data._agent_explorer = cache.agentCheckpoints._agent_explorer;
+        if (cache.agentCheckpoints._agent_risk)
+            state.data._agent_risk = cache.agentCheckpoints._agent_risk;
+    }
+    const ageMs = Date.now() - new Date(cache.createdAt).getTime();
+    const ageMin = Math.round(ageMs / 60_000);
+    logOk(`[Discovery cache] HIT — restored architect plan from ${ageMin}m ago (key ${cache.key.substring(0, 12)}). Skipping Requirements/Explorer/Risk/Architect (~10–15min saved).`);
+    return true;
+}
+function _writeDiscoveryCache(state, key, analysisResult, architectOutput) {
+    state.data._discovery_cache = {
+        version: DISCOVERY_CACHE_VERSION,
+        key,
+        createdAt: new Date().toISOString(),
+        analysisResult,
+        architectOutput,
+        explore_plan: state.data.explore_plan,
+        explore_openspec: state.data.explore_openspec,
+        explore_agents: state.data.explore_agents,
+        pendingQuestions: state.data._pending_questions || [],
+        suggestions: state.data._agent_suggestions || [],
+        agentCheckpoints: {
+            _agent_requirements: state.data._agent_requirements,
+            _agent_explorer: state.data._agent_explorer,
+            _agent_risk: state.data._agent_risk,
+        },
+    };
+    logInfo(`[Discovery cache] Wrote entry for key ${key.substring(0, 12)} — future restarts will skip discovery if inputs unchanged.`);
+}
 // ── OpenSpec CLI integration ─────────────────────────────────────
 function scaffoldOpenSpec(ticket) {
     const changeName = ticket.toLowerCase();
@@ -52,6 +214,90 @@ function scaffoldOpenSpec(ticket) {
         logErr(`OpenSpec scaffold failed: ${err.message}`);
         return null;
     }
+}
+/**
+ * Extract and validate the `---QUESTIONS---` JSON block from the Architect
+ * agent's output. Returns a list of validated `PendingQuestion` entries.
+ *
+ * Graceful degradation: malformed JSON, missing required fields, and
+ * out-of-bounds `recommend` indices are dropped with a warning. A missing
+ * block simply returns `[]` — the pipeline proceeds as "no questions".
+ *
+ * Hard cap 10 entries; soft cap 3 (warning only).
+ */
+function parseQuestionsBlock(output) {
+    // Accept either `---END---` or the next `---SOMETHING---` marker as terminator
+    const blockRe = /---QUESTIONS---\s*\n([\s\S]*?)(?:\n---END---|\n---[A-Z]+---|$)/i;
+    const m = output.match(blockRe);
+    if (!m)
+        return [];
+    const body = m[1].trim();
+    if (!body)
+        return [];
+    // Strip optional fenced json (e.g. ```json ... ```)
+    const stripped = body
+        .replace(/^```(?:json)?\s*\n/, "")
+        .replace(/\n```\s*$/, "")
+        .trim();
+    let parsed;
+    try {
+        parsed = JSON.parse(stripped);
+    }
+    catch (err) {
+        logWarn(`[architect] malformed QUESTIONS block: ${err.message}`);
+        return [];
+    }
+    if (!Array.isArray(parsed)) {
+        logWarn(`[architect] QUESTIONS block must be an array, got ${typeof parsed}`);
+        return [];
+    }
+    const HARD_CAP = 10;
+    const SOFT_CAP = 3;
+    const now = Date.now();
+    const accepted = [];
+    for (const raw of parsed) {
+        if (accepted.length >= HARD_CAP) {
+            logWarn(`[architect] QUESTIONS block hard-cap reached (${HARD_CAP}); dropping remaining entries`);
+            break;
+        }
+        if (!raw || typeof raw !== "object") {
+            logWarn(`[architect] QUESTIONS entry is not an object — dropped`);
+            continue;
+        }
+        const id = typeof raw.id === "string" ? raw.id.trim() : "";
+        const text = typeof raw.text === "string" ? raw.text.trim() : "";
+        const options = Array.isArray(raw.options) ? raw.options.filter((o) => typeof o === "string" && o.trim().length > 0) : [];
+        if (!id) {
+            logWarn(`[architect] QUESTIONS entry missing 'id' — dropped`);
+            continue;
+        }
+        if (!text) {
+            logWarn(`[architect] QUESTIONS entry '${id}' missing 'text' — dropped`);
+            continue;
+        }
+        if (options.length < 2) {
+            logWarn(`[architect] QUESTIONS entry '${id}' needs >= 2 options — dropped`);
+            continue;
+        }
+        const entry = {
+            id,
+            text,
+            options: options.slice(0, 5),
+            stage: "explore_plan",
+            ts: now,
+        };
+        if (typeof raw.recommend === "number" && Number.isInteger(raw.recommend) && raw.recommend >= 0 && raw.recommend < entry.options.length) {
+            entry.recommend = raw.recommend;
+        }
+        if (typeof raw.reason === "string" && raw.reason.trim().length > 0) {
+            entry.reason = raw.reason.trim();
+        }
+        accepted.push(entry);
+    }
+    if (accepted.length > SOFT_CAP) {
+        logWarn(`[architect] soft cap exceeded: ${accepted.length} questions admitted (max recommended: ${SOFT_CAP})`);
+    }
+    return accepted;
 }
 function parseAndWriteArtifacts(output, scaffoldInfo) {
     const markers = ["---PROPOSAL---", "---DESIGN---", "---SPECS---", "---TASKS---"];
@@ -123,19 +369,39 @@ async function stageExplorePlan(state) {
     if (!state.data.explore_docs_checked) {
         const inaccessible = [];
         const ticketText = `${summary} ${description} ${ac}`;
-        for (const url of (externalUrls || [])) {
-            const docType = classifyDocUrl(url);
-            if (docType !== "External Document") {
-                const criticality = assessDocCriticality(docType, ticketText);
-                inaccessible.push({ type: docType, url, criticality, instructions: getDocPasteInstructions(docType) });
-            }
-        }
+        // URLs whose content was already retrieved -- via OAuth connectors
+        // (Google Drive, Figma) or via the generic HTTP fetch loop. These
+        // must NOT be flagged as inaccessible.
+        const fetchedUrls = new Set();
+        const connectorContents = state.data.ticket.connectorContents || [];
+        for (const c of connectorContents)
+            fetchedUrls.add(c.url);
+        const fetchedUrlContents = state.data.ticket.fetchedUrlContents || [];
+        for (const c of fetchedUrlContents)
+            fetchedUrls.add(c.url);
+        // URLs deduped at fetch time -- their content lives on the primary URL
+        // we already added above, so they're effectively "fetched".
+        const connectorAliases = state.data.ticket.connectorAliases || [];
+        for (const u of connectorAliases)
+            fetchedUrls.add(u);
+        // Real failures recorded during fetch (connector errors, auth probes).
         const authRequired = state.data.ticket.authRequiredUrls || [];
         for (const ar of authRequired) {
-            if (!inaccessible.some((d) => d.url === ar.url)) {
-                const criticality = assessDocCriticality(ar.docType, ticketText);
-                inaccessible.push({ type: ar.docType, url: ar.url, criticality, instructions: getDocPasteInstructions(ar.docType), reason: ar.reason });
-            }
+            const criticality = assessDocCriticality(ar.docType, ticketText);
+            inaccessible.push({ type: ar.docType, url: ar.url, criticality, instructions: getDocPasteInstructions(ar.docType), reason: ar.reason });
+        }
+        // Recognised-service URLs not fetched and not already recorded as
+        // auth-required (e.g. UNFETCHABLE-matched, silently skipped).
+        for (const url of (externalUrls || [])) {
+            if (fetchedUrls.has(url))
+                continue;
+            if (inaccessible.some((d) => d.url === url))
+                continue;
+            const docType = classifyDocUrl(url);
+            if (docType === "External Document")
+                continue;
+            const criticality = assessDocCriticality(docType, ticketText);
+            inaccessible.push({ type: docType, url, criticality, instructions: getDocPasteInstructions(docType) });
         }
         for (const att of (attachments || [])) {
             const ext = att.filename.split(".").pop().toLowerCase();
@@ -218,6 +484,18 @@ async function stageExplorePlan(state) {
                 }
                 await sleep(POLL_INTERVAL);
             }
+        }
+    }
+    // ── Discovery cache check (fix A) ──
+    // Before launching the expensive 4-agent discovery cycle, see if a
+    // prior run already produced a plan for the same inputs. Hits the
+    // common case where a `generate_code` failure rolled back to this
+    // stage with no user-visible change to the ticket or repo. Misses
+    // (intentionally) when planFeedback / _refine_instructions change.
+    const discoveryCacheKey = _computeDiscoveryCacheKey(state);
+    if (!state.data.explore_plan) {
+        if (_tryRestoreFromDiscoveryCache(state, discoveryCacheKey)) {
+            save(state);
         }
     }
     // ── Agents Team: Explore repo + build plan ──
@@ -441,11 +719,52 @@ async function stageExplorePlan(state) {
         const refineArchCtx = state.data._refine_instructions
             ? `\n## User Refinement Instructions (PRIORITY)\n${state.data._refine_instructions}\n`
             : "";
+        // Previously-confirmed clarifying questions — the user already answered these
+        // in a prior run. Do not re-ask them unless the assumption has moved.
+        const priorAnswers = state.data._qa_answers || [];
+        const priorAnswersCtx = priorAnswers.length > 0
+            ? `\n## Previously-confirmed decisions\n` +
+                `The user has already answered these clarifying questions. Do NOT re-ask them unless the plan has moved and these answers would no longer be valid:\n` +
+                priorAnswers.map(a => `- ${a.id}: "${a.optionText}"`).join("\n") + "\n"
+            : "";
         const architectPrompt = `You are the **OpenSpec Architect Agent**. Produce a comprehensive implementation plan as 4 structured artifacts.\n\n` +
             `${archTicketCtx}## Analysis Results\n${trim(analysisResult)}\n\n` +
             `## Z6: VITE_PRODUCT_ID Enforcement\nAll product ID checks MUST use the exact enterprise product ID constant.\n\n` +
             (templateInstructions ? `## OpenSpec Artifact Templates\n${templateInstructions}\n` : "") +
-            `${prevArtifactsCtx}${refineArchCtx}` +
+            `${prevArtifactsCtx}${priorAnswersCtx}${refineArchCtx}` +
+            `## When you are uncertain\n` +
+            `If the ticket or plan has a MATERIAL ambiguity that changes which files/UX/data you modify, append a QUESTIONS block AFTER your \`---TASKS---\` section, in this exact format:\n\n` +
+            `---QUESTIONS---\n` +
+            `[\n` +
+            `  {\n` +
+            `    "id": "short-slug-name",\n` +
+            `    "text": "Full question sentence",\n` +
+            `    "options": ["Option A description", "Option B description"],\n` +
+            `    "recommend": 0,\n` +
+            `    "reason": "One-sentence rationale for option A"\n` +
+            `  }\n` +
+            `]\n` +
+            `---END---\n\n` +
+            `Rules:\n` +
+            `- Maximum 3 questions. If you have more, the ticket itself is too ambiguous — flag this in the proposal instead.\n` +
+            `- Only for decisions that MATERIALLY change implementation (file paths, data shape, UX affordance).\n` +
+            `- NOT for cosmetic preferences, naming micro-choices, or things answered in Jira comments.\n` +
+            `- \`id\` must be unique within this output, kebab-case, ≤ 40 chars.\n` +
+            `- \`options\` must have 2–5 string entries; each a full standalone description.\n` +
+            `- Always include \`recommend\` (0-based index) and a one-sentence \`reason\`.\n` +
+            `- If you have zero questions, DO NOT emit the QUESTIONS block at all.\n\n` +
+            `## TASK GROUP SIZING — CRITICAL (Fix C from AUT-8648 post-mortem)\n` +
+            `The \`---TASKS---\` section uses \`##\` headings to define INDEPENDENT task groups.\n` +
+            `Each group is handed to ONE parallel Developer Agent with a bounded turn budget (~75 file operations max).\n` +
+            `Groups that exceed this budget make the Dev Agent fail with \`Reached max turns\` — wasting 10+ minutes per attempt.\n\n` +
+            `Rules for the TASKS section:\n` +
+            `1. **Each \`##\` group must be implementable in ≤ 30 file operations.** Count: each Read/Write/Edit/Grep/Glob is one operation. < 5 files touched per group is a good target.\n` +
+            `2. **Prefer 4–6 small groups over 1–2 large ones.** Smaller groups parallelize better, tolerate retries, and surface partial progress.\n` +
+            `3. **Each group should touch ≤ 5 source files.** If a group naturally needs more files, SPLIT it along file boundaries into 2+ groups.\n` +
+            `4. **No cross-group dependencies.** Groups run in PARALLEL. If group B needs a file created by group A, either merge A+B or restructure so A's output is also in shared/types.\n` +
+            `5. **Bundle related changes; separate unrelated changes.** Example: auth in one group; routing in another; localization in a third; tests in their own group.\n` +
+            `6. **No kitchen-sink groups.** Any group titled "Misc", "Cleanup", "Various", or "Polish" will exceed the budget — break it up.\n` +
+            `7. **Reference files explicitly.** List the exact file paths the group touches under each \`##\` heading (the post-parser uses this to detect cross-group collisions).\n\n` +
             `## OUTPUT FORMAT — CRITICAL\nYou MUST output exactly 4 sections:\n\n---PROPOSAL---\n---DESIGN---\n---SPECS---\n---TASKS---\n\nAll 4 markers are REQUIRED.`;
         const architectOutput = await runSingleAgent({
             name: "OpenSpec Architect Agent",
@@ -473,7 +792,28 @@ async function stageExplorePlan(state) {
             state.data.explore_plan = architectOutput;
             state.data.explore_openspec = null;
         }
+        // Extract clarifying questions raised by the Architect. Also clear any
+        // prior answers whose id is being re-raised (user must re-answer since
+        // the underlying assumption may have moved).
+        const pendingQuestions = parseQuestionsBlock(architectOutput);
+        state.data._pending_questions = pendingQuestions;
+        if (pendingQuestions.length > 0) {
+            logInfo(`Architect raised ${pendingQuestions.length} clarifying question(s)`);
+            const newIds = new Set(pendingQuestions.map(q => q.id));
+            const existingAnswers = state.data._qa_answers || [];
+            const survivingAnswers = existingAnswers.filter(a => !newIds.has(a.id));
+            if (survivingAnswers.length !== existingAnswers.length) {
+                logInfo(`Cleared ${existingAnswers.length - survivingAnswers.length} stale answer(s) — questions were re-raised`);
+            }
+            state.data._qa_answers = survivingAnswers;
+        }
         state.data.explore_agents = { analysis: analysisResult };
+        // Fix A: persist the architect's output to the content-addressed
+        // discovery cache so a future restart with the same inputs can skip
+        // this entire block. Cache key was computed at function entry; we
+        // re-use it here to avoid drift if the ticket inputs were mutated
+        // mid-stage (they shouldn't be, but defensive).
+        _writeDiscoveryCache(state, discoveryCacheKey, analysisResult, architectOutput);
         save(state);
         logOk(`Implementation plan ready (2 agents completed${artifacts ? " + OpenSpec artifacts" : ""})`);
     }

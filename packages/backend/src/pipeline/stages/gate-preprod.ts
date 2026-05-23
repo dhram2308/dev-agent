@@ -22,6 +22,7 @@ import { loadConfig, loadExtendedConfig } from '../../config/loader';
 import { JiraService } from '../../services/jira';
 import { SlackService } from '../../services/slack';
 import type { PipelineState, StageHandler } from '@shared/types';
+import { isChannelEnabled } from '../../lib/notification-gates';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -57,6 +58,7 @@ export async function waitForApproval(
   requiredCount: number = 1,
   requiredIds: string[] = [],
   uiPrefix: string | null = null,
+  gate: string = 'gate_preprod_approval',
 ): Promise<{ approved: boolean; by?: string[]; feedback?: string }> {
   const cfg = loadConfig();
   const ext = loadExtendedConfig();
@@ -77,10 +79,12 @@ export async function waitForApproval(
   while (approvedBy.size < requiredCount) {
     if (monotonicMs() - pollStart > maxApprovalTimeout) {
       logErr(`Approval timeout after ${maxApprovalTimeout / 3_600_000}h`);
-      await deps.slack.send(
-        `Timeout -- Approval -- ${ticket}\nWaiting for approval exceeded ${maxApprovalTimeout / 3_600_000}h. Pipeline halted.`,
-        [cfg.slack.ownerSlackId || ''],
-      );
+      if (isChannelEnabled(gate, 'slack')) {
+        await deps.slack.send(
+          `Timeout -- Approval -- ${ticket}\nWaiting for approval exceeded ${maxApprovalTimeout / 3_600_000}h. Pipeline halted.`,
+          [cfg.slack.ownerSlackId || ''],
+        );
+      }
       save(state);
       throw new Error(`Approval timeout after ${maxApprovalTimeout / 3_600_000}h`);
     }
@@ -88,10 +92,12 @@ export async function waitForApproval(
     // 1h reminder
     if (!data[reminderKey1h] && monotonicMs() - pollStart > ext.approvalReminder1h) {
       logInfo('Sending 1h approval reminder...');
-      await deps.slack.send(
-        `Reminder -- ${ticket}\nApproval pending for 1 hour. Please review.\nJira: ${deps.jira.issueUrl(ticket)}`,
-        [cfg.slack.ownerSlackId || ''],
-      );
+      if (isChannelEnabled(gate, 'reminder1h')) {
+        await deps.slack.send(
+          `Reminder -- ${ticket}\nApproval pending for 1 hour. Please review.\nJira: ${deps.jira.issueUrl(ticket)}`,
+          [cfg.slack.ownerSlackId || ''],
+        );
+      }
       data[reminderKey1h] = new Date().toISOString();
       save(state);
     }
@@ -99,10 +105,12 @@ export async function waitForApproval(
     // 4h escalation
     if (!data[reminderKey4h] && monotonicMs() - pollStart > ext.approvalReminder4h) {
       logWarn('Sending 4h escalation reminder...');
-      await deps.slack.send(
-        `Escalation -- ${ticket}\nApproval pending for 4 hours! Pipeline is blocked.\nJira: ${deps.jira.issueUrl(ticket)}`,
-        [cfg.slack.ownerSlackId || '', ext.qaSlackId || ''],
-      );
+      if (isChannelEnabled(gate, 'reminder4h')) {
+        await deps.slack.send(
+          `Escalation -- ${ticket}\nApproval pending for 4 hours! Pipeline is blocked.\nJira: ${deps.jira.issueUrl(ticket)}`,
+          [cfg.slack.ownerSlackId || '', ext.qaSlackId || ''],
+        );
+      }
       data[reminderKey4h] = new Date().toISOString();
       save(state);
     }
@@ -167,7 +175,9 @@ export async function waitForApproval(
               save(state);
               logInfo(`${authorName} approved but not in required approvers -- notifying`);
               try {
-                await deps.jira.addComment(ticket, `Thanks ${authorName}, but only the designated approvers can approve this gate.`);
+                if (isChannelEnabled(gate, 'jira')) {
+                  await deps.jira.addComment(ticket, `Thanks ${authorName}, but only the designated approvers can approve this gate.`);
+                }
               } catch (e: unknown) {
                 const msg = e instanceof Error ? e.message : String(e);
                 logWarn(`Could not notify unauthorized approver: ${msg}`);
@@ -218,19 +228,23 @@ export function createGatePreprodHandler(deps: GatePreprodDeps): StageHandler {
         .map((r) => `${r.ok ? 'PASS' : 'FAIL'} ${r.name}`)
         .join('\n');
 
-      await jira.addComment(
-        ticket,
-        `QA Verified\n\n` +
-        `Module status:\n${summary}\n\n` +
-        `Approve: Comment "approved" to promote to Pre-Prod.`,
-      );
+      if (isChannelEnabled('gate_preprod_approval', 'jira')) {
+        await jira.addComment(
+          ticket,
+          `QA Verified\n\n` +
+          `Module status:\n${summary}\n\n` +
+          `Approve: Comment "approved" to promote to Pre-Prod.`,
+        );
+      }
 
-      await slack.send(
-        `Pre-Prod Approval -- ${ticket}\n` +
-        `QA verified for: ${(data.ticket as { summary?: string })?.summary || ''}\n` +
-        `Approve: ${jira.issueUrl(ticket)}`,
-        [cfg.slack.ownerSlackId || ''],
-      );
+      if (isChannelEnabled('gate_preprod_approval', 'slack')) {
+        await slack.send(
+          `Pre-Prod Approval -- ${ticket}\n` +
+          `QA verified for: ${(data.ticket as { summary?: string })?.summary || ''}\n` +
+          `Approve: ${jira.issueUrl(ticket)}`,
+          [cfg.slack.ownerSlackId || ''],
+        );
+      }
 
       data.gate2a_posted = true;
       data.gate2a_at = new Date().toISOString();

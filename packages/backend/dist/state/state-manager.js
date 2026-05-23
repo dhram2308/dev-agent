@@ -647,6 +647,7 @@ function save(state, opts) {
     const baseDir = opts?.baseDir || path.join(__dirname, '..', '..', '..', '..');
     const stateFilePath = path.join(baseDir, `state-${state.ticket}.json`);
     const onWarn = opts?.onWarn || ((msg) => (0, logger_1.logWarn)(msg));
+    const onDebug = opts?.onDebug || ((msg) => (0, logger_1.logDebug)(msg));
     // Re-read disk to merge UI fields and validate CAS
     const diskResult = readStateFromDisk(stateFilePath, {
         allowUnverified: true,
@@ -657,7 +658,7 @@ function save(state, opts) {
         const memSeq = state._seq || 0;
         const diskSeq = diskResult.seq || diskResult.state._seq || 0;
         if (memSeq > 0 && diskSeq > 0 && memSeq !== diskSeq) {
-            onWarn(`[State CAS] CAS conflict: expected seq ${memSeq}, found ${diskSeq} -- merging`);
+            onDebug(`[State CAS] CAS conflict: expected seq ${memSeq}, found ${diskSeq} -- merging`);
             // Re-read and merge: adopt disk state's data, overlay our changes
             mergeUIFieldsFromDisk(state, diskResult.state);
             state._seq = diskSeq; // Adopt disk seq for correct increment
@@ -689,6 +690,7 @@ async function saveAsync(state, opts) {
     const baseDir = opts?.baseDir || path.join(__dirname, '..', '..', '..', '..');
     const stateFilePath = path.join(baseDir, `state-${state.ticket}.json`);
     const onWarn = opts?.onWarn || ((msg) => (0, logger_1.logWarn)(msg));
+    const onDebug = opts?.onDebug || ((msg) => (0, logger_1.logDebug)(msg));
     // Re-read disk to merge UI fields and validate CAS
     const diskResult = readStateFromDisk(stateFilePath, {
         allowUnverified: true,
@@ -698,7 +700,7 @@ async function saveAsync(state, opts) {
         const memSeq = state._seq || 0;
         const diskSeq = diskResult.seq || diskResult.state._seq || 0;
         if (memSeq > 0 && diskSeq > 0 && memSeq !== diskSeq) {
-            onWarn(`[State CAS] CAS conflict: expected seq ${memSeq}, found ${diskSeq} -- merging`);
+            onDebug(`[State CAS] CAS conflict: expected seq ${memSeq}, found ${diskSeq} -- merging`);
             mergeUIFieldsFromDisk(state, diskResult.state);
             state._seq = diskSeq;
         }

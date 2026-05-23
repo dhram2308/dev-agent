@@ -61,11 +61,11 @@ interface CfgObject {
     slack: {
         webhook: string | undefined;
         ownerId: string | undefined;
-        anshitId: string | undefined;
+        qaId: string | undefined;
     };
     ids: {
         owner: string | undefined;
-        anshit: string | undefined;
+        qa: string | undefined;
     };
     urls: {
         qa: string;
@@ -103,7 +103,12 @@ export declare let MAX_CONTINUE_WAIT: number;
 export declare let MAX_PLAN_REJECTIONS: number;
 export declare let ANALYSIS_TIMEOUT_MS: number;
 export declare let DEVELOPER_TIMEOUT_MS: number;
+export declare let DEVELOPER_MAX_TURNS: number;
+export declare let REVIEWER_MAX_TURNS: number;
+export declare let FIXER_MAX_TURNS: number;
+export declare let BUILD_FIXER_MAX_TURNS: number;
 export declare let REVIEWER_TIMEOUT_MS: number;
+export declare let SECURITY_TIMEOUT_MS: number;
 export declare let TEST_FIXER_TIMEOUT_MS: number;
 export declare function applyComplexityTimeout(baseTimeout: number, state: any): number;
 export declare let MAX_PROMPT_TOKENS: number;

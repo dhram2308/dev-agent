@@ -60,6 +60,13 @@ interface ConnectorCardProps {
   oauthLaunching?: boolean;
   /** Inline children for PAT fallback (token input + test button) */
   patFallbackContent?: React.ReactNode;
+  /**
+   * Auto-expand the PAT disclosure on initial render. Use to land the user
+   * directly on the PAT input after a related event (e.g. fresh Figma OAuth
+   * with no PAT yet saved). Once the user manually toggles the disclosure,
+   * subsequent flips of `patAutoOpen` are ignored — the user's choice wins.
+   */
+  patAutoOpen?: boolean;
   /** Config field definitions for this connector's group */
   configFields?: ConnectorConfigField[];
   /** Current config values from the store */
@@ -254,19 +261,23 @@ const styles = {
     gap: 'var(--sp-1)',
   },
   patDisclosure: {
+    marginTop: 'var(--sp-2)',
     paddingTop: 'var(--sp-2)',
     borderTop: '1px solid var(--border-subtle)',
   },
   patToggle: {
-    padding: 0,
-    border: 'none',
-    background: 'transparent',
-    color: 'var(--text-tertiary)',
-    fontSize: 11,
+    padding: 'var(--sp-2) var(--sp-3)',
+    width: '100%',
+    textAlign: 'left' as const,
+    border: '1px solid var(--border-subtle)',
+    borderRadius: 'var(--radius-sm)',
+    background: 'var(--bg-elevated, rgba(99, 102, 241, 0.06))',
+    color: 'var(--text-secondary)',
+    fontSize: 12,
     fontWeight: 500,
     cursor: 'pointer',
     fontFamily: 'var(--font-sans)',
-    transition: 'color 0.15s',
+    transition: 'background 0.15s, color 0.15s',
   },
   patContent: {
     marginTop: 'var(--sp-2)',
@@ -650,6 +661,7 @@ export function ConnectorCard({
   onOAuthDisconnect,
   oauthLaunching = false,
   patFallbackContent,
+  patAutoOpen = false,
   configFields,
   configValues,
   onSaveConnectorConfig,
@@ -658,8 +670,21 @@ export function ConnectorCard({
   const isTesting = testResult?.loading ?? false;
   const result = testResult?.result ?? null;
 
-  // PAT fallback disclosure state (for OAuth-capable providers)
-  const [patExpanded, setPatExpanded] = useState(false);
+  // PAT disclosure state. Auto-expands on initial render when `patAutoOpen`
+  // is true (e.g. just-completed Figma OAuth with no PAT yet) so the user
+  // doesn't have to hunt for the small disclosure toggle. Once they manually
+  // click the toggle, their choice wins and patAutoOpen is ignored.
+  const [patExpanded, setPatExpanded] = useState(patAutoOpen);
+  const [patUserToggled, setPatUserToggled] = useState(false);
+
+  useEffect(() => {
+    if (!patUserToggled && patAutoOpen) setPatExpanded(true);
+  }, [patAutoOpen, patUserToggled]);
+
+  const handlePatToggle = useCallback(() => {
+    setPatUserToggled(true);
+    setPatExpanded((v) => !v);
+  }, []);
 
   // Manage modal state
   const [manageOpen, setManageOpen] = useState(false);
@@ -1138,16 +1163,22 @@ export function ConnectorCard({
         </div>
       )}
 
-      {/* PAT fallback disclosure (for OAuth-capable providers) */}
-      {supportsOAuth && patFallbackContent && (
+      {/* PAT disclosure: shown whenever caller provides patFallbackContent.
+          Used for both OAuth-capable providers (Figma \u2014 PAT as fallback for
+          cross-workspace files OAuth can't reach) and OAuth-less providers
+          (Postman \u2014 PAT is the only auth path). See `pat-in-credential-store`
+          change for the keychain-storage implementation. */}
+      {patFallbackContent && (
         <div style={styles.patDisclosure}>
           <button
             type="button"
             style={styles.patToggle}
-            onClick={() => setPatExpanded((v) => !v)}
+            onClick={handlePatToggle}
             aria-expanded={patExpanded}
           >
-            {patExpanded ? 'Hide API token \u25B4' : 'Use API token instead \u25BE'}
+            {patExpanded
+              ? `\u25B4 Hide API token`
+              : (supportsOAuth ? `\u25BE Use API token (covers cross-workspace files)` : `\u25BE Set API token`)}
           </button>
           {patExpanded && (
             <div style={styles.patContent}>

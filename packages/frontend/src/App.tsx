@@ -20,6 +20,7 @@ import { LogFileArchiveViewer } from './components/LogFileArchiveViewer';
 import { TicketTabBar } from './components/TicketTabBar';
 import { QAProgressPanel } from './components/QAProgressPanel';
 import { WriteCodeDetail } from './components/WriteCodeDetail';
+import { StageOverviewList } from './components/StageOverviewSection';
 import { DiffViewer } from './components/review/DiffViewer';
 import { AgentSwimLanes } from './components/AgentSwimLanes';
 import { useLiveForTicket } from './store/codegenLive';
@@ -373,6 +374,10 @@ function DashboardView({
               <ContextInjectionPanel ticket={activeTicket} isRunning={isRunning} />
             )}
             <GateApproval />
+            {/* Per-stage overview sections — always rendered so every
+                stage pill in AgentStatus has a scroll target. Existing
+                detail panels above add depth when relevant. */}
+            <StageOverviewList />
             <LogViewer />
             {activeTicket && <LogFileArchiveViewer ticket={activeTicket} />}
           </>

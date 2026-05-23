@@ -273,7 +273,7 @@ const SENSITIVE_ENV_KEYS = [
     'QA_MAIN_PASS',
     'QA1_PASS',
     'OWNER_SLACK_ID',
-    'ANSHIT_SLACK_ID',
+    'QA_SLACK_ID',
 ];
 /**
  * Redact environment variable values from a string.

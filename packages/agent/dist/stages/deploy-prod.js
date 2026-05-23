@@ -214,14 +214,14 @@ async function stageDeployProd(state) {
                     await slack(`\ud83d\udea8 *PRODUCTION SMOKE FAILED — ${TICKET}*\n` +
                         `Production (${cfg.urls.prod}) is not responding after deploy.\n\n` +
                         `*Rollback command:*\n\`\`\`\ngit checkout ${cfg.branch.prod}\ngit reset --hard ${rollbackSha}\ngit push --force origin ${cfg.branch.prod}\n\`\`\`\n` +
-                        `Pre-merge SHA: \`${state.data._prod_pre_merge_sha}\``, [cfg.slack.ownerId, cfg.slack.anshitId]);
+                        `Pre-merge SHA: \`${state.data._prod_pre_merge_sha}\``, [cfg.slack.ownerId, cfg.slack.qaId]);
                 }
             }
             else {
                 if (isChannelEnabled("deploy_prod", "slack")) {
                     await slack(`\ud83d\udea8 *PRODUCTION SMOKE FAILED — ${TICKET}*\n` +
                         `Production (${cfg.urls.prod}) is not responding after deploy.\n` +
-                        `No rollback SHA available — manual investigation required.`, [cfg.slack.ownerId, cfg.slack.anshitId]);
+                        `No rollback SHA available — manual investigation required.`, [cfg.slack.ownerId, cfg.slack.qaId]);
                 }
             }
             addWarning(state, "deploy_prod", `Production smoke failed — rollback SHA: ${state.data._prod_pre_merge_sha || "unavailable"}`);

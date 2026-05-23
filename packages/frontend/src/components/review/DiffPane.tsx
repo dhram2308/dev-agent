@@ -9,6 +9,7 @@ import { useReviewStore } from '../../store/review';
 import { InlineComment } from './InlineComment';
 import {
   parseUnifiedDiff,
+  synthesizeFullFileHunk,
   computeCharHighlights,
   getFileExtension,
   actionColor,
@@ -866,11 +867,21 @@ function SplitDiff({
 
 export function DiffPane({ change, viewMode }: DiffPaneProps): JSX.Element {
   const hunks = useMemo(() => {
+    // 1. Backend provided a unified diff (the normal `update` case) →
+    //    parse it. Both unified + split renderers handle it.
     if (change.diff) {
       return parseUnifiedDiff(change.diff);
     }
+    // 2. No diff but we have file content. Synthesize a hunk so the
+    //    split/unified renderer can show it side-by-side (empty left
+    //    pane + full content right for `create`; mirror for `delete`).
+    //    Previously this fell through to a plain-text dump which broke
+    //    the GitHub-style side-by-side experience for new files.
+    if (change.content) {
+      return synthesizeFullFileHunk(change.content, change.action);
+    }
     return [];
-  }, [change.diff]);
+  }, [change.diff, change.content, change.action]);
 
   const hasDiff = hunks.length > 0;
   const ext = getFileExtension(change.file);
@@ -907,22 +918,18 @@ export function DiffPane({ change, viewMode }: DiffPaneProps): JSX.Element {
         )}
       </div>
 
-      {/* Diff content */}
+      {/* Diff content — split/unified renderer handles synthesized
+          hunks for create/delete the same as parsed ones for update. */}
       {hasDiff ? (
         viewMode === 'split' ? (
           <SplitDiff hunks={hunks} file={change.file} />
         ) : (
           <UnifiedDiff hunks={hunks} file={change.file} />
         )
-      ) : change.content ? (
-        /* New file with content but no diff */
-        <div style={s.newFileContent}>
-          {change.content}
-        </div>
       ) : (
         <div style={s.noContent}>
           {change.action === 'delete'
-            ? 'File deleted'
+            ? 'File deleted (no content captured)'
             : 'No diff available for this file'}
         </div>
       )}

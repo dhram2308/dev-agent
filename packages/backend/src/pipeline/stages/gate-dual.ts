@@ -19,6 +19,7 @@ import { JiraService } from '../../services/jira';
 import { SlackService } from '../../services/slack';
 import { waitForApproval } from './gate-preprod';
 import type { PipelineState, StageHandler } from '@shared/types';
+import { isChannelEnabled } from '../../lib/notification-gates';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -41,22 +42,26 @@ export function createGateDualHandler(deps: GateDualDeps): StageHandler {
     logStep(9, 'GATE 2b -- Dual Approval (Owner + QA)');
 
     if (!data.gate2b_posted) {
-      await jira.addComment(
-        ticket,
-        `Dual Approval Required\n\n` +
-        `Pre-Prod MR: ${data.preprod_mr_url}\n\n` +
-        `BOTH must approve:\n` +
-        `1. Owner\n` +
-        `2. QA Malhotra\n\n` +
-        `Both: comment "approved" on this ticket.`,
-      );
+      if (isChannelEnabled('gate_dual_approval', 'jira')) {
+        await jira.addComment(
+          ticket,
+          `Dual Approval Required\n\n` +
+          `Pre-Prod MR: ${data.preprod_mr_url}\n\n` +
+          `BOTH must approve:\n` +
+          `1. Owner\n` +
+          `2. QA Malhotra\n\n` +
+          `Both: comment "approved" on this ticket.`,
+        );
+      }
 
-      await slack.send(
-        `Dual Approval Required -- ${ticket}\n` +
-        `Pre-Prod MR ready. BOTH of you must approve.\n` +
-        `Jira: ${jira.issueUrl(ticket)}`,
-        [cfg.slack.ownerSlackId || '', ext.qaSlackId || ''],
-      );
+      if (isChannelEnabled('gate_dual_approval', 'slack')) {
+        await slack.send(
+          `Dual Approval Required -- ${ticket}\n` +
+          `Pre-Prod MR ready. BOTH of you must approve.\n` +
+          `Jira: ${jira.issueUrl(ticket)}`,
+          [cfg.slack.ownerSlackId || '', ext.qaSlackId || ''],
+        );
+      }
 
       data.gate2b_posted = true;
       data.gate2b_at = new Date().toISOString();
@@ -90,6 +95,7 @@ export function createGateDualHandler(deps: GateDualDeps): StageHandler {
       count,
       requiredIds,
       'gate2b',
+      'gate_dual_approval',
     );
     if (!result.approved) throw new Error('Dual approval rejected');
 

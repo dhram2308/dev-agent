@@ -68,7 +68,9 @@ function commentKey(file: string, line: number): string {
 // -- Store ----------------------------------------------------------
 
 export const useReviewStore = create<ReviewStore>((set, get) => ({
-  viewMode: 'unified',
+  // Default to split mode — matches the GitHub side-by-side diff that
+  // most reviewers expect. The toolbar still exposes the Unified toggle.
+  viewMode: 'split',
   selectedFile: null,
   comments: new Map(),
   commentingOn: null,
@@ -118,7 +120,7 @@ export const useReviewStore = create<ReviewStore>((set, get) => ({
 
   reset: () =>
     set({
-      viewMode: 'unified',
+      viewMode: 'split',
       selectedFile: null,
       comments: new Map(),
       commentingOn: null,

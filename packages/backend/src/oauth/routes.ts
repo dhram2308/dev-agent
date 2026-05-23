@@ -337,6 +337,116 @@ export async function handleOAuthRoute(
 ): Promise<boolean> {
   const { pathname } = url;
 
+  // ── POST /api/connectors/:provider/pat ────────────────────────
+  // [pat-in-credential-store task 1.3] Save a Personal Access Token to the
+  // credential store (keychain on macOS). Mirrors to process.env so in-process
+  // callers see it immediately; the next backend restart re-reads via
+  // initFromStore. Same x-api-token auth as other write routes.
+  const patSaveMatch = pathname.match(/^\/api\/connectors\/([^/]+)\/pat$/);
+  if (patSaveMatch && request.method === 'POST') {
+    const token = request.headers['x-api-token'] || url.searchParams.get('token');
+    if (token !== apiToken) {
+      sendJson(res, 403, { error: 'Forbidden: invalid or missing API token' });
+      return true;
+    }
+    const provider = patSaveMatch[1];
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { PAT_PROVIDER_ENV_MAP } = require('./token-manager') as {
+      PAT_PROVIDER_ENV_MAP: Readonly<Record<string, string>>;
+    };
+    const envKey = PAT_PROVIDER_ENV_MAP[provider];
+    if (!envKey) {
+      sendJson(res, 400, {
+        error: `Provider "${provider}" does not support keychain-stored PAT (allowed: ${Object.keys(PAT_PROVIDER_ENV_MAP).join(', ')})`,
+      });
+      return true;
+    }
+    try {
+      const body = await parseBody(request);
+      const patValue = body.token;
+      if (typeof patValue !== 'string' || patValue.trim() === '') {
+        sendJson(res, 400, { error: 'Body must include a non-empty `token` string' });
+        return true;
+      }
+      const metadata = (body.metadata && typeof body.metadata === 'object')
+        ? (body.metadata as Record<string, string>)
+        : {};
+      const store = await getCredentialStore();
+      await store.set(provider, {
+        kind: 'pat',
+        accessToken: patValue.trim(),
+        metadata,
+      });
+      process.env[envKey] = patValue.trim();
+      sendJson(res, 200, { ok: true, provider, envKey });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      sendJson(res, 500, { error: `Failed to save PAT for ${provider}: ${msg}` });
+    }
+    return true;
+  }
+
+  // ── DELETE /api/connectors/:provider/pat ──────────────────────
+  // [pat-in-credential-store task 1.4] Remove a stored PAT from the credential
+  // store and clear the corresponding env var. 404 if no entry existed.
+  if (patSaveMatch && request.method === 'DELETE') {
+    const token = request.headers['x-api-token'] || url.searchParams.get('token');
+    if (token !== apiToken) {
+      sendJson(res, 403, { error: 'Forbidden: invalid or missing API token' });
+      return true;
+    }
+    const provider = patSaveMatch[1];
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { PAT_PROVIDER_ENV_MAP } = require('./token-manager') as {
+      PAT_PROVIDER_ENV_MAP: Readonly<Record<string, string>>;
+    };
+    const envKey = PAT_PROVIDER_ENV_MAP[provider];
+    if (!envKey) {
+      sendJson(res, 400, {
+        error: `Provider "${provider}" does not support keychain-stored PAT (allowed: ${Object.keys(PAT_PROVIDER_ENV_MAP).join(', ')})`,
+      });
+      return true;
+    }
+    try {
+      const store = await getCredentialStore();
+      const existing = await store.get(provider);
+      if (!existing) {
+        sendJson(res, 404, { error: `No PAT stored for ${provider}` });
+        return true;
+      }
+      await store.delete(provider);
+      delete process.env[envKey];
+      sendJson(res, 200, { ok: true, provider });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      sendJson(res, 500, { error: `Failed to remove PAT for ${provider}: ${msg}` });
+    }
+    return true;
+  }
+
+  // ── GET /api/oauth/_debug/refresh-history ────────────────────
+  // [oauth-connectors task 11.12] Diagnostic-only route returning the in-memory
+  // refresh-history ring buffer. Gated by OAUTH_DEBUG=true so the endpoint is
+  // 404 in normal deployments; enable when investigating spurious refreshes.
+  // No auth check beyond the gate — the data is non-secret (no token bytes).
+  if (pathname === '/api/oauth/_debug/refresh-history' && request.method === 'GET') {
+    if (process.env.OAUTH_DEBUG !== 'true') {
+      sendJson(res, 404, { error: 'Not found' });
+      return true;
+    }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const tm = require('./token-manager') as {
+        getRefreshHistory: () => unknown[];
+      };
+      sendJson(res, 200, { history: tm.getRefreshHistory() });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      sendJson(res, 500, { error: `Failed to read refresh history: ${msg}` });
+    }
+    return true;
+  }
+
   // ── GET /api/oauth/status ───────────────────────────────────
   if (pathname === '/api/oauth/status' && request.method === 'GET') {
     // Auth required.

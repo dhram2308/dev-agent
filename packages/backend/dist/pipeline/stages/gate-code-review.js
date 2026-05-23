@@ -25,6 +25,7 @@ const utils_1 = require("../../lib/utils");
 const state_manager_1 = require("../../state/state-manager");
 const loader_1 = require("../../config/loader");
 const constants_1 = require("@shared/constants");
+const notification_gates_1 = require("../../lib/notification-gates");
 // ── Constants ────────────────────────────────────────────────────────
 const REJECTION_WORD_RE = /\brejected\b/i;
 const NOT_REJECTED_RE = /\bnot\s+rejected\b/i;
@@ -98,7 +99,9 @@ function createGateCodeReviewHandler(deps) {
         while (true) {
             if (monotonicMs() - gate1PollStart > maxApprovalTimeout) {
                 (0, logger_1.logErr)(`Gate 1 code review timeout after ${maxApprovalTimeout / 3_600_000}h`);
-                await slack.send(`Timeout -- Code Review -- ${ticket}\nPipeline halted.`, [cfg.slack.ownerSlackId || '']);
+                if ((0, notification_gates_1.isChannelEnabled)('gate_code_review', 'slack')) {
+                    await slack.send(`Timeout -- Code Review -- ${ticket}\nPipeline halted.`, [cfg.slack.ownerSlackId || '']);
+                }
                 (0, state_manager_1.save)(state);
                 throw new Error(`Gate 1 code review timeout after ${maxApprovalTimeout / 3_600_000}h`);
             }

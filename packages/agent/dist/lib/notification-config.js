@@ -19,7 +19,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const crypto_1 = __importDefault(require("crypto"));
-const CONFIG_PATH = path_1.default.join(__dirname, "..", "notification-config.json");
+// Resolve to project root regardless of whether this module loads from
+// packages/agent/src/lib (tsx-native) or packages/agent/dist/lib (compiled).
+// Both locations are exactly 4 directory levels below the workspace root.
+const CONFIG_PATH = path_1.default.join(__dirname, "..", "..", "..", "..", "notification-config.json");
 // ── Gates & Channels ────────────────────────────────────────────────
 const GATES = [
     "fetch_ticket",

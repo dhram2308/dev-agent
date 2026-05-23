@@ -165,22 +165,38 @@ function unwrapEnvelope(raw: string, secret: string, label = "unknown"): UnwrapR
 // -- Quarantine: move corrupt files aside ------------------------------------
 function quarantineFile(filePath: string, baseDir: string): string | null {
   const quarantineDir = path.join(baseDir, QUARANTINE_DIR_NAME);
+  let dest: string | null = null;
   try {
     if (!fs.existsSync(quarantineDir)) {
       fs.mkdirSync(quarantineDir, { recursive: true, mode: 0o700 });
     }
     const basename = path.basename(filePath);
-    const dest = path.join(quarantineDir, `${basename}.${Date.now()}.quarantined`);
+    dest = path.join(quarantineDir, `${basename}.${Date.now()}.quarantined`);
     fs.renameSync(filePath, dest);
-    return dest;
   } catch {
     // If quarantine fails, just rename in place
     try {
-      const dest = filePath + `.corrupted.${Date.now()}`;
+      dest = filePath + `.corrupted.${Date.now()}`;
       fs.renameSync(filePath, dest);
-      return dest;
-    } catch { return null; }
+    } catch { dest = null; }
   }
+
+  // M18: Surface the quarantine to operators. Silent quarantine = silent
+  // data loss. Drop a sibling ALERT.txt and write an error-severity log
+  // line so monitoring picks it up. Failures here are non-fatal — the
+  // quarantine itself already happened.
+  try {
+    if (dest) {
+      const alertPath = path.join(quarantineDir, "ALERT.txt");
+      const ts = new Date().toISOString();
+      const msg = `[${ts}] State file integrity failure — ${path.basename(filePath)} quarantined to ${path.basename(dest)}\n`;
+      fs.appendFileSync(alertPath, msg, { mode: 0o600 });
+    }
+    // eslint-disable-next-line no-console
+    console.error(`[STATE QUARANTINE] ${path.basename(filePath)} -> ${dest ? path.basename(dest) : "(rename failed)"}. Investigate before resuming pipelines.`);
+  } catch { /* never block on telemetry */ }
+
+  return dest;
 }
 
 // -- Crash recovery: clean orphaned .tmp files --------------------------------
@@ -190,6 +206,19 @@ function recoverTmpFiles(stateFilePath: string): TmpRecoveryAction[] {
   const recovered: TmpRecoveryAction[] = [];
 
   try {
+    // L5: Look for a sibling lock file. If the lock is held and recent,
+    // a writer is actively in flight even if .tmp looks old — don't
+    // touch it. This widens the safety margin around legitimate slow
+    // writes (e.g. large state pruning) without weakening crash recovery.
+    let lockHeld = false;
+    try {
+      const lockPath = stateFilePath + ".lock";
+      if (fs.existsSync(lockPath)) {
+        const lockStat = fs.statSync(lockPath);
+        if (Date.now() - lockStat.mtimeMs < 30_000) lockHeld = true;
+      }
+    } catch { /* ignore */ }
+
     const files = fs.readdirSync(dir);
     for (const file of files) {
       if (file.startsWith(base + ".tmp")) {
@@ -197,7 +226,9 @@ function recoverTmpFiles(stateFilePath: string): TmpRecoveryAction[] {
         const stat = fs.statSync(tmpPath);
         const ageMs = Date.now() - stat.mtimeMs;
 
-        if (ageMs > 10_000) {
+        // Keep the 10s threshold for the "definitely crashed" branch; but
+        // skip if an active lock-holder is also writing.
+        if (ageMs > 10_000 && !lockHeld) {
           // Older than 10s -- orphaned from a crashed write
           // Check if it's a valid state that's newer than current
           if (!fs.existsSync(stateFilePath)) {
@@ -284,6 +315,17 @@ function pruneState(state: PipelineState): PipelineState {
  */
 const UI_FIELD_PATTERN = /^.*_ui_(approved|rejected|feedback|refine|refine_instructions)$/;
 
+// C1: Concurrency-managed fields owned by parallel agents via
+// `withTicketStateSync`. The orchestrator's `saveSync` must NOT clobber
+// disk values for these fields when its in-memory copy is stale (e.g.
+// the value was changed in another process between this process's read
+// and write). Preservation policy: arrays are union-merged by element
+// identity; objects are key-merged with disk-wins on missing keys. Per-
+// agent checkpoint keys (`_dev_group_*`, `_dev_single_result`,
+// `_dev_retry_result`, `_review_*`, `_security_*`) are also preserved
+// when in-memory has no entry.
+const CONCURRENCY_FIELD_PATTERN = /^(?:_active_agents|_agents_history|_dev_group_\d+|_dev_single_result|_dev_retry_result|_review_result|_security_result|_fixer_result|_build_fix_result|_ac_fix_result|_browser_fix_result)$/;
+
 function isUIField(key: string): boolean {
   return UI_FIELD_PATTERN.test(key);
 }
@@ -298,6 +340,31 @@ function mergeUIFieldsFromDisk(memoryState: PipelineState, diskState: PipelineSt
   for (const key of Object.keys(diskState.data)) {
     if (isUIField(key) && (memoryState.data as any)[key] === undefined) {
       (memoryState.data as any)[key] = (diskState.data as any)[key];
+    }
+    // C1: Also preserve concurrency-managed fields that another writer
+    // (parallel agent or server route) may have updated while this
+    // process held a stale in-memory copy. Conservative semantics:
+    // disk wins iff in-memory has no value, OR (for _agents_history
+    // arrays) union by stable identity.
+    if (CONCURRENCY_FIELD_PATTERN.test(key)) {
+      const mem = (memoryState.data as any)[key];
+      const disk = (diskState.data as any)[key];
+      if (mem === undefined || mem === null) {
+        (memoryState.data as any)[key] = disk;
+      } else if (key === "_agents_history" && Array.isArray(mem) && Array.isArray(disk)) {
+        // Union by (name, startedAt) — preserves entries either side knows about
+        const seen = new Set<string>();
+        const merged: any[] = [];
+        for (const e of [...disk, ...mem]) {
+          if (!e) continue;
+          const id = `${e.name}|${e.startedAt}`;
+          if (seen.has(id)) continue;
+          seen.add(id);
+          merged.push(e);
+        }
+        // Cap retained per the team's existing AGENTS_HISTORY_CAP (50)
+        (memoryState.data as any)[key] = merged.slice(-50);
+      }
     }
   }
 }
@@ -523,10 +590,25 @@ function saveSync(stateFilePath: string, state: PipelineState, opts: StateManage
       const diskSeq = diskResult.seq || diskResult.state._seq || 0;
       if (memSeq > 0 && diskSeq > 0 && memSeq !== diskSeq) {
         const debug = opts.onDebug || console.debug.bind(console);
-        debug(`[State CAS] CAS conflict: expected seq ${memSeq}, found ${diskSeq} -- merging`);
-        // Re-read and merge: adopt disk state's data, overlay our changes
-        mergeUIFieldsFromDisk(state, diskResult.state);
-        state._seq = diskSeq; // Adopt disk seq for correct increment
+        const warn = opts.onWarn || (() => {});
+        if (memSeq < diskSeq) {
+          // H10: Disk has been updated by another writer since we read it.
+          // Merge UI + concurrency-managed fields from disk so we don't
+          // clobber them, and adopt disk's seq for monotonic bump.
+          debug(`[State CAS] disk ahead (mem=${memSeq}, disk=${diskSeq}) — merging`);
+          mergeUIFieldsFromDisk(state, diskResult.state);
+          state._seq = diskSeq;
+        } else {
+          // H10: In-memory seq is ahead of disk. This should never happen
+          // in normal flow (disk monotonically increases). Likely causes:
+          // state-file rollback, restoration from backup, or a bug.
+          // Refusing to silently adopt the lower disk seq prevents two
+          // distinct writes from sharing the same effective sequence
+          // number and confusing CAS readers downstream.
+          warn(`[State CAS] in-memory seq ${memSeq} ahead of disk seq ${diskSeq} — keeping memSeq (disk likely rolled back)`);
+          mergeUIFieldsFromDisk(state, diskResult.state);
+          // state._seq stays at memSeq — next bump produces memSeq+1
+        }
       } else {
         mergeUIFieldsFromDisk(state, diskResult.state);
       }

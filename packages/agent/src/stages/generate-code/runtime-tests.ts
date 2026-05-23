@@ -21,6 +21,7 @@ const { sanitizeForPrompt } = require("../../lib/utils");
 const { save } = require("../../lib/state");
 const { runSingleAgent } = require("../../lib/agents-team");
 const { localGetChanges, localGetOriginal } = require("../../lib/local-repo");
+const { _validateDevChanges } = require("./developer");
 
 // -- Shell command with heartbeat progress --
 function execWithProgress(cmd: string, opts: any, label: string, intervalMs: number = 15000): Promise<{stdout: string; stderr: string; code: number}> {
@@ -117,11 +118,20 @@ function extractPublicAPI(filePath: string): string {
 // -- Find nearest test files to changed files --
 function findNearestTests(changedFiles: any[], repoPath: string, max: number = 5): string[] {
   const examples: string[] = [];
+  // M4: Walk up to depth 4 (was 2). Repos commonly place tests at
+  // `src/__tests__/integration/foo.spec.tsx` — three levels deep from the
+  // changed file's parent directory. Also walk UP one level so tests in
+  // a sibling `__tests__/` directory of the changed file's parent are
+  // discovered.
   for (const cf of changedFiles) {
-    const dir = path.dirname(path.join(repoPath, cf.file_path));
-    try {
-      _walkForTests(dir, examples, max, 0, 2);
-    } catch (e: any) { logWarn(`findNearestTests walk error: ${e.message.substring(0, 80)}`); }
+    const fileDir = path.dirname(path.join(repoPath, cf.file_path));
+    const candidates = [fileDir, path.dirname(fileDir)];
+    for (const dir of candidates) {
+      try {
+        _walkForTests(dir, examples, max, 0, 4);
+      } catch (e: any) { logWarn(`findNearestTests walk error: ${e.message.substring(0, 80)}`); }
+      if (examples.length >= max) break;
+    }
     if (examples.length >= max) break;
   }
   return examples;
@@ -159,7 +169,66 @@ async function runRuntimeTests(state: PipelineState, fileChanges: any[], origina
   }
 
   const { execSync, spawn: spawnProc } = require("child_process");
-  const artifactsDir = path.join(path.dirname(path.dirname(__dirname)), TEST_ARTIFACTS_DIR, TICKET);
+  // M24: Per-run timestamped subdirectory so the next run can't blow away
+  // the previous run's screenshots / jest results / console captures.
+  // The current run still gets a stable handle via _test_artifacts_path,
+  // and a `latest` symlink lets external dashboards keep a predictable
+  // path. Keep last 5 runs; older ones are pruned to bound disk usage.
+  const artifactsRoot = path.join(path.dirname(path.dirname(__dirname)), TEST_ARTIFACTS_DIR, TICKET);
+  const runStamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const artifactsDir = path.join(artifactsRoot, runStamp);
+  try {
+    fs.mkdirSync(artifactsDir, { recursive: true });
+    // Prune older runs (keep last 5)
+    if (fs.existsSync(artifactsRoot)) {
+      const subdirs = fs.readdirSync(artifactsRoot, { withFileTypes: true })
+        .filter((d: any) => d.isDirectory() && d.name !== "latest")
+        .map((d: any) => d.name)
+        .sort();
+      while (subdirs.length > 5) {
+        const old = subdirs.shift();
+        try { fs.rmSync(path.join(artifactsRoot, old), { recursive: true, force: true }); } catch {}
+      }
+    }
+    // Update `latest` symlink for stable external references
+    const latestLink = path.join(artifactsRoot, "latest");
+    try { if (fs.existsSync(latestLink) || fs.lstatSync(latestLink).isSymbolicLink()) fs.unlinkSync(latestLink); } catch {}
+    try { fs.symlinkSync(runStamp, latestLink, "dir"); } catch {}
+  } catch (e: any) { logWarn(`Artifacts dir setup failed: ${e.message.substring(0, 100)}`); }
+
+  // C5: Cleanup that MUST run even on crash so generated test scaffolding
+  // (jest config, .env.local, test-providers, mi-core shim, *.spec.* files)
+  // never leaks into the next stage's commit. Previously only ran on the
+  // success return path.
+  const revertScaffolding = (): void => {
+    logInfo("  Reverting generated test infrastructure files...");
+    try {
+      const filesToRevert = ["jest.config.override.js", ".env.local"];
+      for (const f of filesToRevert) {
+        const fp = path.join(cfg.localRepo, f);
+        if (fs.existsSync(fp)) fs.unlinkSync(fp);
+      }
+      try {
+        execSync("git clean -fd -- '**/*.spec.tsx' '**/*.spec.ts' '**/*.test.tsx' '**/*.test.ts' 2>/dev/null || true", {
+          cwd: cfg.localRepo, timeout: 15_000, stdio: "pipe", shell: true,
+        });
+        execSync("git checkout -- '**/*.spec.tsx' '**/*.spec.ts' '**/*.test.tsx' '**/*.test.ts' 2>/dev/null || true", {
+          cwd: cfg.localRepo, timeout: 15_000, stdio: "pipe", shell: true,
+        });
+      } catch {}
+      const appSrcClean = path.join(cfg.localRepo, "apps", "enterprise", "src");
+      const srcClean = fs.existsSync(appSrcClean) ? appSrcClean : path.join(cfg.localRepo, "src");
+      const shimDir = path.join(srcClean, "__test-shims__");
+      if (fs.existsSync(shimDir)) fs.rmSync(shimDir, { recursive: true, force: true });
+      const setupRuntime = path.join(srcClean, "setupTests.runtime.ts");
+      if (fs.existsSync(setupRuntime)) fs.unlinkSync(setupRuntime);
+      const testProviders = path.join(srcClean, "test-providers.tsx");
+      if (fs.existsSync(testProviders)) fs.unlinkSync(testProviders);
+      logOk("  Test infrastructure files reverted -- only production code remains");
+    } catch (cleanErr: any) {
+      logWarn(`  Test file cleanup error: ${cleanErr.message.substring(0, 200)} -- proceeding anyway`);
+    }
+  };
 
   // Fix 2d: Kill stale Claude process from previous crash
   if ((state.data as any)._claude_pid) {
@@ -191,12 +260,14 @@ async function runRuntimeTests(state: PipelineState, fileChanges: any[], origina
     save(state);
   }
 
-  // Clean artifacts directory for fresh run (task 6.3)
-  try {
-    if (fs.existsSync(artifactsDir)) fs.rmSync(artifactsDir, { recursive: true, force: true });
-    fs.mkdirSync(artifactsDir, { recursive: true });
-  } catch (e: any) { logWarn(`Artifacts dir setup failed: ${e.message.substring(0, 100)}`); }
+  // M24: artifactsDir is already a fresh, timestamped per-run directory
+  // created above; the destructive rm-then-mkdir that used to live here
+  // would have wiped previous runs. Skipped entirely.
   (state.data as any)._test_artifacts_path = artifactsDir;
+
+  // C5: Open try/finally — revertScaffolding() runs in `finally` so a crash
+  // during phases 0–3 cannot leak generated test files into the next commit.
+  try {
 
   const changeType = classifyChanges(fileChanges);
   logInfo(`Runtime tests: Change type = ${changeType}`);
@@ -361,36 +432,9 @@ async function runRuntimeTests(state: PipelineState, fileChanges: any[], origina
     }
   }
 
-  // -- Cleanup: Revert test files (tasks 6.1-6.4) --
-  logInfo("  Reverting generated test infrastructure files...");
-  try {
-    const filesToRevert = ["jest.config.override.js", ".env.local"];
-    for (const f of filesToRevert) {
-      const fp = path.join(cfg.localRepo, f);
-      if (fs.existsSync(fp)) fs.unlinkSync(fp);
-    }
-    // Remove generated test files (untracked) and revert modified ones -- recursive glob
-    try {
-      execSync("git clean -fd -- '**/*.spec.tsx' '**/*.spec.ts' '**/*.test.tsx' '**/*.test.ts' 2>/dev/null || true", {
-        cwd: cfg.localRepo, timeout: 15_000, stdio: "pipe", shell: true,
-      });
-      execSync("git checkout -- '**/*.spec.tsx' '**/*.spec.ts' '**/*.test.tsx' '**/*.test.ts' 2>/dev/null || true", {
-        cwd: cfg.localRepo, timeout: 15_000, stdio: "pipe", shell: true,
-      });
-    } catch {}
-    // Remove generated directories
-    const appSrcClean = path.join(cfg.localRepo, "apps", "enterprise", "src");
-    const srcClean = fs.existsSync(appSrcClean) ? appSrcClean : path.join(cfg.localRepo, "src");
-    const shimDir = path.join(srcClean, "__test-shims__");
-    if (fs.existsSync(shimDir)) fs.rmSync(shimDir, { recursive: true, force: true });
-    const setupRuntime = path.join(srcClean, "setupTests.runtime.ts");
-    if (fs.existsSync(setupRuntime)) fs.unlinkSync(setupRuntime);
-    const testProviders = path.join(srcClean, "test-providers.tsx");
-    if (fs.existsSync(testProviders)) fs.unlinkSync(testProviders);
-
-    logOk("  Test infrastructure files reverted -- only production code remains");
-  } catch (cleanErr: any) {
-    logWarn(`  Test file cleanup error: ${cleanErr.message.substring(0, 200)} -- proceeding anyway`);
+  } finally {
+    // C5: Always revert scaffolding, even if phases threw.
+    revertScaffolding();
   }
 
   // Re-extract changes after cleanup (ensures no test files in commit)
@@ -580,6 +624,9 @@ async function _runUnitTests(state: PipelineState, fileChanges: any[], artifacts
           });
           if (devFixResult) {
             fileChanges = localGetChanges(cfg.localRepo);
+            // H2: Validate the test-fix dev agent's output. It edits real
+            // source files, so GQ7/F3 risks apply.
+            _validateDevChanges(state);
             logOk("  Developer fixed code based on test failures -- re-running tests...");
             // Final re-run
             try {
@@ -612,6 +659,21 @@ async function _runUnitTests(state: PipelineState, fileChanges: any[], artifacts
     (state.data as any)._unit_tests_complete = unitResult.status;
     (state.data as any)._unit_tests_count = unitResult;
     save(state);
+
+    // H6: Block push when unit tests are still failing after all retries.
+    // Previously INCONCLUSIVE silently passed through and the MR shipped
+    // with failing tests. The operator can override with
+    // `ALLOW_FAILING_UNIT_TESTS=true` for emergencies (the failures are
+    // still surfaced in state warnings and MR notes either way).
+    const allowFailing = String(process.env.ALLOW_FAILING_UNIT_TESTS || "false").toLowerCase() === "true";
+    const failThreshold = parseInt(process.env.MAX_TEST_FAILURES || "0", 10) || 0;
+    if (unitResult.status !== "PASS" && unitResult.failed > failThreshold && !allowFailing) {
+      throw new Error(
+        `H6: ${unitResult.failed} unit test failure(s) exceed MAX_TEST_FAILURES=${failThreshold}. ` +
+        `Set ALLOW_FAILING_UNIT_TESTS=true to push anyway. ` +
+        `(${unitResult.passed}/${unitResult.total} passed)`,
+      );
+    }
 
     // 4.11: Validate test count
     const acStr = (state.data as any).ticket?.ac || "";
@@ -689,7 +751,44 @@ async function _runBrowserSmoke(state: PipelineState, fileChanges: any[], artifa
     }
 
     if (!ready) {
-      logWarn("  Vite preview didn't respond in time -- skipping browser tests");
+      // M5: A non-responsive Vite preview is often a port race — the port
+      // was free at findFreePort time but stolen before viteProc bound to
+      // it (or viteProc crashed silently). Kill the doomed process and
+      // retry once with the next free port before giving up.
+      logWarn("  Vite preview didn't respond on first port — retrying with next free port");
+      try { if (viteProc?.pid) process.kill(-viteProc.pid, "SIGTERM"); } catch { try { process.kill(viteProc.pid, "SIGTERM"); } catch {} }
+      const retryPort = await findFreePort(vitePort + 1, VITE_PREVIEW_PORT_END);
+      if (retryPort) {
+        viteProc = spawnProc("npx", ["vite", "preview", "--port", String(retryPort)], {
+          cwd: cfg.localRepo, stdio: "pipe", detached: true,
+        });
+        viteProc.unref();
+        (state.data as any)._vite_preview_pid = viteProc.pid;
+        (state.data as any)._vite_preview_port = retryPort;
+        save(state);
+        let retryCrashed = false;
+        viteProc.on("exit", (code: number | null) => { if (code !== 0 && code !== null) retryCrashed = true; });
+        const retryUrl = `http://127.0.0.1:${retryPort}`;
+        const t1 = monotonicMs();
+        while (monotonicMs() - t1 < VITE_PREVIEW_TIMEOUT) {
+          if (retryCrashed) break;
+          try {
+            await new Promise<number>((resolve, reject) => {
+              const r = http.get(retryUrl, { agent: false }, (res: any) => { res.resume(); r.destroy(); resolve(res.statusCode); });
+              r.on("error", () => { r.destroy(); reject(new Error("connect")); });
+              r.setTimeout(2000, () => { r.destroy(); reject(new Error("timeout")); });
+            });
+            ready = true;
+            break;
+          } catch {
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+        }
+        if (ready) logOk(`  Vite preview ready at ${retryUrl} (retry succeeded)`);
+      }
+    }
+    if (!ready) {
+      logWarn("  Vite preview didn't respond after retry -- skipping browser tests");
       (state.data as any)._e2e_tests_complete = "INCONCLUSIVE";
       save(state);
       return fileChanges;
@@ -851,7 +950,13 @@ async function _runBrowserSmoke(state: PipelineState, fileChanges: any[], artifa
       const consoleFile = path.join(artifactsDir, "console-errors.json");
       if (fs.existsSync(consoleFile)) {
         const errors = JSON.parse(fs.readFileSync(consoleFile, "utf8"));
-        e2eResult.consoleErrors = (errors || []).slice(0, 10);
+        // L2: Record total count + truncated remainder so the MR / state
+        // shows "13 errors (showing first 10)" instead of silently dropping
+        // 3.
+        const allErrors = Array.isArray(errors) ? errors : [];
+        e2eResult.consoleErrors = allErrors.slice(0, 10);
+        e2eResult.consoleErrorsTotal = allErrors.length;
+        if (allErrors.length > 10) e2eResult.consoleErrorsTruncated = allErrors.length - 10;
         // T2.12: Playwright uses e.level, not e.type for console errors
         const highSeverity = errors.filter((e: any) => e.level === "error" || e.type === "pageerror").length;
         const warnings = errors.filter((e: any) => e.level === "warning" || e.type === "warning").length;

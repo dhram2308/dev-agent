@@ -50,7 +50,7 @@ function isValidUrl(val) {
  *   - Required fields present (TICKET, JIRA_TOKEN, GITLAB_TOKEN, etc.)
  *   - Numeric fields valid (GITLAB_PROJECT_ID, timeouts)
  *   - URL format checks (JIRA_BASE_URL, GITLAB_URL)
- *   - Cross-field validation (OWNER_JIRA_ID != ANSHIT_JIRA_ID)
+ *   - Cross-field validation (OWNER_JIRA_ID != QA_JIRA_ID)
  *   - Boolean flags (RUN_BUILD_CHECK, BROWSER_VERIFY, etc.)
  *   - Port range ordering
  *   - Timeout ordering
@@ -297,12 +297,12 @@ function validateAllConfig(env = process.env) {
             group: 'timeouts',
         });
     }
-    // Same approver warning (OWNER_JIRA_ID != ANSHIT_JIRA_ID for dual approval)
+    // Same approver warning (OWNER_JIRA_ID != QA_JIRA_ID for dual approval)
     const ownerJira = env['OWNER_JIRA_ID'];
-    const anshitJira = env['ANSHIT_JIRA_ID'];
-    if (ownerJira && anshitJira && ownerJira.trim() === anshitJira.trim()) {
+    const qaJira = env['QA_JIRA_ID'];
+    if (ownerJira && qaJira && ownerJira.trim() === qaJira.trim()) {
         results.push({
-            field: 'OWNER_JIRA_ID/ANSHIT_JIRA_ID',
+            field: 'OWNER_JIRA_ID/QA_JIRA_ID',
             severity: Severity.WARN,
             message: 'Both approver IDs are the same -- dual approval gate will be ineffective',
             group: 'jira',
@@ -320,9 +320,9 @@ function validateAllConfig(env = process.env) {
     }
     // Empty approvers + ALLOW_ANY_APPROVER check
     const allowAny = (0, loader_1.parseBoolean)(env['ALLOW_ANY_APPROVER']);
-    if (!ownerJira && !anshitJira && !allowAny) {
+    if (!ownerJira && !qaJira && !allowAny) {
         results.push({
-            field: 'OWNER_JIRA_ID/ANSHIT_JIRA_ID',
+            field: 'OWNER_JIRA_ID/QA_JIRA_ID',
             severity: Severity.FATAL,
             message: 'Both approver IDs empty and ALLOW_ANY_APPROVER is false. Set at least one approver or ALLOW_ANY_APPROVER=true.',
             group: 'jira',
@@ -384,9 +384,9 @@ function validateAllConfig(env = process.env) {
     const sensitiveWithDefaults = [
         { field: 'SLACK_WEBHOOK', group: 'slack' },
         { field: 'OWNER_SLACK_ID', group: 'slack' },
-        { field: 'ANSHIT_SLACK_ID', group: 'slack' },
+        { field: 'QA_SLACK_ID', group: 'slack' },
         { field: 'OWNER_JIRA_ID', group: 'jira' },
-        { field: 'ANSHIT_JIRA_ID', group: 'jira' },
+        { field: 'QA_JIRA_ID', group: 'jira' },
     ];
     for (const sf of sensitiveWithDefaults) {
         const val = env[sf.field];

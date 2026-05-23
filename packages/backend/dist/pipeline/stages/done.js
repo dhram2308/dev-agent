@@ -55,6 +55,7 @@ const path = __importStar(require("path"));
 const logger_1 = require("../../lib/logger");
 const state_manager_1 = require("../../state/state-manager");
 const loader_1 = require("../../config/loader");
+const notification_gates_1 = require("../../lib/notification-gates");
 // ── Stage Handler ────────────────────────────────────────────────
 function createDoneHandler(deps) {
     const { jira, slack } = deps;
@@ -95,18 +96,20 @@ function createDoneHandler(deps) {
                 const warningText = warnings && warnings.length > 0
                     ? `\n\nKnown Limitations:\n${warnings.map((w) => `- [${w.stage}] ${w.message}`).join('\n')}`
                     : '';
-                await jira.addComment(ticket, `Deployment Complete\n` +
-                    `\n` +
-                    `${ticket}: ${ticketData?.summary || ''}\n` +
-                    `\n` +
-                    `Summary:\n` +
-                    `- QA MR: ${data.qa_mr_url || '--'}\n` +
-                    `- Pre-Prod MR: ${data.preprod_mr_url || '--'}\n` +
-                    `- Production MR: ${data.prod_mr_url || '--'}\n` +
-                    `\n` +
-                    `Total time: ${elapsed} minutes\n` +
-                    `All gates passed. Production is live.` +
-                    warningText);
+                if ((0, notification_gates_1.isChannelEnabled)('done', 'jira')) {
+                    await jira.addComment(ticket, `Deployment Complete\n` +
+                        `\n` +
+                        `${ticket}: ${ticketData?.summary || ''}\n` +
+                        `\n` +
+                        `Summary:\n` +
+                        `- QA MR: ${data.qa_mr_url || '--'}\n` +
+                        `- Pre-Prod MR: ${data.preprod_mr_url || '--'}\n` +
+                        `- Production MR: ${data.prod_mr_url || '--'}\n` +
+                        `\n` +
+                        `Total time: ${elapsed} minutes\n` +
+                        `All gates passed. Production is live.` +
+                        warningText);
+                }
                 data.final_comment = true;
                 (0, state_manager_1.save)(state);
             }
@@ -117,11 +120,13 @@ function createDoneHandler(deps) {
                     ? ((Date.now() - new Date(startedAt).getTime()) / 60_000).toFixed(1)
                     : 'unknown';
                 const ticketData = data.ticket;
-                await slack.send(`${ticket} deployed to Production\n` +
-                    `${ticketData?.summary || ''}\n\n` +
-                    `Jira: ${jira.issueUrl(ticket)}\n` +
-                    `MR: ${data.prod_mr_url || '--'}\n` +
-                    `Time: ${elapsed} min`, [cfg.slack.ownerSlackId || '']);
+                if ((0, notification_gates_1.isChannelEnabled)('done', 'slack')) {
+                    await slack.send(`${ticket} deployed to Production\n` +
+                        `${ticketData?.summary || ''}\n\n` +
+                        `Jira: ${jira.issueUrl(ticket)}\n` +
+                        `MR: ${data.prod_mr_url || '--'}\n` +
+                        `Time: ${elapsed} min`, [cfg.slack.ownerSlackId || '']);
+                }
                 data.final_slack = true;
                 (0, state_manager_1.save)(state);
             }

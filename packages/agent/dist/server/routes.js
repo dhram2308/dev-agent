@@ -360,6 +360,172 @@ async function handleRequest(url, request, res, apiToken, html) {
         res.end(JSON.stringify(result));
         return true;
     }
+    // ── GET /api/changes ──
+    // Durable diff-data surface for the Write Code stage card.
+    // Picks the best available source (live/state/git/none) so the UI can
+    // render the same DiffViewer across running, post-run, cached-resume, and
+    // past-gate contexts without stage-gated branches.
+    if (url.pathname === "/api/changes") {
+        const ticket = safeTicket(url.searchParams.get("ticket"));
+        if (!ticket) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Invalid ticket format" }));
+            return true;
+        }
+        const now = Date.now();
+        const state = getState(ticket);
+        if (!state) {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ source: "none", changes: [], summary: "", original_files: {}, ts: now, reason: "no_state" }));
+            return true;
+        }
+        try {
+            const d = state.data || {};
+            const { cfg } = require("../lib/config");
+            const liveActive = state.stage === "generate_code" && !!d._active_team;
+            const hasStateChanges = Array.isArray(d.codeChanges?.changes) && d.codeChanges.changes.length > 0;
+            if (liveActive && cfg.localRepo) {
+                const { buildLiveSnapshot } = require("../lib/agents-team");
+                const rawAgents = d._active_agents || [];
+                const activeAgents = Array.isArray(rawAgents)
+                    ? rawAgents.map((a) => (typeof a === "string" ? a : a?.name)).filter((n) => typeof n === "string")
+                    : [];
+                const snap = buildLiveSnapshot(cfg.localRepo, ticket, d._active_team || "Developer Team", activeAgents);
+                res.writeHead(200, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({
+                    source: "live",
+                    changes: snap.changes,
+                    summary: d.codeChanges?.summary || "",
+                    original_files: snap.original_files,
+                    ts: now,
+                }));
+                return true;
+            }
+            if (hasStateChanges) {
+                res.writeHead(200, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({
+                    source: "state",
+                    changes: d.codeChanges.changes,
+                    summary: d.codeChanges.summary || "",
+                    original_files: d.original_files || {},
+                    ts: now,
+                }));
+                return true;
+            }
+            if (cfg.localRepo) {
+                const { localGetChanges, localGetOriginal } = require("../lib/local-repo");
+                const SENSITIVE = /^(\.env(\..*)?|\.api-token|\.state-secret|\.debug)$/;
+                const raw = localGetChanges(cfg.localRepo);
+                const filtered = raw.filter((c) => !SENSITIVE.test(c.file_path));
+                if (filtered.length > 0) {
+                    const originals = {};
+                    for (const c of filtered) {
+                        if (c.action !== "update")
+                            continue;
+                        const orig = localGetOriginal(cfg.localRepo, c.file_path);
+                        if (orig !== null)
+                            originals[c.file_path] = orig;
+                    }
+                    res.writeHead(200, { "Content-Type": "application/json" });
+                    res.end(JSON.stringify({
+                        source: "git",
+                        changes: filtered,
+                        summary: "",
+                        original_files: originals,
+                        ts: now,
+                    }));
+                    return true;
+                }
+            }
+            const reason = cfg.localRepo ? "no_changes_yet" : "no_local_repo";
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ source: "none", changes: [], summary: "", original_files: {}, ts: now, reason }));
+        }
+        catch (e) {
+            const msg = (e?.message || "unknown error").substring(0, 500);
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ source: "none", changes: [], summary: "", original_files: {}, ts: now, reason: "error", error: msg }));
+        }
+        return true;
+    }
+    // ── GET /api/codegen/live ──
+    // One-shot snapshot for the frontend to hydrate its live-codegen store when
+    // the user opens the UI mid-codegen. SSE is authoritative for subsequent
+    // updates; this endpoint just catches the first-mount window.
+    if (url.pathname === "/api/codegen/live") {
+        const ticket = safeTicket(url.searchParams.get("ticket"));
+        if (!ticket) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Invalid ticket format" }));
+            return true;
+        }
+        const state = getState(ticket);
+        if (!state) {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ live: false, reason: "no_state" }));
+            return true;
+        }
+        if (state.stage !== "generate_code") {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ live: false, reason: "not_generating" }));
+            return true;
+        }
+        // Pull cfg + buildLiveSnapshot lazily (routes.ts may not already import them)
+        const { cfg } = require("../lib/config");
+        if (!cfg.localRepo) {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ live: false, reason: "no_local_repo" }));
+            return true;
+        }
+        try {
+            const { buildLiveSnapshot } = require("../lib/agents-team");
+            const rawAgents = state.data._active_agents || [];
+            const activeAgents = Array.isArray(rawAgents)
+                ? rawAgents.map((a) => (typeof a === 'string' ? a : a?.name)).filter((n) => typeof n === 'string')
+                : [];
+            const teamName = state.data._active_team || "Developer Team";
+            const snapshot = buildLiveSnapshot(cfg.localRepo, ticket, teamName, activeAgents);
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ live: true, ...snapshot }));
+        }
+        catch (e) {
+            const msg = (e?.message || "unknown error").substring(0, 500);
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ live: false, error: msg }));
+        }
+        return true;
+    }
+    // ── GET /api/agents/progress ──
+    // Hydration endpoint for the AgentSwimLanes frontend store. Mirrors
+    // /api/codegen/live shape (one-shot snapshot; SSE is authoritative for
+    // updates). Returns active + history arrays so a mid-run page refresh can
+    // reconstruct lanes before the first `agent:progress` event arrives.
+    if (url.pathname === "/api/agents/progress") {
+        const ticket = safeTicket(url.searchParams.get("ticket"));
+        if (!ticket) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Invalid ticket format" }));
+            return true;
+        }
+        const state = getState(ticket);
+        if (!state) {
+            res.writeHead(404, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "ticket not found" }));
+            return true;
+        }
+        const d = state.data || {};
+        const rawActive = d._active_agents || [];
+        const active = Array.isArray(rawActive)
+            ? rawActive.map((a) => typeof a === 'string'
+                ? { name: a, team: '', startedAt: 0, phase: 'running' }
+                : a)
+            : [];
+        const history = Array.isArray(d._agents_history) ? d._agents_history : [];
+        const live = state.stage === "generate_code" && active.length > 0;
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ live, active, history, ts: Date.now() }));
+        return true;
+    }
     // ── POST /api/approve ──
     // Uses patchUIAsync for atomic locked write with HMAC
     if (url.pathname === "/api/approve" && request.method === "POST") {
@@ -626,6 +792,96 @@ async function handleRequest(url, request, res, apiToken, html) {
         }
         return true;
     }
+    // ── POST /api/answer-questions ──
+    // Accepts user answers to Architect-raised clarifying questions.
+    // Appends to state.data._qa_answers and removes answered entries
+    // from state.data._pending_questions. Broadcasts a state event so
+    // the UI re-enables the Approve button and hides answered rows.
+    if (url.pathname === "/api/answer-questions" && request.method === "POST") {
+        try {
+            const rawAns = await parseBody(request, 10_000);
+            const body = JSON.parse(rawAns.toString() || "{}");
+            const t = safeTicket(body?.ticket);
+            if (!t) {
+                res.writeHead(400, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ ok: false, error: "Invalid ticket format" }));
+                return true;
+            }
+            if (!Array.isArray(body?.answers) || body.answers.length === 0) {
+                res.writeHead(400, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ ok: false, error: "'answers' must be a non-empty array" }));
+                return true;
+            }
+            for (const a of body.answers) {
+                if (!a || typeof a !== "object" || typeof a.id !== "string" || typeof a.choice !== "number") {
+                    res.writeHead(400, { "Content-Type": "application/json" });
+                    res.end(JSON.stringify({ ok: false, error: "Each answer must be {id: string, choice: number}" }));
+                    return true;
+                }
+            }
+            const via = body?.via === "ai-default" ? "ai-default" : "user";
+            let remaining = 0;
+            let validationError = null;
+            await updateAsync(t, async (state) => {
+                state.data = state.data || {};
+                const pending = Array.isArray(state.data._pending_questions) ? state.data._pending_questions : [];
+                const answers = Array.isArray(state.data._qa_answers) ? state.data._qa_answers : [];
+                // Validate every incoming answer against the current pending list.
+                for (const a of body.answers) {
+                    const q = pending.find((p) => p.id === a.id);
+                    if (!q) {
+                        validationError = { code: 400, message: `Unknown question id: ${a.id}` };
+                        return state;
+                    }
+                    if (!Array.isArray(q.options) || a.choice < 0 || a.choice >= q.options.length) {
+                        validationError = {
+                            code: 400,
+                            message: `Choice out of range for '${a.id}': got ${a.choice}, have ${q.options?.length ?? 0} options`,
+                        };
+                        return state;
+                    }
+                }
+                const now = Date.now();
+                const answeredIds = new Set();
+                for (const a of body.answers) {
+                    const q = pending.find((p) => p.id === a.id);
+                    answers.push({
+                        id: a.id,
+                        choice: a.choice,
+                        optionText: q.options[a.choice],
+                        via,
+                        ts: now,
+                    });
+                    answeredIds.add(a.id);
+                }
+                state.data._qa_answers = answers;
+                state.data._pending_questions = pending.filter((p) => !answeredIds.has(p.id));
+                remaining = state.data._pending_questions.length;
+                return state;
+            });
+            if (validationError) {
+                const err = validationError;
+                res.writeHead(err.code, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ ok: false, error: err.message }));
+                return true;
+            }
+            // Re-read the freshly written state and broadcast it so every UI
+            // client updates the pending-questions panel in real time.
+            const updated = getState(t);
+            if (updated) {
+                broadcast("state", { ticket: t, stage: updated.stage, data: updated.data });
+            }
+            addLog(`[qa] ${body.answers.length} answer(s) applied for ${t} (remaining pending: ${remaining})`, "system", t);
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: true, remaining }));
+        }
+        catch (e) {
+            const status = e.message.includes("no state file") ? 404 : 400;
+            res.writeHead(status, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: false, error: e.message }));
+        }
+        return true;
+    }
     // ── POST /api/inject-context ──
     // Uses updateAsync for atomic locked read-modify-write with HMAC
     if (url.pathname === "/api/inject-context" && request.method === "POST") {
@@ -780,7 +1036,10 @@ async function handleRequest(url, request, res, apiToken, html) {
             const stage = (state && state.stage) || "unknown";
             const stageIndex = STAGES.indexOf(stage);
             const progress = stageIndex >= 0 ? parseFloat((stageIndex / STAGES.length).toFixed(2)) : 0;
-            const activeAgents = (state && state.data && state.data._active_agents) || [];
+            const rawActive = (state && state.data && state.data._active_agents) || [];
+            const activeAgents = Array.isArray(rawActive)
+                ? rawActive.map((a) => (typeof a === 'string' ? a : a?.name)).filter((n) => typeof n === 'string')
+                : [];
             const startedAt = (state && state.data && state.data._startedAt) || null;
             let needsApproval = GATE_STAGES.has(stage);
             // explore_plan only needs approval when plan is posted

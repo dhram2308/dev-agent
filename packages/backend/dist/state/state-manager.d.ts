@@ -33,10 +33,12 @@ export interface ReadResult {
 export interface ReadOpts {
     allowUnverified?: boolean;
     onWarn?: (msg: string) => void;
+    onDebug?: (msg: string) => void;
 }
 /** Options for save operations */
 export interface SaveOpts {
     onWarn?: (msg: string) => void;
+    onDebug?: (msg: string) => void;
 }
 /** Defaults for creating fresh state */
 export interface StateDefaults {

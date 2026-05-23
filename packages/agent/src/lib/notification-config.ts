@@ -21,7 +21,10 @@ import type {
   NotificationConfigMap,
 } from '@mi/shared';
 
-const CONFIG_PATH: string = path.join(__dirname, "..", "notification-config.json");
+// Resolve to project root regardless of whether this module loads from
+// packages/agent/src/lib (tsx-native) or packages/agent/dist/lib (compiled).
+// Both locations are exactly 4 directory levels below the workspace root.
+const CONFIG_PATH: string = path.join(__dirname, "..", "..", "..", "..", "notification-config.json");
 
 // ── Gates & Channels ────────────────────────────────────────────────
 

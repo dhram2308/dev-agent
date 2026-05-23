@@ -87,7 +87,10 @@ try {
 // [OAuth] Token manager injection point -- set by the backend server
 interface TokenManagerLike {
   getAccessTokenSync(provider: string): string | null;
-  refresh(provider: string): Promise<unknown>;
+  // `trigger` is a diagnostic label propagated to the backend's refresh-history
+  // ring buffer (oauth-connectors task 11.12). Optional for back-compat with
+  // older builds of the backend that don't accept it.
+  refresh(provider: string, trigger?: string): Promise<unknown>;
 }
 let _tokenManager: TokenManagerLike | null = null;
 
@@ -276,6 +279,23 @@ function startAgent(ticket: string): AgentStartResult {
 
       addLog(`Agent for ${ticket} exited with code ${code}`, "system", ticket);
 
+      // [OAuth] Exit-78 but no TokenManager wired: surface the diagnostic
+      // instead of silently failing. See oauth-connectors design.md Decision 10
+      // and tasks.md 11.5. This branch is reached if the backend never called
+      // setTokenManager (e.g., legacy boot path or build mismatch).
+      if (code === EXIT_AUTH_REFRESH && !_tokenManager) {
+        const state = getState(ticket);
+        const provider = (state?.data?._authFailure as { provider: string } | undefined)?.provider || 'unknown';
+        const msg = `[OAuth] Agent for ${ticket} exited with code 78 (AUTH_REFRESH_NEEDED) for provider ${provider}, but TokenManager is not wired into agent-process. Refresh+respawn cannot run. Check that the backend HTTP server called setTokenManager() at startup.`;
+        addLog(msg, "system", ticket);
+        console.warn(msg);
+        broadcast("authRequired", { provider, reason: "token-manager-not-wired", ticket });
+        broadcast("status", { running: false, code, ticket });
+        clearTicketLogs(ticket);
+        delete agentProcs[ticket];
+        return;
+      }
+
       // [OAuth] Exit-78: agent requests auth refresh + respawn
       if (code === EXIT_AUTH_REFRESH && _tokenManager) {
         delete agentProcs[ticket];
@@ -295,7 +315,7 @@ function startAgent(ticket: string): AgentStartResult {
             return;
           }
           addLog(`[OAuth] Exit-78 for ${provider}. Refreshing token and respawning (attempt ${respawnCount}/${MAX_AUTH_RESPAWNS_PER_PROVIDER})...`, "system", ticket);
-          _tokenManager.refresh(provider).then(() => {
+          _tokenManager.refresh(provider, 'exit-78').then(() => {
             addLog(`[OAuth] Token refreshed for ${provider}. Respawning agent for ${ticket}...`, "system", ticket);
             startAgent(ticket);
           }).catch((err: any) => {

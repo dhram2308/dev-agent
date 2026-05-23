@@ -254,13 +254,13 @@ async function main() {
         }
     }
     // E7: Dual approval same-person guard
-    if (cfg.ids.owner && cfg.ids.anshit && cfg.ids.owner === cfg.ids.anshit) {
-        logWarn("OWNER_JIRA_ID and ANSHIT_JIRA_ID are the same — dual approval gate will be ineffective");
+    if (cfg.ids.owner && cfg.ids.qa && cfg.ids.owner === cfg.ids.qa) {
+        logWarn("OWNER_JIRA_ID and QA_JIRA_ID are the same — dual approval gate will be ineffective");
     }
-    if (!cfg.ids.owner && !cfg.ids.anshit) {
+    if (!cfg.ids.owner && !cfg.ids.qa) {
         const allowAny = (process.env.ALLOW_ANY_APPROVER || "false").toLowerCase() === "true";
         if (!allowAny) {
-            logErr("Both OWNER_JIRA_ID and ANSHIT_JIRA_ID are empty — set ALLOW_ANY_APPROVER=true to proceed without specific approvers");
+            logErr("Both OWNER_JIRA_ID and QA_JIRA_ID are empty — set ALLOW_ANY_APPROVER=true to proceed without specific approvers");
             process.exit(1);
         }
         logWarn("Both approver IDs empty but ALLOW_ANY_APPROVER=true — any Jira user can approve");
@@ -270,9 +270,9 @@ async function main() {
         cfg.ids.owner = await resolveJiraAccountId(cfg.ids.owner);
         logDebug(`C4: Owner Jira ID resolved: ${cfg.ids.owner}`);
     }
-    if (cfg.ids.anshit) {
-        cfg.ids.anshit = await resolveJiraAccountId(cfg.ids.anshit);
-        logDebug(`C4: Anshit Jira ID resolved: ${cfg.ids.anshit}`);
+    if (cfg.ids.qa) {
+        cfg.ids.qa = await resolveJiraAccountId(cfg.ids.qa);
+        logDebug(`C4: QA Jira ID resolved: ${cfg.ids.qa}`);
     }
     // Clone/update local repo cache for fast file reads
     // If WORKTREE_PATH is set (spawned by server with per-ticket worktree), use it directly
@@ -302,20 +302,42 @@ async function main() {
     }
     catch (lockErr) {
         if (lockErr.code === "EEXIST") {
-            // Lock file exists — check if owning process is still alive
+            // Lock file exists — check if owning process is still alive.
+            // C6: PID is not enough — the kernel reuses PIDs, so process.kill(pid,0)
+            // succeeding can mean "an unrelated process now has that PID". Combine
+            // with a lock-file mtime check: if the lock is older than LOCK_STALE_MS
+            // and no process exists with that PID running our binary, treat as stale.
+            const LOCK_STALE_MS = 5 * 60 * 1000; // 5 minutes — longer than any healthy heartbeat cadence
             try {
                 const lockPid = parseInt(fs_1.default.readFileSync(LOCK_FILE, "utf8").trim(), 10);
+                let lockMtimeMs = 0;
+                try {
+                    lockMtimeMs = fs_1.default.statSync(LOCK_FILE).mtimeMs;
+                }
+                catch { }
+                const lockAgeMs = lockMtimeMs > 0 ? Date.now() - lockMtimeMs : Infinity;
+                let pidAlive = false;
                 try {
                     process.kill(lockPid, 0);
-                    logErr(`Another agent running for ${TICKET} (PID ${lockPid}). Aborting.`);
-                    process.exit(1);
+                    pidAlive = true;
                 }
                 catch {
-                    // Process dead — stale lock
-                    logWarn(`Stale lock file found (PID ${lockPid} not running) — removing`);
-                    fs_1.default.unlinkSync(LOCK_FILE);
-                    fs_1.default.writeFileSync(LOCK_FILE, String(process.pid), { flag: "wx", mode: 0o600 });
+                    pidAlive = false;
                 }
+                if (pidAlive && lockAgeMs <= LOCK_STALE_MS) {
+                    logErr(`Another agent running for ${TICKET} (PID ${lockPid}, lock age ${Math.round(lockAgeMs / 1000)}s). Aborting.`);
+                    process.exit(1);
+                }
+                if (pidAlive && lockAgeMs > LOCK_STALE_MS) {
+                    // PID alive but lock is ancient — almost certainly a recycled PID
+                    // belonging to another process. Treat as stale.
+                    logWarn(`Lock file held by PID ${lockPid} but ${Math.round(lockAgeMs / 1000)}s old — assuming recycled PID, removing`);
+                }
+                else {
+                    logWarn(`Stale lock file found (PID ${lockPid} not running) — removing`);
+                }
+                fs_1.default.unlinkSync(LOCK_FILE);
+                fs_1.default.writeFileSync(LOCK_FILE, String(process.pid), { flag: "wx", mode: 0o600 });
             }
             catch (innerErr) {
                 // Can't read lock file or re-create — try to force
@@ -338,6 +360,20 @@ async function main() {
         process.exit(1);
     }
     setCurrentState(state);
+    // C7: Reap ghost _active_agents from a prior crashed run. Any entry here
+    // was owned by a Node process that no longer exists (this is `main()` —
+    // we've just acquired the lock, so no parallel run is in flight). Leaving
+    // ghost entries would corrupt the UI's live-agents view and confuse the
+    // checkpoint/resume snapshot.
+    if (Array.isArray(state.data._active_agents) && state.data._active_agents.length > 0) {
+        const ghostNames = state.data._active_agents.map((a) => (a && a.name) || String(a)).join(", ");
+        logWarn(`[Resume] Clearing ${state.data._active_agents.length} ghost active agent(s) from prior run: ${ghostNames}`);
+        state.data._active_agents = [];
+        try {
+            save(state);
+        }
+        catch { }
+    }
     // [Component 5] Agent Restart Protection — check crash loop & apply backoff
     const restartResult = await applyRestartProtection(state, state.data._lastError ? "error_recovery" : "startup");
     if (!restartResult.proceed) {

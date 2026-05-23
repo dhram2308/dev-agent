@@ -46,6 +46,17 @@ const AUTH_PATTERNS = [
     /authentication.*(failed|error)/i,
     /invalid.*(token|credential|api.?key)/i,
     /access.?denied/i,
+    // Gap G: Claude-specific auth/org-permission errors observed in
+    // AUT-8648 — 3 consecutive Architect runs at 09:48–09:49 all printed
+    // "Your organization does not have access to Claude. Please login
+    // again or contact your administrator." (exit 1, 100 chars stdout).
+    // Pipeline retried indefinitely until the auth outage resolved ~3h
+    // later. These patterns ensure such errors classify as AUTH (not
+    // TRANSIENT) and halt fast for operator intervention.
+    /does not have access to claude/i,
+    /please login again/i,
+    /contact your administrator/i,
+    /your organization does not have access/i,
 ];
 /**
  * Patterns that indicate timeout

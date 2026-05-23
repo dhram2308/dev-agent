@@ -25,6 +25,7 @@ import { GitLabService } from '../../services/gitlab';
 import { SlackService } from '../../services/slack';
 import { STAGE_CLEARS } from '@shared/constants';
 import type { PipelineState, StageHandler } from '@shared/types';
+import { isChannelEnabled } from '../../lib/notification-gates';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -126,7 +127,9 @@ export function createGateCodeReviewHandler(deps: GateCodeReviewDeps): StageHand
     while (true) {
       if (monotonicMs() - gate1PollStart > maxApprovalTimeout) {
         logErr(`Gate 1 code review timeout after ${maxApprovalTimeout / 3_600_000}h`);
-        await slack.send(`Timeout -- Code Review -- ${ticket}\nPipeline halted.`, [cfg.slack.ownerSlackId || '']);
+        if (isChannelEnabled('gate_code_review', 'slack')) {
+          await slack.send(`Timeout -- Code Review -- ${ticket}\nPipeline halted.`, [cfg.slack.ownerSlackId || '']);
+        }
         save(state);
         throw new Error(`Gate 1 code review timeout after ${maxApprovalTimeout / 3_600_000}h`);
       }

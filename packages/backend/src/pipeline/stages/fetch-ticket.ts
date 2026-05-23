@@ -29,6 +29,7 @@ import {
 import { adfText, adfToMarkdown, adfExtractUrls } from '../../lib/adf-parser';
 import type { AdfNode } from '../../lib/adf-parser';
 import { matchUrl as gdriveMatchUrl, fetchByUrl as gdriveFetchByUrl } from '../../lib/gdrive';
+import { matchUrl as figmaMatchUrl, fetchByUrl as figmaFetchByUrl } from '../../lib/figma';
 import { save } from '../../state/state-manager';
 import { loadConfig, loadExtendedConfig } from '../../config/loader';
 import {
@@ -104,13 +105,14 @@ const MAX_VISION_IMAGES = 5;
 /**
  * Patterns for URLs that cannot be fetched (auth-gated services).
  *
- * Note: Google Drive URLs (docs/sheets/drive.google.com) are intentionally
- * NOT in this list — when the `google` OAuth connector is connected, the
- * URL fetch loop routes them through `lib/gdrive.ts` which uses the stored
- * OAuth token. If Google isn't connected, gdrive returns an error and the
- * URL falls through to auth-required detection like any other failure.
+ * Note: Google Drive and Figma URLs are intentionally NOT in this list --
+ * when the respective OAuth connector is connected, the URL fetch loop
+ * routes them through `lib/gdrive.ts` / `lib/figma.ts` which use the
+ * stored OAuth tokens (or a PAT for Figma). If the connector isn't
+ * connected, the fetcher returns an error and the URL falls through to
+ * auth-required detection like any other failure.
  */
-const UNFETCHABLE = /figma\.com|lovable\.app|canva\.com|miro\.com|postman\.com|getpostman\.com|confluence\.|notion\.so|\.sharepoint\.com|swagger\/api-docs/i;
+const UNFETCHABLE = /lovable\.app|canva\.com|miro\.com|postman\.com|getpostman\.com|confluence\.|notion\.so|\.sharepoint\.com|swagger\/api-docs/i;
 
 /** Private IP patterns to block SSRF. */
 const PRIVATE_IP = /^(127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|169\.254\.\d+\.\d+|0\.0\.0\.0|localhost)$/i;
@@ -510,12 +512,13 @@ export async function stageFetchTicket(state: PipelineState): Promise<void> {
     externalUrls.forEach((u) => logInfo(`  -> ${u}`));
   }
 
-  // ── Connector routing (Google Drive via OAuth) ───────────────────
+  // ── Connector routing (Google Drive + Figma via OAuth/PAT) ───────
   // Run BEFORE the generic URL fetch loop. Successful connector fetches
   // populate ticket.connectorContents (consumed by generate-code). Failures
   // populate ticket.authRequiredUrls so explore-plan halts and asks the user
   // to paste the content. The probe-based auth detection below can't classify
-  // Drive URLs (Google returns a 200 HTML page even when unauthenticated).
+  // these URLs (Drive returns 200 HTML when unauthenticated; Figma always
+  // returns its SPA shell on direct GETs).
   const connectorContentsExisting = (data.ticket as Record<string, unknown>).connectorContents as
     | Array<{ source: string; url: string; title: string; content: string; sizeBytes: number }>
     | undefined;
@@ -523,46 +526,76 @@ export async function stageFetchTicket(state: PipelineState): Promise<void> {
     connectorContentsExisting ?? [];
   const connectorAuthRequired: AuthRequiredUrl[] = [];
   const gdriveUrls = new Set<string>();
+  const figmaUrls = new Set<string>();
 
   if (connectorContents.length === 0) {
     for (const url of externalUrls) {
-      if (!gdriveMatchUrl(url)) continue;
-      gdriveUrls.add(url);
-      logInfo(`  Connector fetch [gdrive]: ${url}`);
-      const gd = await gdriveFetchByUrl(url);
-      if (gd && gd.ok && gd.content) {
-        const title = gd.title ?? `Google Drive ${url}`;
-        const content = gd.content;
-        connectorContents.push({
-          source: 'gdrive',
-          url,
-          title,
-          content,
-          sizeBytes: content.length,
-        });
-        logOk(`  Connector OK [gdrive]: ${title} (${content.length} chars)`);
-      } else {
-        const reason = (gd && gd.error) || 'Connector fetch returned no result';
-        connectorAuthRequired.push({
-          url,
-          reason,
-          docType: classifyDocUrl(url),
-        });
-        logWarn(`  Connector FAIL [gdrive]: ${reason}`);
+      if (gdriveMatchUrl(url)) {
+        gdriveUrls.add(url);
+        logInfo(`  Connector fetch [gdrive]: ${url}`);
+        const gd = await gdriveFetchByUrl(url);
+        if (gd && gd.ok && gd.content) {
+          const title = gd.title ?? `Google Drive ${url}`;
+          const content = gd.content;
+          connectorContents.push({
+            source: 'gdrive',
+            url,
+            title,
+            content,
+            sizeBytes: content.length,
+          });
+          logOk(`  Connector OK [gdrive]: ${title} (${content.length} chars)`);
+        } else {
+          const reason = (gd && gd.error) || 'Connector fetch returned no result';
+          connectorAuthRequired.push({
+            url,
+            reason,
+            docType: classifyDocUrl(url),
+          });
+          logWarn(`  Connector FAIL [gdrive]: ${reason}`);
+        }
+        continue;
+      }
+      if (figmaMatchUrl(url)) {
+        figmaUrls.add(url);
+        logInfo(`  Connector fetch [figma]: ${url}`);
+        const fg = await figmaFetchByUrl(url);
+        if (fg && fg.ok && fg.content) {
+          const title = fg.title ?? `Figma ${url}`;
+          const content = fg.content;
+          connectorContents.push({
+            source: 'figma',
+            url,
+            title,
+            content,
+            sizeBytes: content.length,
+          });
+          logOk(`  Connector OK [figma]: ${title} (${content.length} chars)`);
+        } else {
+          const reason = (fg && fg.error) || 'Connector fetch returned no result';
+          connectorAuthRequired.push({
+            url,
+            reason,
+            docType: classifyDocUrl(url),
+          });
+          logWarn(`  Connector FAIL [figma]: ${reason}`);
+        }
+        continue;
       }
     }
     (data.ticket as Record<string, unknown>).connectorContents = connectorContents;
   } else {
     logInfo(`Connector contents already populated (${connectorContents.length} items) -- skipping re-fetch`);
-    // Track URLs that map to gdrive so the generic fetch loop doesn't re-probe them.
+    // Track URLs that map to a connector so the generic fetch loop doesn't re-probe them.
     for (const url of externalUrls) {
       if (gdriveMatchUrl(url)) gdriveUrls.add(url);
+      if (figmaMatchUrl(url)) figmaUrls.add(url);
     }
   }
 
   // ── Fetch accessible external URLs ───────────────────────────────
   const fetchableUrls = externalUrls.filter((url) => {
-    if (gdriveUrls.has(url)) {
+    if (gdriveUrls.has(url) || figmaUrls.has(url)) {
       // Already handled by connector routing above.
       return false;
     }

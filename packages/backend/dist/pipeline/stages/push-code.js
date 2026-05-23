@@ -20,6 +20,7 @@ exports.pushCodeToGitLab = pushCodeToGitLab;
 const constants_1 = require("@shared/constants");
 const logger_1 = require("../../lib/logger");
 const utils_1 = require("../../lib/utils");
+const notification_gates_1 = require("../../lib/notification-gates");
 // ── Main function ───────────────────────────────────────────────────
 /**
  * Push code changes to GitLab: branch creation, commit, MR creation.
@@ -257,13 +258,15 @@ async function pushCodeToGitLab(state, changes, deps) {
     }
     // Slack notification only (no Jira comment)
     if (!data.code_slack_sent) {
-        await slack(`*Code Review Required -- ${TICKET}*\n` +
-            `Agent generated code for: *${ticket?.summary || ''}*\n` +
-            `MR: ${data.code_mr_url}\n` +
-            `Approve the MR on GitLab to proceed.`, [cfg.slack.ownerId]);
+        if ((0, notification_gates_1.isChannelEnabled)('gate_code_review', 'slack')) {
+            await slack(`*Code Review Required -- ${TICKET}*\n` +
+                `Agent generated code for: *${ticket?.summary || ''}*\n` +
+                `MR: ${data.code_mr_url}\n` +
+                `Approve the MR on GitLab to proceed.`, [cfg.slack.ownerId]);
+            (0, logger_1.logOk)('Slack notification sent (no Jira comment)');
+        }
         data.code_slack_sent = true;
         save(state);
-        (0, logger_1.logOk)('Slack notification sent (no Jira comment)');
     }
     state.stage = 'gate_code_review';
     save(state);

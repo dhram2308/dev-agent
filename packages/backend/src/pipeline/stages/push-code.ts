@@ -21,6 +21,7 @@ import {
   logStep, logOk, logErr, logInfo, logWarn, logDebug,
 } from '../../lib/logger';
 import { sanitizeMRText, addWarning, isBinaryFile } from '../../lib/utils';
+import { isChannelEnabled } from '../../lib/notification-gates';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -354,16 +355,18 @@ export async function pushCodeToGitLab(
 
   // Slack notification only (no Jira comment)
   if (!data.code_slack_sent) {
-    await slack(
-      `*Code Review Required -- ${TICKET}*\n` +
-      `Agent generated code for: *${ticket?.summary || ''}*\n` +
-      `MR: ${data.code_mr_url}\n` +
-      `Approve the MR on GitLab to proceed.`,
-      [cfg.slack.ownerId],
-    );
+    if (isChannelEnabled('gate_code_review', 'slack')) {
+      await slack(
+        `*Code Review Required -- ${TICKET}*\n` +
+        `Agent generated code for: *${ticket?.summary || ''}*\n` +
+        `MR: ${data.code_mr_url}\n` +
+        `Approve the MR on GitLab to proceed.`,
+        [cfg.slack.ownerId],
+      );
+      logOk('Slack notification sent (no Jira comment)');
+    }
     data.code_slack_sent = true;
     save(state);
-    logOk('Slack notification sent (no Jira comment)');
   }
 
   state.stage = 'gate_code_review';

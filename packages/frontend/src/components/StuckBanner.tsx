@@ -1,18 +1,44 @@
 // ═══════════════════════════════════════════════════════════════
 // MI Dev Agent — Stuck Banner
-// Shows a warning banner when the active ticket has been on the
-// same stage for longer than STUCK_THRESHOLD_MS (10 minutes) while
-// still marked running. The store's useIsStuck selector only
-// recomputes when state changes, so we tick a local timer to
-// keep it honest during long quiet periods.
+//
+// Shows a warning banner when the active ticket is genuinely stalled
+// (no agent heartbeat / activity update for too long). Previously this
+// component fired purely on stage age, which produced false positives
+// during the legitimately-long `generate_code` stage (often 30-60 min
+// of active work). Now it uses _lastActivity as the freshness signal
+// and per-stage thresholds tuned to each stage's normal duration.
 // ═══════════════════════════════════════════════════════════════
 
 import { useEffect, useState } from 'react';
 import { useActiveTicketState } from '../store/pipeline';
-import { STAGE_INFO } from '../types';
+import { STAGE_INFO, type StageName } from '../types';
 
-const STUCK_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+// Per-stage "no activity" thresholds, calibrated against each stage's
+// legitimate normal duration. The backend's stage-timeout budgets are
+// the hard wall — these are the "operator should look at it" softer
+// thresholds, set well below the backend timeouts so the banner
+// triggers BEFORE the stage actually fails.
+const STUCK_THRESHOLD_MS_PER_STAGE: Partial<Record<StageName, number>> = {
+  fetch_ticket: 3 * 60 * 1000,
+  explore_plan: 8 * 60 * 1000,       // 4 analysis agents + architect
+  generate_code: 15 * 60 * 1000,     // long-running dev/review/fix loop
+  gate_code_review: Number.POSITIVE_INFINITY,   // human gate — never stuck
+  deploy_qa: 5 * 60 * 1000,
+  test_qa: Number.POSITIVE_INFINITY,            // human gate
+  gate_preprod_approval: Number.POSITIVE_INFINITY,
+  create_preprod_mr: 3 * 60 * 1000,
+  gate_dual_approval: Number.POSITIVE_INFINITY,
+  deploy_prod: 10 * 60 * 1000,
+};
+
+// Fallback when stage isn't in the map.
+const DEFAULT_STUCK_THRESHOLD_MS = 10 * 60 * 1000;
 const TICK_INTERVAL_MS = 30 * 1000; // re-evaluate every 30s
+
+function getStuckThreshold(stage: StageName): number {
+  const v = STUCK_THRESHOLD_MS_PER_STAGE[stage];
+  return v !== undefined ? v : DEFAULT_STUCK_THRESHOLD_MS;
+}
 
 const styles = {
   banner: {
@@ -66,10 +92,21 @@ export function StuckBanner(): JSX.Element | null {
   if (!ticketState.isRunning) return null;
   if (!ticketState.stageStartedAt) return null;
 
-  const elapsed = Date.now() - ticketState.stageStartedAt;
-  if (elapsed < STUCK_THRESHOLD_MS) return null;
+  // Prefer _lastActivity (updated every 30s by claude.ts's heartbeat
+  // during active agent work, and by state writes elsewhere) over plain
+  // stage age. An active agent will keep _lastActivity fresh; a frozen
+  // pipeline will let it grow stale even mid-stage.
+  const lastActivityIso = ticketState.state?.data?._lastActivity;
+  const lastActivityMs = lastActivityIso
+    ? Date.parse(lastActivityIso)
+    : ticketState.stageStartedAt;
+  const elapsedSinceActivity = Date.now() - (Number.isFinite(lastActivityMs) ? lastActivityMs : ticketState.stageStartedAt);
+
+  const threshold = getStuckThreshold(ticketState.stage);
+  if (elapsedSinceActivity < threshold) return null;
 
   const stageLabel = STAGE_INFO.find((s) => s.stage === ticketState.stage)?.label ?? ticketState.stage;
+  const stageAge = Date.now() - ticketState.stageStartedAt;
 
   return (
     <div style={styles.banner} role="status" aria-live="polite">
@@ -80,7 +117,8 @@ export function StuckBanner(): JSX.Element | null {
       <div style={styles.content}>
         <div style={styles.title}>Stage may be stuck</div>
         <div style={styles.detail}>
-          <strong>{stageLabel}</strong> has been running for {formatDuration(elapsed)} without progress. Consider checking logs or resetting the stage.
+          <strong>{stageLabel}</strong> — {lastActivityIso ? `last activity ${formatDuration(elapsedSinceActivity)} ago` : `no activity in ${formatDuration(elapsedSinceActivity)}`}.
+          Stage has been running for {formatDuration(stageAge)} total. Consider checking logs or resetting the stage.
         </div>
       </div>
     </div>

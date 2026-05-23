@@ -21,7 +21,9 @@ declare function fetchFigmaFile(fileKey: string, nodeId?: string): Promise<Figma
  */
 declare function describeFramesWithVision(fileKey: string, frameIds: string[] | undefined, callAnthropicVision: (base64: string, mimeType: string, description: string) => Promise<string>): Promise<string>;
 /**
- * Test connection — validate PAT by calling /v1/me.
+ * Test connection — call /v1/me which works for both PAT and OAuth (with
+ * `current_user:read` scope). Distinguishes auth modes in the error so a
+ * user looking at the message knows which credential to fix.
  */
 declare function testConnection(): Promise<ConnectorTestResult>;
 export { matchUrl, fetchFigmaFile, describeFramesWithVision, testConnection };

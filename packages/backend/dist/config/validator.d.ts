@@ -24,7 +24,7 @@ export type WarnFn = (msg: string) => void;
  *   - Required fields present (TICKET, JIRA_TOKEN, GITLAB_TOKEN, etc.)
  *   - Numeric fields valid (GITLAB_PROJECT_ID, timeouts)
  *   - URL format checks (JIRA_BASE_URL, GITLAB_URL)
- *   - Cross-field validation (OWNER_JIRA_ID != ANSHIT_JIRA_ID)
+ *   - Cross-field validation (OWNER_JIRA_ID != QA_JIRA_ID)
  *   - Boolean flags (RUN_BUILD_CHECK, BROWSER_VERIFY, etc.)
  *   - Port range ordering
  *   - Timeout ordering

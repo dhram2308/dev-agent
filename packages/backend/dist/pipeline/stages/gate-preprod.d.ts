@@ -19,7 +19,7 @@ interface GatePreprodDeps {
 export declare function waitForApproval(state: PipelineState, deps: {
     jira: JiraService;
     slack: SlackService;
-}, sinceKey: string, requiredCount?: number, requiredIds?: string[], uiPrefix?: string | null): Promise<{
+}, sinceKey: string, requiredCount?: number, requiredIds?: string[], uiPrefix?: string | null, gate?: string): Promise<{
     approved: boolean;
     by?: string[];
     feedback?: string;

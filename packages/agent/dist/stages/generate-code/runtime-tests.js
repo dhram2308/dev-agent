@@ -13,6 +13,7 @@ const { sanitizeForPrompt } = require("../../lib/utils");
 const { save } = require("../../lib/state");
 const { runSingleAgent } = require("../../lib/agents-team");
 const { localGetChanges, localGetOriginal } = require("../../lib/local-repo");
+const { _validateDevChanges } = require("./developer");
 // -- Shell command with heartbeat progress --
 function execWithProgress(cmd, opts, label, intervalMs = 15000) {
     return new Promise((resolve, reject) => {
@@ -131,13 +132,23 @@ function extractPublicAPI(filePath) {
 // -- Find nearest test files to changed files --
 function findNearestTests(changedFiles, repoPath, max = 5) {
     const examples = [];
+    // M4: Walk up to depth 4 (was 2). Repos commonly place tests at
+    // `src/__tests__/integration/foo.spec.tsx` — three levels deep from the
+    // changed file's parent directory. Also walk UP one level so tests in
+    // a sibling `__tests__/` directory of the changed file's parent are
+    // discovered.
     for (const cf of changedFiles) {
-        const dir = path.dirname(path.join(repoPath, cf.file_path));
-        try {
-            _walkForTests(dir, examples, max, 0, 2);
-        }
-        catch (e) {
-            logWarn(`findNearestTests walk error: ${e.message.substring(0, 80)}`);
+        const fileDir = path.dirname(path.join(repoPath, cf.file_path));
+        const candidates = [fileDir, path.dirname(fileDir)];
+        for (const dir of candidates) {
+            try {
+                _walkForTests(dir, examples, max, 0, 4);
+            }
+            catch (e) {
+                logWarn(`findNearestTests walk error: ${e.message.substring(0, 80)}`);
+            }
+            if (examples.length >= max)
+                break;
         }
         if (examples.length >= max)
             break;
@@ -181,7 +192,84 @@ async function runRuntimeTests(state, fileChanges, originalFiles) {
         return fileChanges;
     }
     const { execSync, spawn: spawnProc } = require("child_process");
-    const artifactsDir = path.join(path.dirname(path.dirname(__dirname)), TEST_ARTIFACTS_DIR, TICKET);
+    // M24: Per-run timestamped subdirectory so the next run can't blow away
+    // the previous run's screenshots / jest results / console captures.
+    // The current run still gets a stable handle via _test_artifacts_path,
+    // and a `latest` symlink lets external dashboards keep a predictable
+    // path. Keep last 5 runs; older ones are pruned to bound disk usage.
+    const artifactsRoot = path.join(path.dirname(path.dirname(__dirname)), TEST_ARTIFACTS_DIR, TICKET);
+    const runStamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const artifactsDir = path.join(artifactsRoot, runStamp);
+    try {
+        fs.mkdirSync(artifactsDir, { recursive: true });
+        // Prune older runs (keep last 5)
+        if (fs.existsSync(artifactsRoot)) {
+            const subdirs = fs.readdirSync(artifactsRoot, { withFileTypes: true })
+                .filter((d) => d.isDirectory() && d.name !== "latest")
+                .map((d) => d.name)
+                .sort();
+            while (subdirs.length > 5) {
+                const old = subdirs.shift();
+                try {
+                    fs.rmSync(path.join(artifactsRoot, old), { recursive: true, force: true });
+                }
+                catch { }
+            }
+        }
+        // Update `latest` symlink for stable external references
+        const latestLink = path.join(artifactsRoot, "latest");
+        try {
+            if (fs.existsSync(latestLink) || fs.lstatSync(latestLink).isSymbolicLink())
+                fs.unlinkSync(latestLink);
+        }
+        catch { }
+        try {
+            fs.symlinkSync(runStamp, latestLink, "dir");
+        }
+        catch { }
+    }
+    catch (e) {
+        logWarn(`Artifacts dir setup failed: ${e.message.substring(0, 100)}`);
+    }
+    // C5: Cleanup that MUST run even on crash so generated test scaffolding
+    // (jest config, .env.local, test-providers, mi-core shim, *.spec.* files)
+    // never leaks into the next stage's commit. Previously only ran on the
+    // success return path.
+    const revertScaffolding = () => {
+        logInfo("  Reverting generated test infrastructure files...");
+        try {
+            const filesToRevert = ["jest.config.override.js", ".env.local"];
+            for (const f of filesToRevert) {
+                const fp = path.join(cfg.localRepo, f);
+                if (fs.existsSync(fp))
+                    fs.unlinkSync(fp);
+            }
+            try {
+                execSync("git clean -fd -- '**/*.spec.tsx' '**/*.spec.ts' '**/*.test.tsx' '**/*.test.ts' 2>/dev/null || true", {
+                    cwd: cfg.localRepo, timeout: 15_000, stdio: "pipe", shell: true,
+                });
+                execSync("git checkout -- '**/*.spec.tsx' '**/*.spec.ts' '**/*.test.tsx' '**/*.test.ts' 2>/dev/null || true", {
+                    cwd: cfg.localRepo, timeout: 15_000, stdio: "pipe", shell: true,
+                });
+            }
+            catch { }
+            const appSrcClean = path.join(cfg.localRepo, "apps", "enterprise", "src");
+            const srcClean = fs.existsSync(appSrcClean) ? appSrcClean : path.join(cfg.localRepo, "src");
+            const shimDir = path.join(srcClean, "__test-shims__");
+            if (fs.existsSync(shimDir))
+                fs.rmSync(shimDir, { recursive: true, force: true });
+            const setupRuntime = path.join(srcClean, "setupTests.runtime.ts");
+            if (fs.existsSync(setupRuntime))
+                fs.unlinkSync(setupRuntime);
+            const testProviders = path.join(srcClean, "test-providers.tsx");
+            if (fs.existsSync(testProviders))
+                fs.unlinkSync(testProviders);
+            logOk("  Test infrastructure files reverted -- only production code remains");
+        }
+        catch (cleanErr) {
+            logWarn(`  Test file cleanup error: ${cleanErr.message.substring(0, 200)} -- proceeding anyway`);
+        }
+    };
     // Fix 2d: Kill stale Claude process from previous crash
     if (state.data._claude_pid) {
         try {
@@ -231,201 +319,167 @@ async function runRuntimeTests(state, fileChanges, originalFiles) {
         state.data._vite_preview_port = null;
         save(state);
     }
-    // Clean artifacts directory for fresh run (task 6.3)
-    try {
-        if (fs.existsSync(artifactsDir))
-            fs.rmSync(artifactsDir, { recursive: true, force: true });
-        fs.mkdirSync(artifactsDir, { recursive: true });
-    }
-    catch (e) {
-        logWarn(`Artifacts dir setup failed: ${e.message.substring(0, 100)}`);
-    }
+    // M24: artifactsDir is already a fresh, timestamped per-run directory
+    // created above; the destructive rm-then-mkdir that used to live here
+    // would have wiped previous runs. Skipped entirely.
     state.data._test_artifacts_path = artifactsDir;
-    const changeType = classifyChanges(fileChanges);
-    logInfo(`Runtime tests: Change type = ${changeType}`);
-    // -- Phase 0: Environment Bootstrap (tasks 2.1-2.11) --
-    if (!state.data._env_bootstrapped && !state.data._env_bootstrap_failed && changeType !== "STYLE") {
-        logStep("RT-0", "Environment Bootstrap");
-        try {
-            // 2.2: npm install guard
-            const nmPath = path.join(cfg.localRepo, "node_modules");
-            if (!fs.existsSync(nmPath)) {
-                logInfo("  Installing dependencies (npm install --legacy-peer-deps)...");
-                try {
-                    const npmResult = await execWithProgress("npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund", { cwd: cfg.localRepo, timeout: BUILD_INSTALL_TIMEOUT, env: { ...process.env, NODE_OPTIONS: "--max_old_space_size=8192" } }, "npm install");
-                    if (npmResult.code !== 0)
-                        throw new Error(npmResult.stderr.substring(0, 200) || "non-zero exit");
-                    logOk("  Dependencies installed");
+    // C5: Open try/finally — revertScaffolding() runs in `finally` so a crash
+    // during phases 0–3 cannot leak generated test files into the next commit.
+    try {
+        const changeType = classifyChanges(fileChanges);
+        logInfo(`Runtime tests: Change type = ${changeType}`);
+        // -- Phase 0: Environment Bootstrap (tasks 2.1-2.11) --
+        if (!state.data._env_bootstrapped && !state.data._env_bootstrap_failed && changeType !== "STYLE") {
+            logStep("RT-0", "Environment Bootstrap");
+            try {
+                // 2.2: npm install guard
+                const nmPath = path.join(cfg.localRepo, "node_modules");
+                if (!fs.existsSync(nmPath)) {
+                    logInfo("  Installing dependencies (npm install --legacy-peer-deps)...");
+                    try {
+                        const npmResult = await execWithProgress("npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund", { cwd: cfg.localRepo, timeout: BUILD_INSTALL_TIMEOUT, env: { ...process.env, NODE_OPTIONS: "--max_old_space_size=8192" } }, "npm install");
+                        if (npmResult.code !== 0)
+                            throw new Error(npmResult.stderr.substring(0, 200) || "non-zero exit");
+                        logOk("  Dependencies installed");
+                    }
+                    catch (e) {
+                        logWarn(`  npm install failed: ${(e.message || "").substring(0, 200)}`);
+                        state.data._env_bootstrap_failed = true;
+                        save(state);
+                    }
                 }
-                catch (e) {
-                    logWarn(`  npm install failed: ${(e.message || "").substring(0, 200)}`);
-                    state.data._env_bootstrap_failed = true;
+                if (!state.data._env_bootstrap_failed) {
+                    // 2.3: jest-environment-jsdom + jest-canvas-mock install
+                    const devDeps = ["jest-environment-jsdom", "jest-canvas-mock"];
+                    for (const dep of devDeps) {
+                        const depPath = path.join(cfg.localRepo, "node_modules", dep);
+                        if (!fs.existsSync(depPath)) {
+                            try {
+                                logInfo(`  Installing ${dep}...`);
+                                execSync(`npm install --save-dev ${dep} --legacy-peer-deps`, {
+                                    cwd: cfg.localRepo, timeout: 60_000, stdio: "pipe",
+                                });
+                            }
+                            catch (e) {
+                                logWarn(`  Failed to install ${dep}: ${e.message.substring(0, 100)}`);
+                            }
+                        }
+                    }
+                    // 2.4: Playwright install
+                    try {
+                        const pwPath = path.join(cfg.localRepo, "node_modules", "@playwright", "test");
+                        if (!fs.existsSync(pwPath)) {
+                            logInfo("  Installing @playwright/test...");
+                            execSync("npm install --save-dev @playwright/test --legacy-peer-deps", {
+                                cwd: cfg.localRepo, timeout: 120_000, stdio: "pipe",
+                            });
+                        }
+                        logInfo(`  Installing Playwright ${PLAYWRIGHT_BROWSER} browser...`);
+                        execSync(`npx playwright install ${PLAYWRIGHT_BROWSER}`, {
+                            cwd: cfg.localRepo, timeout: 120_000, stdio: "pipe",
+                        });
+                        logOk("  Playwright browser installed");
+                    }
+                    catch (e) {
+                        logWarn(`  Playwright install failed: ${e.message.substring(0, 200)} -- Phase 3 will be skipped`);
+                        state.data._playwright_install_failed = true;
+                    }
+                    // 2.5: Generate jest.config.override.ts
+                    _generateJestConfig(cfg.localRepo);
+                    // Shared: Find the correct src dir
+                    const appSrcBase = path.join(cfg.localRepo, "apps", "enterprise", "src");
+                    const srcDir = fs.existsSync(appSrcBase) ? appSrcBase : path.join(cfg.localRepo, "src");
+                    // 2.6: Generate setupTests.runtime.ts
+                    _generateSetupTests(srcDir);
+                    // 2.7: Generate test-providers.tsx
+                    _generateTestProviders(srcDir);
+                    // 2.8: Generate @mi/core shim
+                    _generateMiCoreShim(srcDir);
+                    // 2.9: .env.local for VITE_* mock values
+                    _generateEnvLocal(cfg.localRepo);
+                    // 2.10: Validation step -- run 1 existing test file
+                    _validateTestSetup(cfg.localRepo, execSync);
+                    state.data._env_bootstrapped = true;
+                    save(state);
+                    logOk("Phase 0: Environment bootstrap complete");
+                }
+            }
+            catch (bootstrapErr) {
+                // 2.11: Graceful degradation
+                logWarn(`Phase 0: Bootstrap failed: ${bootstrapErr.message} -- skipping Phases 2-3`);
+                state.data._env_bootstrap_failed = true;
+                save(state);
+            }
+        }
+        // -- Phase 1 Enhancement: Vite Build (tasks 3.1-3.3) --
+        // Run if env bootstrapped and Vite build not yet done (doesn't require build-check to have run)
+        if (state.data._env_bootstrapped && !state.data._vite_build_done && changeType !== "STYLE") {
+            logStep("RT-1", "Vite Build Verification");
+            try {
+                const distPath = path.join(cfg.localRepo, "dist", "apps", "enterprise");
+                const hasExistingDist = fs.existsSync(distPath);
+                logInfo(`  Running ${hasExistingDist ? "affected" : "full"} Vite build...`);
+                const buildCmd = hasExistingDist
+                    ? `npx nx affected:build --base=HEAD~1`
+                    : `npx nx build enterprise`;
+                const buildResult = await execWithProgress(buildCmd, { cwd: cfg.localRepo, timeout: VITE_BUILD_TIMEOUT, env: { ...process.env, NODE_OPTIONS: "--max_old_space_size=8192" } }, "Vite build");
+                if (buildResult.code !== 0)
+                    throw new Error(buildResult.stderr.substring(0, 300) || "non-zero exit");
+                state.data._vite_build_done = true;
+                logOk("  Vite build: SUCCESS");
+            }
+            catch (buildErr) {
+                logWarn(`  Vite build failed: ${(buildErr.message || "").substring(0, 300)}`);
+                state.data._vite_build_done = "FAIL";
+            }
+            save(state);
+        }
+        // -- Phase 2+3: Unit Tests + Browser Smoke Tests (PARALLEL when possible) --
+        const canRunUnit = state.data._env_bootstrapped && !state.data._env_bootstrap_failed &&
+            !state.data._unit_tests_complete && changeType !== "STYLE";
+        const canRunE2E = state.data._env_bootstrapped && !state.data._env_bootstrap_failed &&
+            !state.data._e2e_tests_complete && !state.data._playwright_install_failed &&
+            (changeType === "COMPONENT" || changeType === "API_INTEGRATION") &&
+            state.data._vite_build_done === true;
+        if (canRunUnit && canRunE2E) {
+            // Run both in parallel -- they write to non-overlapping files (.spec.tsx vs .test.ts)
+            logInfo("  Running Unit Tests + Browser Smoke Tests in parallel...");
+            const [unitResult, e2eResult] = await Promise.allSettled([
+                _runUnitTests(state, fileChanges, artifactsDir, execSync),
+                _runBrowserSmoke(state, fileChanges, artifactsDir, execSync, spawnProc),
+            ]);
+            // Use unit test result for fileChanges if available (it may have dev-retry changes)
+            if (unitResult.status === "fulfilled") {
+                fileChanges = unitResult.value;
+            }
+            if (e2eResult.status === "rejected") {
+                logWarn(`  Browser smoke tests failed (parallel): ${e2eResult.reason?.message?.substring(0, 200) || "unknown"}`);
+            }
+        }
+        else {
+            // Fall back to sequential when only one type can run
+            if (canRunUnit) {
+                fileChanges = await _runUnitTests(state, fileChanges, artifactsDir, execSync);
+            }
+            else if (changeType === "STYLE") {
+                logInfo("  Skipping Phase 2 -- STYLE-only change");
+                state.data._unit_tests_complete = "SKIP";
+            }
+            if (canRunE2E) {
+                fileChanges = await _runBrowserSmoke(state, fileChanges, artifactsDir, execSync, spawnProc);
+            }
+            else if (changeType === "STYLE" || changeType === "UTILITY") {
+                if (!state.data._e2e_tests_complete) {
+                    logInfo(`  Skipping Phase 3 -- ${changeType} change doesn't need browser tests`);
+                    state.data._e2e_tests_complete = "SKIP";
                     save(state);
                 }
             }
-            if (!state.data._env_bootstrap_failed) {
-                // 2.3: jest-environment-jsdom + jest-canvas-mock install
-                const devDeps = ["jest-environment-jsdom", "jest-canvas-mock"];
-                for (const dep of devDeps) {
-                    const depPath = path.join(cfg.localRepo, "node_modules", dep);
-                    if (!fs.existsSync(depPath)) {
-                        try {
-                            logInfo(`  Installing ${dep}...`);
-                            execSync(`npm install --save-dev ${dep} --legacy-peer-deps`, {
-                                cwd: cfg.localRepo, timeout: 60_000, stdio: "pipe",
-                            });
-                        }
-                        catch (e) {
-                            logWarn(`  Failed to install ${dep}: ${e.message.substring(0, 100)}`);
-                        }
-                    }
-                }
-                // 2.4: Playwright install
-                try {
-                    const pwPath = path.join(cfg.localRepo, "node_modules", "@playwright", "test");
-                    if (!fs.existsSync(pwPath)) {
-                        logInfo("  Installing @playwright/test...");
-                        execSync("npm install --save-dev @playwright/test --legacy-peer-deps", {
-                            cwd: cfg.localRepo, timeout: 120_000, stdio: "pipe",
-                        });
-                    }
-                    logInfo(`  Installing Playwright ${PLAYWRIGHT_BROWSER} browser...`);
-                    execSync(`npx playwright install ${PLAYWRIGHT_BROWSER}`, {
-                        cwd: cfg.localRepo, timeout: 120_000, stdio: "pipe",
-                    });
-                    logOk("  Playwright browser installed");
-                }
-                catch (e) {
-                    logWarn(`  Playwright install failed: ${e.message.substring(0, 200)} -- Phase 3 will be skipped`);
-                    state.data._playwright_install_failed = true;
-                }
-                // 2.5: Generate jest.config.override.ts
-                _generateJestConfig(cfg.localRepo);
-                // Shared: Find the correct src dir
-                const appSrcBase = path.join(cfg.localRepo, "apps", "enterprise", "src");
-                const srcDir = fs.existsSync(appSrcBase) ? appSrcBase : path.join(cfg.localRepo, "src");
-                // 2.6: Generate setupTests.runtime.ts
-                _generateSetupTests(srcDir);
-                // 2.7: Generate test-providers.tsx
-                _generateTestProviders(srcDir);
-                // 2.8: Generate @mi/core shim
-                _generateMiCoreShim(srcDir);
-                // 2.9: .env.local for VITE_* mock values
-                _generateEnvLocal(cfg.localRepo);
-                // 2.10: Validation step -- run 1 existing test file
-                _validateTestSetup(cfg.localRepo, execSync);
-                state.data._env_bootstrapped = true;
-                save(state);
-                logOk("Phase 0: Environment bootstrap complete");
-            }
-        }
-        catch (bootstrapErr) {
-            // 2.11: Graceful degradation
-            logWarn(`Phase 0: Bootstrap failed: ${bootstrapErr.message} -- skipping Phases 2-3`);
-            state.data._env_bootstrap_failed = true;
-            save(state);
         }
     }
-    // -- Phase 1 Enhancement: Vite Build (tasks 3.1-3.3) --
-    // Run if env bootstrapped and Vite build not yet done (doesn't require build-check to have run)
-    if (state.data._env_bootstrapped && !state.data._vite_build_done && changeType !== "STYLE") {
-        logStep("RT-1", "Vite Build Verification");
-        try {
-            const distPath = path.join(cfg.localRepo, "dist", "apps", "enterprise");
-            const hasExistingDist = fs.existsSync(distPath);
-            logInfo(`  Running ${hasExistingDist ? "affected" : "full"} Vite build...`);
-            const buildCmd = hasExistingDist
-                ? `npx nx affected:build --base=HEAD~1`
-                : `npx nx build enterprise`;
-            const buildResult = await execWithProgress(buildCmd, { cwd: cfg.localRepo, timeout: VITE_BUILD_TIMEOUT, env: { ...process.env, NODE_OPTIONS: "--max_old_space_size=8192" } }, "Vite build");
-            if (buildResult.code !== 0)
-                throw new Error(buildResult.stderr.substring(0, 300) || "non-zero exit");
-            state.data._vite_build_done = true;
-            logOk("  Vite build: SUCCESS");
-        }
-        catch (buildErr) {
-            logWarn(`  Vite build failed: ${(buildErr.message || "").substring(0, 300)}`);
-            state.data._vite_build_done = "FAIL";
-        }
-        save(state);
-    }
-    // -- Phase 2+3: Unit Tests + Browser Smoke Tests (PARALLEL when possible) --
-    const canRunUnit = state.data._env_bootstrapped && !state.data._env_bootstrap_failed &&
-        !state.data._unit_tests_complete && changeType !== "STYLE";
-    const canRunE2E = state.data._env_bootstrapped && !state.data._env_bootstrap_failed &&
-        !state.data._e2e_tests_complete && !state.data._playwright_install_failed &&
-        (changeType === "COMPONENT" || changeType === "API_INTEGRATION") &&
-        state.data._vite_build_done === true;
-    if (canRunUnit && canRunE2E) {
-        // Run both in parallel -- they write to non-overlapping files (.spec.tsx vs .test.ts)
-        logInfo("  Running Unit Tests + Browser Smoke Tests in parallel...");
-        const [unitResult, e2eResult] = await Promise.allSettled([
-            _runUnitTests(state, fileChanges, artifactsDir, execSync),
-            _runBrowserSmoke(state, fileChanges, artifactsDir, execSync, spawnProc),
-        ]);
-        // Use unit test result for fileChanges if available (it may have dev-retry changes)
-        if (unitResult.status === "fulfilled") {
-            fileChanges = unitResult.value;
-        }
-        if (e2eResult.status === "rejected") {
-            logWarn(`  Browser smoke tests failed (parallel): ${e2eResult.reason?.message?.substring(0, 200) || "unknown"}`);
-        }
-    }
-    else {
-        // Fall back to sequential when only one type can run
-        if (canRunUnit) {
-            fileChanges = await _runUnitTests(state, fileChanges, artifactsDir, execSync);
-        }
-        else if (changeType === "STYLE") {
-            logInfo("  Skipping Phase 2 -- STYLE-only change");
-            state.data._unit_tests_complete = "SKIP";
-        }
-        if (canRunE2E) {
-            fileChanges = await _runBrowserSmoke(state, fileChanges, artifactsDir, execSync, spawnProc);
-        }
-        else if (changeType === "STYLE" || changeType === "UTILITY") {
-            if (!state.data._e2e_tests_complete) {
-                logInfo(`  Skipping Phase 3 -- ${changeType} change doesn't need browser tests`);
-                state.data._e2e_tests_complete = "SKIP";
-                save(state);
-            }
-        }
-    }
-    // -- Cleanup: Revert test files (tasks 6.1-6.4) --
-    logInfo("  Reverting generated test infrastructure files...");
-    try {
-        const filesToRevert = ["jest.config.override.js", ".env.local"];
-        for (const f of filesToRevert) {
-            const fp = path.join(cfg.localRepo, f);
-            if (fs.existsSync(fp))
-                fs.unlinkSync(fp);
-        }
-        // Remove generated test files (untracked) and revert modified ones -- recursive glob
-        try {
-            execSync("git clean -fd -- '**/*.spec.tsx' '**/*.spec.ts' '**/*.test.tsx' '**/*.test.ts' 2>/dev/null || true", {
-                cwd: cfg.localRepo, timeout: 15_000, stdio: "pipe", shell: true,
-            });
-            execSync("git checkout -- '**/*.spec.tsx' '**/*.spec.ts' '**/*.test.tsx' '**/*.test.ts' 2>/dev/null || true", {
-                cwd: cfg.localRepo, timeout: 15_000, stdio: "pipe", shell: true,
-            });
-        }
-        catch { }
-        // Remove generated directories
-        const appSrcClean = path.join(cfg.localRepo, "apps", "enterprise", "src");
-        const srcClean = fs.existsSync(appSrcClean) ? appSrcClean : path.join(cfg.localRepo, "src");
-        const shimDir = path.join(srcClean, "__test-shims__");
-        if (fs.existsSync(shimDir))
-            fs.rmSync(shimDir, { recursive: true, force: true });
-        const setupRuntime = path.join(srcClean, "setupTests.runtime.ts");
-        if (fs.existsSync(setupRuntime))
-            fs.unlinkSync(setupRuntime);
-        const testProviders = path.join(srcClean, "test-providers.tsx");
-        if (fs.existsSync(testProviders))
-            fs.unlinkSync(testProviders);
-        logOk("  Test infrastructure files reverted -- only production code remains");
-    }
-    catch (cleanErr) {
-        logWarn(`  Test file cleanup error: ${cleanErr.message.substring(0, 200)} -- proceeding anyway`);
+    finally {
+        // C5: Always revert scaffolding, even if phases threw.
+        revertScaffolding();
     }
     // Re-extract changes after cleanup (ensures no test files in commit)
     fileChanges = localGetChanges(cfg.localRepo);
@@ -602,6 +656,9 @@ async function _runUnitTests(state, fileChanges, artifactsDir, execSync) {
                     });
                     if (devFixResult) {
                         fileChanges = localGetChanges(cfg.localRepo);
+                        // H2: Validate the test-fix dev agent's output. It edits real
+                        // source files, so GQ7/F3 risks apply.
+                        _validateDevChanges(state);
                         logOk("  Developer fixed code based on test failures -- re-running tests...");
                         // Final re-run
                         try {
@@ -637,6 +694,18 @@ async function _runUnitTests(state, fileChanges, artifactsDir, execSync) {
         state.data._unit_tests_complete = unitResult.status;
         state.data._unit_tests_count = unitResult;
         save(state);
+        // H6: Block push when unit tests are still failing after all retries.
+        // Previously INCONCLUSIVE silently passed through and the MR shipped
+        // with failing tests. The operator can override with
+        // `ALLOW_FAILING_UNIT_TESTS=true` for emergencies (the failures are
+        // still surfaced in state warnings and MR notes either way).
+        const allowFailing = String(process.env.ALLOW_FAILING_UNIT_TESTS || "false").toLowerCase() === "true";
+        const failThreshold = parseInt(process.env.MAX_TEST_FAILURES || "0", 10) || 0;
+        if (unitResult.status !== "PASS" && unitResult.failed > failThreshold && !allowFailing) {
+            throw new Error(`H6: ${unitResult.failed} unit test failure(s) exceed MAX_TEST_FAILURES=${failThreshold}. ` +
+                `Set ALLOW_FAILING_UNIT_TESTS=true to push anyway. ` +
+                `(${unitResult.passed}/${unitResult.total} passed)`);
+        }
         // 4.11: Validate test count
         const acStr = state.data.ticket?.ac || "";
         const acCount = (acStr.match(/^[\s]*[-*\d.]+/gm) || []).length || 1;
@@ -709,7 +778,57 @@ async function _runBrowserSmoke(state, fileChanges, artifactsDir, execSync, spaw
             }
         }
         if (!ready) {
-            logWarn("  Vite preview didn't respond in time -- skipping browser tests");
+            // M5: A non-responsive Vite preview is often a port race — the port
+            // was free at findFreePort time but stolen before viteProc bound to
+            // it (or viteProc crashed silently). Kill the doomed process and
+            // retry once with the next free port before giving up.
+            logWarn("  Vite preview didn't respond on first port — retrying with next free port");
+            try {
+                if (viteProc?.pid)
+                    process.kill(-viteProc.pid, "SIGTERM");
+            }
+            catch {
+                try {
+                    process.kill(viteProc.pid, "SIGTERM");
+                }
+                catch { }
+            }
+            const retryPort = await findFreePort(vitePort + 1, VITE_PREVIEW_PORT_END);
+            if (retryPort) {
+                viteProc = spawnProc("npx", ["vite", "preview", "--port", String(retryPort)], {
+                    cwd: cfg.localRepo, stdio: "pipe", detached: true,
+                });
+                viteProc.unref();
+                state.data._vite_preview_pid = viteProc.pid;
+                state.data._vite_preview_port = retryPort;
+                save(state);
+                let retryCrashed = false;
+                viteProc.on("exit", (code) => { if (code !== 0 && code !== null)
+                    retryCrashed = true; });
+                const retryUrl = `http://127.0.0.1:${retryPort}`;
+                const t1 = monotonicMs();
+                while (monotonicMs() - t1 < VITE_PREVIEW_TIMEOUT) {
+                    if (retryCrashed)
+                        break;
+                    try {
+                        await new Promise((resolve, reject) => {
+                            const r = http.get(retryUrl, { agent: false }, (res) => { res.resume(); r.destroy(); resolve(res.statusCode); });
+                            r.on("error", () => { r.destroy(); reject(new Error("connect")); });
+                            r.setTimeout(2000, () => { r.destroy(); reject(new Error("timeout")); });
+                        });
+                        ready = true;
+                        break;
+                    }
+                    catch {
+                        await new Promise((r) => setTimeout(r, 1000));
+                    }
+                }
+                if (ready)
+                    logOk(`  Vite preview ready at ${retryUrl} (retry succeeded)`);
+            }
+        }
+        if (!ready) {
+            logWarn("  Vite preview didn't respond after retry -- skipping browser tests");
             state.data._e2e_tests_complete = "INCONCLUSIVE";
             save(state);
             return fileChanges;
@@ -869,7 +988,14 @@ async function _runBrowserSmoke(state, fileChanges, artifactsDir, execSync, spaw
             const consoleFile = path.join(artifactsDir, "console-errors.json");
             if (fs.existsSync(consoleFile)) {
                 const errors = JSON.parse(fs.readFileSync(consoleFile, "utf8"));
-                e2eResult.consoleErrors = (errors || []).slice(0, 10);
+                // L2: Record total count + truncated remainder so the MR / state
+                // shows "13 errors (showing first 10)" instead of silently dropping
+                // 3.
+                const allErrors = Array.isArray(errors) ? errors : [];
+                e2eResult.consoleErrors = allErrors.slice(0, 10);
+                e2eResult.consoleErrorsTotal = allErrors.length;
+                if (allErrors.length > 10)
+                    e2eResult.consoleErrorsTruncated = allErrors.length - 10;
                 // T2.12: Playwright uses e.level, not e.type for console errors
                 const highSeverity = errors.filter((e) => e.level === "error" || e.type === "pageerror").length;
                 const warnings = errors.filter((e) => e.level === "warning" || e.type === "warning").length;

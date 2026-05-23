@@ -540,6 +540,30 @@ export const CONFIG_SCHEMA: Record<string, ConfigSchemaEntry> = {
     description: "Developer agent timeout (ms)", hotReload: true, riskLevel: "SAFE",
     min: 60_000, max: 3_600_000,
   },
+  DEVELOPER_MAX_TURNS: {
+    env: "DEVELOPER_MAX_TURNS", type: "int", default: 25,
+    required: false, sensitive: false, group: "timeouts",
+    description: "Developer agent Claude CLI max turns budget", hotReload: true, riskLevel: "SAFE",
+    min: 5, max: 200,
+  },
+  REVIEWER_MAX_TURNS: {
+    env: "REVIEWER_MAX_TURNS", type: "int", default: 15,
+    required: false, sensitive: false, group: "timeouts",
+    description: "Reviewer / Security agent Claude CLI max turns budget", hotReload: true, riskLevel: "SAFE",
+    min: 5, max: 200,
+  },
+  FIXER_MAX_TURNS: {
+    env: "FIXER_MAX_TURNS", type: "int", default: 20,
+    required: false, sensitive: false, group: "timeouts",
+    description: "Fixer agent Claude CLI max turns budget", hotReload: true, riskLevel: "SAFE",
+    min: 5, max: 200,
+  },
+  BUILD_FIXER_MAX_TURNS: {
+    env: "BUILD_FIXER_MAX_TURNS", type: "int", default: 15,
+    required: false, sensitive: false, group: "timeouts",
+    description: "Build Fixer agent Claude CLI max turns budget", hotReload: true, riskLevel: "SAFE",
+    min: 5, max: 200,
+  },
   REVIEWER_TIMEOUT: {
     env: "REVIEWER_TIMEOUT", type: "int", default: 600_000,
     required: false, sensitive: false, group: "timeouts",

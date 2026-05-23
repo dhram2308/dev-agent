@@ -128,10 +128,31 @@ function localGetFile(clonePath, filePath) {
         const resolved = path_1.default.resolve(clonePath, filePath);
         if (!resolved.startsWith(path_1.default.resolve(clonePath)))
             return null;
-        // G6: Symlink escape guard
+        // C3: Refuse to read symlink targets — committing the resolved
+        // content would let an agent exfiltrate internal files (e.g. a
+        // foo.ts -> .env link). G6 only caught escapes outside the repo;
+        // an in-repo target (e.g. .env, .api-token) passed through.
+        try {
+            const lst = fs_1.default.lstatSync(resolved);
+            if (lst.isSymbolicLink()) {
+                logWarn(`Symlink skipped (not committed): ${filePath}`);
+                return null;
+            }
+        }
+        catch { /* file doesn't exist yet — allow */ }
+        // G6: Symlink escape guard (still useful if lstat missed and realpath
+        // escapes). Compare BOTH sides through realpath so OS-level symlinks
+        // in the clone-path itself (e.g. macOS `/var` -> `/private/var`)
+        // don't falsely trip the guard for legitimate in-repo files.
         try {
             const real = fs_1.default.realpathSync(resolved);
-            if (!real.startsWith(path_1.default.resolve(clonePath))) {
+            const realClone = (() => { try {
+                return fs_1.default.realpathSync(clonePath);
+            }
+            catch {
+                return path_1.default.resolve(clonePath);
+            } })();
+            if (!real.startsWith(realClone)) {
                 logWarn(`G6: Symlink escape blocked: ${filePath}`);
                 return null;
             }
@@ -174,7 +195,11 @@ function localResetRepo(clonePath) {
 }
 function localGetChanges(clonePath) {
     const { execFileSync } = require("child_process");
-    const output = execFileSync("git", ["-C", clonePath, "status", "--porcelain"], { encoding: "utf8", timeout: 15_000 }).trim();
+    // Strip only the trailing newline — `.trim()` would eat the leading
+    // space of the first line, which `git status --porcelain` uses to
+    // encode the worktree column (e.g. " M path" for unstaged-modified).
+    // Losing that space offsets the downstream `substring(3)` path parse.
+    const output = execFileSync("git", ["-C", clonePath, "status", "--porcelain"], { encoding: "utf8", timeout: 15_000 }).replace(/\n+$/, "");
     if (!output)
         return [];
     let diffOutput = "";
@@ -209,6 +234,14 @@ function localGetChanges(clonePath) {
                 changes.push({ action: "create", file_path: newPath, content });
             }
             continue;
+        }
+        // C2: Detect unmerged (merge-conflict) states before mapping to an
+        // action. Without this, codes like UU/AA/DD silently fall through to
+        // "update" and the file content (with `<<<<<<<` markers) ships in the
+        // GitLab commit.
+        const UNMERGED = new Set(["DD", "AU", "UD", "UA", "DU", "AA", "UU"]);
+        if (UNMERGED.has(status)) {
+            throw new Error(`Merge conflict detected in ${filePath} (git status: ${status}). Resolve conflicts before committing.`);
         }
         let action;
         if (status === "D") {
@@ -368,8 +401,14 @@ function cleanOrphanedWorktrees() {
     for (const entry of entries) {
         if (!entry.isDirectory())
             continue;
-        const ticket = entry.name;
-        const lockPath = path_1.default.join(__dirname, "..", `state-${ticket}.lock`);
+        const name = entry.name;
+        // M1: Sub-worktrees follow the naming `<ticket>.dev-<idx>`. Owning
+        // ticket is the prefix before `.dev-`. Reap if the OWNING ticket's
+        // agent process is dead.
+        const subMatch = name.match(/^(.+)\.dev-(\d+)$/);
+        const owningTicket = subMatch ? subMatch[1] : name;
+        const subIdx = subMatch ? parseInt(subMatch[2], 10) : null;
+        const lockPath = path_1.default.join(__dirname, "..", `state-${owningTicket}.lock`);
         // Check if owning agent process is alive
         let alive = false;
         if (fs_1.default.existsSync(lockPath)) {
@@ -385,8 +424,17 @@ function cleanOrphanedWorktrees() {
             }
         }
         if (!alive) {
-            logInfo(`Cleaning orphaned worktree: ${ticket}`);
-            removeWorktree(ticket);
+            if (subIdx !== null) {
+                logInfo(`Cleaning orphaned sub-worktree: ${name}`);
+                try {
+                    removeSubWorktree(owningTicket, subIdx);
+                }
+                catch { }
+            }
+            else {
+                logInfo(`Cleaning orphaned worktree: ${owningTicket}`);
+                removeWorktree(owningTicket);
+            }
         }
     }
     // Prune any stale git worktree references
@@ -394,6 +442,227 @@ function cleanOrphanedWorktrees() {
         execFileSync("git", ["-C", REPO_CACHE_DIR, "worktree", "prune"], { stdio: "pipe", timeout: 10_000 });
     }
     catch { }
+}
+// ── M1: Per-agent sub-worktrees ──────────────────────────────────────
+//
+// For parallel Dev Agents within a single ticket, each agent gets its
+// own sub-worktree so they can't collide on the filesystem. After all
+// agents finish, mergeSubWorktrees applies each agent's changes back
+// into the ticket's canonical worktree.
+//
+// Naming: <WORKTREES_DIR>/<ticket>.dev-<index>/ (e.g. AUT-8648.dev-0).
+// The dot keeps them distinguishable from the canonical ticket
+// worktree directory and matches the existing orphan-cleanup walk.
+function _subWorktreeName(ticket, idx) {
+    return `${ticket}.dev-${idx}`;
+}
+function _subWorktreePath(ticket, idx) {
+    return path_1.default.join(WORKTREES_DIR, _subWorktreeName(ticket, idx));
+}
+/**
+ * Create a sub-worktree branched from the ticket's CURRENT worktree HEAD
+ * (so each Dev Agent starts from the same base, including any in-progress
+ * work from earlier stages). Returns the absolute path or throws.
+ */
+function createSubWorktree(ticket, idx) {
+    const { execFileSync } = require("child_process");
+    if (!ticket)
+        throw new Error("createSubWorktree: ticket is required");
+    if (!Number.isInteger(idx) || idx < 0)
+        throw new Error("createSubWorktree: idx must be a non-negative integer");
+    const wtPath = _subWorktreePath(ticket, idx);
+    const parentTicketPath = path_1.default.join(WORKTREES_DIR, ticket);
+    // Determine the base SHA: prefer the ticket's current worktree HEAD,
+    // fall back to origin/<base-branch> if the ticket worktree doesn't
+    // exist yet (e.g. spawned without the server's createWorktree path).
+    let baseSha;
+    try {
+        if (fs_1.default.existsSync(parentTicketPath)) {
+            baseSha = execFileSync("git", ["-C", parentTicketPath, "rev-parse", "HEAD"], { encoding: "utf8", timeout: 10_000 }).toString().trim();
+        }
+        else {
+            baseSha = execFileSync("git", ["-C", REPO_CACHE_DIR, "rev-parse", `origin/${cfg.branch.ts}`], { encoding: "utf8", timeout: 10_000 }).toString().trim();
+        }
+    }
+    catch (e) {
+        throw new Error(`createSubWorktree: failed to resolve base SHA: ${e.message}`);
+    }
+    // If a previous sub-worktree exists at this path (e.g. crash recovery),
+    // remove it before recreating so we start from a clean base.
+    if (fs_1.default.existsSync(wtPath)) {
+        try {
+            removeSubWorktree(ticket, idx);
+        }
+        catch { }
+    }
+    if (!fs_1.default.existsSync(WORKTREES_DIR)) {
+        fs_1.default.mkdirSync(WORKTREES_DIR, { recursive: true });
+    }
+    logInfo(`Creating sub-worktree ${_subWorktreeName(ticket, idx)} at ${baseSha.substring(0, 8)}…`);
+    execFileSync("git", ["-C", REPO_CACHE_DIR, "worktree", "add", "--detach", wtPath, baseSha], { stdio: "pipe", timeout: 60_000 });
+    // Mirror any in-progress changes from the ticket's canonical worktree
+    // into the sub-worktree so the agent sees the same starting state.
+    // Without this, a Dev Agent in iteration 2 of a retry would lose all
+    // changes from iteration 1's other groups that were merged back.
+    if (fs_1.default.existsSync(parentTicketPath) && parentTicketPath !== wtPath) {
+        try {
+            const changes = localGetChanges(parentTicketPath);
+            for (const c of changes) {
+                const dst = path_1.default.join(wtPath, c.file_path);
+                if (c.action === "delete") {
+                    try {
+                        if (fs_1.default.existsSync(dst))
+                            fs_1.default.rmSync(dst, { force: true });
+                    }
+                    catch { }
+                    continue;
+                }
+                if (typeof c.content === "string") {
+                    try {
+                        fs_1.default.mkdirSync(path_1.default.dirname(dst), { recursive: true });
+                        fs_1.default.writeFileSync(dst, c.content);
+                    }
+                    catch (e) {
+                        logWarn(`createSubWorktree: failed to mirror ${c.file_path}: ${e.message.substring(0, 120)}`);
+                    }
+                }
+            }
+        }
+        catch (e) {
+            logWarn(`createSubWorktree: mirror step failed: ${e.message.substring(0, 200)}`);
+        }
+    }
+    logOk(`Sub-worktree created: ${wtPath}`);
+    return wtPath;
+}
+/**
+ * Remove one sub-worktree.
+ */
+function removeSubWorktree(ticket, idx) {
+    const { execFileSync } = require("child_process");
+    const wtPath = _subWorktreePath(ticket, idx);
+    if (!fs_1.default.existsSync(wtPath))
+        return;
+    try {
+        execFileSync("git", ["-C", REPO_CACHE_DIR, "worktree", "remove", wtPath, "--force"], { stdio: "pipe", timeout: 30_000 });
+    }
+    catch (e) {
+        logWarn(`Sub-worktree remove failed: ${e.message.substring(0, 120)} — falling back to rm + prune`);
+        try {
+            fs_1.default.rmSync(wtPath, { recursive: true, force: true });
+        }
+        catch { }
+        try {
+            execFileSync("git", ["-C", REPO_CACHE_DIR, "worktree", "prune"], { stdio: "pipe", timeout: 10_000 });
+        }
+        catch { }
+    }
+}
+/**
+ * Remove all sub-worktrees for a ticket (idx >= 0).
+ */
+function removeAllSubWorktrees(ticket) {
+    if (!fs_1.default.existsSync(WORKTREES_DIR))
+        return;
+    const prefix = `${ticket}.dev-`;
+    try {
+        for (const entry of fs_1.default.readdirSync(WORKTREES_DIR, { withFileTypes: true })) {
+            if (!entry.isDirectory())
+                continue;
+            if (!entry.name.startsWith(prefix))
+                continue;
+            const idx = parseInt(entry.name.slice(prefix.length), 10);
+            if (Number.isInteger(idx)) {
+                try {
+                    removeSubWorktree(ticket, idx);
+                }
+                catch (e) {
+                    logWarn(`removeAllSubWorktrees: ${entry.name} failed: ${e.message.substring(0, 100)}`);
+                }
+            }
+        }
+    }
+    catch (e) {
+        logWarn(`removeAllSubWorktrees: enumerate failed: ${e.message.substring(0, 100)}`);
+    }
+}
+/**
+ * Merge sub-worktrees back into the canonical ticket worktree.
+ *
+ * Strategy: for each sub-worktree, iterate its `localGetChanges`. Track
+ * which file each change came from; if two agents touched the same file,
+ * first-agent-wins and the conflict is reported. Forbidden files (.env-
+ * class) are never copied — they shouldn't appear here (F3 blocks them
+ * earlier), but defense in depth keeps the canonical worktree's preserved
+ * secrets intact.
+ */
+function mergeSubWorktrees(ticket, agentIndices, canonicalPath) {
+    const FORBIDDEN = [
+        /(^|\/)\.env(\..+)?$/,
+        /(^|\/)\.api-token$/,
+        /(^|\/)\.state-secret$/,
+        /(^|\/)\.npmrc$/,
+    ];
+    const result = { applied: 0, conflicts: [], skippedForbidden: [] };
+    const fileOwner = new Map(); // file_path → first agent idx that wrote it
+    for (const idx of agentIndices) {
+        const sub = _subWorktreePath(ticket, idx);
+        if (!fs_1.default.existsSync(sub))
+            continue;
+        let changes;
+        try {
+            changes = localGetChanges(sub);
+        }
+        catch (e) {
+            logWarn(`mergeSubWorktrees: localGetChanges(${sub}) failed: ${e.message.substring(0, 120)}`);
+            continue;
+        }
+        for (const c of changes) {
+            if (FORBIDDEN.some((re) => re.test(c.file_path))) {
+                result.skippedForbidden.push(c.file_path);
+                continue;
+            }
+            const prior = fileOwner.get(c.file_path);
+            if (prior !== undefined) {
+                // Same file modified by two agents → first wins. Track conflict.
+                const existing = result.conflicts.find((x) => x.file === c.file_path);
+                if (existing) {
+                    if (!existing.agents.includes(idx))
+                        existing.agents.push(idx);
+                }
+                else {
+                    result.conflicts.push({ file: c.file_path, agents: [prior, idx] });
+                }
+                continue;
+            }
+            fileOwner.set(c.file_path, idx);
+            const dst = path_1.default.join(canonicalPath, c.file_path);
+            try {
+                if (c.action === "delete") {
+                    if (fs_1.default.existsSync(dst))
+                        fs_1.default.rmSync(dst, { force: true });
+                }
+                else {
+                    fs_1.default.mkdirSync(path_1.default.dirname(dst), { recursive: true });
+                    if (typeof c.content === "string") {
+                        fs_1.default.writeFileSync(dst, c.content);
+                    }
+                    else {
+                        // Binary content placeholder — copy raw bytes from src
+                        const src = path_1.default.join(sub, c.file_path);
+                        if (fs_1.default.existsSync(src)) {
+                            fs_1.default.copyFileSync(src, dst);
+                        }
+                    }
+                }
+                result.applied++;
+            }
+            catch (e) {
+                logWarn(`mergeSubWorktrees: failed to apply ${c.file_path}: ${e.message.substring(0, 120)}`);
+            }
+        }
+    }
+    return result;
 }
 /**
  * Check if there are any active worktrees.
@@ -423,5 +692,10 @@ module.exports = {
     removeWorktree,
     cleanOrphanedWorktrees,
     getActiveWorktrees,
+    // M1: per-agent sub-worktree support
+    createSubWorktree,
+    removeSubWorktree,
+    removeAllSubWorktrees,
+    mergeSubWorktrees,
 };
 //# sourceMappingURL=local-repo.js.map

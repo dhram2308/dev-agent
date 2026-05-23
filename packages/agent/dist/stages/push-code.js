@@ -5,6 +5,7 @@ const { cfg, TICKET, MAX_COMMIT_FILE_SIZE, RUN_RUNTIME_TESTS, BROWSER_VERIFY } =
 const { logStep, logOk, logErr, logInfo, logWarn, logDebug } = require("../lib/logging");
 const { req } = require("../lib/http-client");
 const { redactSecrets, sanitizeMRText, addWarning, isBinaryFile } = require("../lib/utils");
+const { detectSecrets } = require("../lib/redaction");
 const { save } = require("../lib/state");
 const { gl } = require("../lib/gitlab");
 const { slack } = require("../lib/slack");
@@ -25,16 +26,34 @@ async function pushCodeToGitLab(state, changes) {
             logWarn(`Skipping change with undefined content: ${c.file_path}`);
             return false;
         }
+        // M10: Reject path-traversal segments. Git rejects `..` inside paths
+        // for tracked files, but the GitLab REST commit API accepts whatever
+        // string we send. Defense in depth: drop the change before the API
+        // call. Also strips leading `/` and `./` for consistency.
+        const trimmed = c.file_path.replace(/^\.?\/+/, "");
+        if (trimmed.split("/").some((seg) => seg === ".." || seg === "")) {
+            logWarn(`Skipping change with path-traversal segment: ${c.file_path}`);
+            addWarning(state, "generate_code", `Rejected file_path with .. segment: ${c.file_path}`);
+            return false;
+        }
+        c.file_path = trimmed;
         return true;
     });
     // L2: Deduplicate by file_path (keep last occurrence)
     const seen = new Map();
+    const dupedPaths = [];
     for (const c of changes.changes) {
+        if (seen.has(c.file_path))
+            dupedPaths.push(c.file_path);
         seen.set(c.file_path, c);
     }
+    const originalLen = changes.changes.length;
     changes.changes = [...seen.values()];
-    if (changes.changes.length !== seen.size) {
-        logInfo(`Deduplicated to ${changes.changes.length} unique file(s)`);
+    // L3: Surface which paths were collapsed so an unexpected double-write
+    // is visible in logs (a Dev Agent producing the same path twice with
+    // different content used to silently lose the earlier content).
+    if (changes.changes.length !== originalLen) {
+        logInfo(`Deduplicated ${originalLen} → ${changes.changes.length} entries; collapsed paths: ${[...new Set(dupedPaths)].join(", ")}`);
     }
     if (changes.changes.length === 0) {
         throw new Error("No valid files to push after validation.");
@@ -42,7 +61,19 @@ async function pushCodeToGitLab(state, changes) {
     const branch = `enterprise-ts-${TICKET}`;
     if (!state.data.code_branch) {
         // Q4: Parent Branch Awareness — branch from parent feature branch if available
-        const sourceBranch = state.data.parentBranch || cfg.branch.ts;
+        let sourceBranch = state.data.parentBranch || cfg.branch.ts;
+        // M13: Verify the source branch exists on the remote before branching.
+        // A deleted/renamed parentBranch would otherwise produce a 4xx from
+        // GitLab with a confusing error; falling back to cfg.branch.ts gives
+        // the user a working branch with a clear warning in the logs.
+        if (sourceBranch !== cfg.branch.ts) {
+            const sourceExists = await gl.getBranch(sourceBranch);
+            if (!sourceExists) {
+                logWarn(`M13: parent branch '${sourceBranch}' not found on remote — falling back to ${cfg.branch.ts}`);
+                addWarning(state, "generate_code", `Parent branch missing on remote: ${sourceBranch}`);
+                sourceBranch = cfg.branch.ts;
+            }
+        }
         logInfo(`Creating branch ${branch} from ${sourceBranch}${state.data.parentBranch ? " (parent feature branch)" : ""}…`);
         await gl.createBranch(branch, sourceBranch);
         state.data.code_branch = branch;
@@ -93,6 +124,32 @@ async function pushCodeToGitLab(state, changes) {
                     logWarn(`GQ2: Skipping ${c.file_path} — content size ${(c.content.length / 1024).toFixed(1)}KB exceeds limit ${(MAX_COMMIT_FILE_SIZE / 1024).toFixed(0)}KB`);
                     addWarning(state, "generate_code", `File skipped (too large): ${c.file_path} (${(c.content.length / 1024).toFixed(1)}KB)`);
                     continue;
+                }
+                // C4: Scan file content for embedded secrets before committing.
+                // Critical findings (tokens, private keys, AWS keys, etc.) hard-fail
+                // the push — never ship secrets to GitLab even by accident.
+                if (c.content && typeof detectSecrets === "function") {
+                    try {
+                        const findings = detectSecrets(c.content) || [];
+                        const critical = findings.filter((f) => f.severity === "critical");
+                        if (critical.length > 0) {
+                            const names = [...new Set(critical.map((f) => f.name))].join(", ");
+                            addWarning(state, "generate_code", `Secrets detected in ${c.file_path}: ${names}`);
+                            throw new Error(`Refusing to commit ${c.file_path} — detected ${critical.length} critical secret(s): ${names}`);
+                        }
+                        if (findings.length > 0) {
+                            const names = [...new Set(findings.map((f) => f.name))].join(", ");
+                            logWarn(`Non-critical secrets in ${c.file_path}: ${names}`);
+                            addWarning(state, "generate_code", `Possible secrets in ${c.file_path}: ${names}`);
+                        }
+                    }
+                    catch (e) {
+                        // Re-throw refusals; swallow unexpected scanner errors so push isn't
+                        // blocked by a buggy regex.
+                        if (/Refusing to commit/.test(e.message))
+                            throw e;
+                        logDebug(`detectSecrets failed for ${c.file_path}: ${e.message}`);
+                    }
                 }
             }
             validChanges.push(c);
@@ -162,8 +219,26 @@ async function pushCodeToGitLab(state, changes) {
                 throw commitErr;
             }
         }
+        // M11: Persist code_committed + SHA IMMEDIATELY after the commit
+        // returns, before any further work, to minimize the window where a
+        // crash between commit-success and state-update would leave us with
+        // a phantom commit on the remote and `code_committed=false` on disk
+        // (which would cause a duplicate "already exists" retry on resume).
         state.data.code_committed = true;
         state.data._last_commit_sha = commitResult.id || null;
+        // M12: Keep a bounded history of commit SHAs so the divergence check
+        // (and future audits) can compare against ALL recent attempts, not
+        // just the most recent. Useful when the create→update retry path
+        // produces a different SHA than the original attempt.
+        if (commitResult.id) {
+            const history = Array.isArray(state.data._commit_sha_history)
+                ? state.data._commit_sha_history
+                : [];
+            history.push({ sha: commitResult.id, ts: new Date().toISOString() });
+            while (history.length > 10)
+                history.shift();
+            state.data._commit_sha_history = history;
+        }
         save(state);
         logOk(`Committed ${commitResult.id ? commitResult.id.substring(0, 8) + " " : ""}as ${cfg.git.authorName} <${cfg.git.authorEmail}>`);
     }
@@ -198,7 +273,15 @@ async function pushCodeToGitLab(state, changes) {
             const branchResp = await req(gl.u(`/repository/branches/${encodeURIComponent(branch)}`), { headers: gl.h() });
             if (branchResp.status === 200 && branchResp.data && branchResp.data.commit) {
                 const remoteSha = branchResp.data.commit.id;
-                if (state.data._last_commit_sha && state.data._last_commit_sha !== remoteSha) {
+                // M12: Accept the remote SHA if it matches ANY recent attempt (the
+                // create→update retry path produces a new SHA distinct from the
+                // first attempt; both are legitimately ours).
+                const history = Array.isArray(state.data._commit_sha_history)
+                    ? state.data._commit_sha_history
+                    : [];
+                const matchesAny = history.some((h) => h.sha === remoteSha) ||
+                    state.data._last_commit_sha === remoteSha;
+                if (state.data._last_commit_sha && !matchesAny) {
                     logErr(`GQ8: Remote branch has diverged! Local SHA: ${state.data._last_commit_sha.substring(0, 8)}, Remote SHA: ${remoteSha.substring(0, 8)}`);
                     addWarning(state, "generate_code", `Branch diverged: local ${state.data._last_commit_sha.substring(0, 8)} vs remote ${remoteSha.substring(0, 8)}`);
                     throw new Error(`Branch ${branch} has diverged — remote HEAD differs from local commit. Manual resolution required.`);

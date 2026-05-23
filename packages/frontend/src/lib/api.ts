@@ -345,3 +345,30 @@ export interface OAuthProviderStatus {
 export async function getOAuthStatuses(): Promise<{ providers: OAuthProviderStatus[] }> {
   return apiFetch('/api/oauth/status');
 }
+
+/**
+ * Save a Personal Access Token to the keychain-backed credential store.
+ * Backend stores the token under the `pat:<provider>` keychain entry and
+ * mirrors it into `process.env[envKey]` for in-process use immediately.
+ * See `pat-in-credential-store` change.
+ */
+export async function savePat(
+  provider: string,
+  token: string,
+  metadata?: Record<string, string>,
+): Promise<{ ok: boolean; provider: string; envKey: string }> {
+  return apiFetch(`/api/connectors/${encodeURIComponent(provider)}/pat`, {
+    method: 'POST',
+    body: JSON.stringify({ token, metadata }),
+  });
+}
+
+/**
+ * Remove a stored PAT from the credential store and clear the corresponding
+ * env var. Returns `{ ok: true }` if removed, throws if no PAT was stored.
+ */
+export async function removePat(provider: string): Promise<{ ok: boolean; provider: string }> {
+  return apiFetch(`/api/connectors/${encodeURIComponent(provider)}/pat`, {
+    method: 'DELETE',
+  });
+}

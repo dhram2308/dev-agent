@@ -108,6 +108,22 @@ function markStable(state) {
 async function applyRestartProtection(state, reason = "startup") {
     // Record this restart
     recordRestart(state, reason);
+    // M16: Persist the restart record durably so a subsequent crash before
+    // the orchestrator's next save() can't lose history. Without this, rapid
+    // flapping resets the counter every cycle and the crash-loop detector
+    // never trips, allowing the Slack channel to be spammed indefinitely.
+    try {
+        const { stateFilePath } = require('./state-migration');
+        const { withTicketStateSync } = require('./state-unified');
+        const { TICKET } = require('./config');
+        withTicketStateSync(stateFilePath(TICKET), (s) => {
+            s.data = s.data || {};
+            s.data._restart_history = state.data._restart_history;
+        });
+    }
+    catch (e) {
+        logWarn(`[Restart] Failed to persist restart history durably: ${e.message}`);
+    }
     // Check for crash loop
     const crashCheck = checkCrashLoop(state);
     if (crashCheck.inCrashLoop) {

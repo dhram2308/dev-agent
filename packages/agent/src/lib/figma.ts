@@ -47,13 +47,13 @@ interface HttpResponse {
   data: any;
 }
 
-function _figmaGet(urlPath: string): Promise<HttpResponse> {
-  // OAuth mode: parent server injects access token via env var
-  const oauthToken = process.env.FIGMA_OAUTH_ACCESS_TOKEN;
-  const token = oauthToken || process.env.FIGMA_TOKEN;
-  if (!token) return Promise.reject(new Error("FIGMA_TOKEN or FIGMA_OAUTH_ACCESS_TOKEN not set"));
-  const authHeaders: Record<string, string> = oauthToken
-    ? { Authorization: `Bearer ${oauthToken}` }
+type FigmaAuthMode = 'oauth' | 'pat';
+
+function _figmaGetWithMode(urlPath: string, mode: FigmaAuthMode): Promise<HttpResponse> {
+  const token = mode === 'oauth' ? process.env.FIGMA_OAUTH_ACCESS_TOKEN : process.env.FIGMA_TOKEN;
+  if (!token) return Promise.reject(new Error(`Figma ${mode === 'oauth' ? 'FIGMA_OAUTH_ACCESS_TOKEN' : 'FIGMA_TOKEN'} not set`));
+  const authHeaders: Record<string, string> = mode === 'oauth'
+    ? { Authorization: `Bearer ${token}` }
     : { "X-Figma-Token": token };
   return new Promise((resolve, reject) => {
     const opts = {
@@ -76,6 +76,31 @@ function _figmaGet(urlPath: string): Promise<HttpResponse> {
     req.on("error", reject);
     req.on("timeout", () => { req.destroy(); reject(new Error("Figma API request timed out")); });
     req.end();
+  });
+}
+
+/**
+ * Authenticated Figma GET. When both OAuth and PAT credentials are present,
+ * tries OAuth first (cheap, refreshable, no per-token rotation), falls back
+ * to PAT on 401/403 — Figma's OAuth tokens often can't reach files outside
+ * the workspaces the OAuth grant explicitly covers, while PATs inherit the
+ * full account access. Without this fallback, an OAuth-only setup fails
+ * silently for cross-workspace files even though the user has access in
+ * the Figma UI.
+ */
+function _figmaGet(urlPath: string): Promise<HttpResponse> {
+  const hasOAuth = !!process.env.FIGMA_OAUTH_ACCESS_TOKEN;
+  const hasPat = !!process.env.FIGMA_TOKEN;
+  if (!hasOAuth && !hasPat) {
+    return Promise.reject(new Error("FIGMA_TOKEN or FIGMA_OAUTH_ACCESS_TOKEN not set"));
+  }
+  const primary: FigmaAuthMode = hasOAuth ? 'oauth' : 'pat';
+  return _figmaGetWithMode(urlPath, primary).then((resp) => {
+    if ((resp.status === 401 || resp.status === 403) && primary === 'oauth' && hasPat) {
+      // OAuth was rejected — common for cross-workspace files. Retry with PAT.
+      return _figmaGetWithMode(urlPath, 'pat');
+    }
+    return resp;
   });
 }
 
@@ -132,6 +157,7 @@ function _traverseNodes(node: any, depth: number, result: TraversalResult): void
  */
 async function fetchFigmaFile(fileKey: string, nodeId?: string): Promise<FigmaResult> {
   try {
+    const oauthMode = !!process.env.FIGMA_OAUTH_ACCESS_TOKEN;
     let resp: HttpResponse;
     if (nodeId) {
       resp = await _figmaGet(`/v1/files/${fileKey}/nodes?ids=${encodeURIComponent(nodeId)}`);
@@ -139,11 +165,20 @@ async function fetchFigmaFile(fileKey: string, nodeId?: string): Promise<FigmaRe
       resp = await _figmaGet(`/v1/files/${fileKey}`);
     }
 
-    if (resp.status === 403) {
-      return { ok: false, error: "Figma token expired or invalid — generate a new PAT at figma.com/developers" };
+    if (resp.status === 403 || resp.status === 401) {
+      const bodySnippet = typeof resp.data === 'string'
+        ? resp.data.slice(0, 200)
+        : JSON.stringify(resp.data).slice(0, 200);
+      const hint = oauthMode
+        ? `OAuth token rejected for file ${fileKey} — likely the file lives in a workspace your OAuth grant doesn't cover, or the app's registered scopes don't include file_content:read. Try: (1) open the file in Figma and ensure your OAuth user has access, (2) disconnect/reconnect Figma in Settings to re-grant scopes, (3) fall back to a PAT by setting FIGMA_TOKEN in .env.`
+        : `PAT rejected — token expired, revoked, or lacks access to ${fileKey}. Generate a new one at figma.com/developers.`;
+      return { ok: false, error: `Figma ${resp.status} (${oauthMode ? 'OAuth' : 'PAT'}): ${hint} [${bodySnippet}]` };
     }
     if (resp.status !== 200) {
-      return { ok: false, error: `Figma API error: HTTP ${resp.status}` };
+      const bodySnippet = typeof resp.data === 'string'
+        ? resp.data.slice(0, 200)
+        : JSON.stringify(resp.data).slice(0, 200);
+      return { ok: false, error: `Figma API error: HTTP ${resp.status} ${bodySnippet}`.trim() };
     }
 
     const fileData = resp.data;
@@ -258,20 +293,33 @@ async function describeFramesWithVision(
 }
 
 /**
- * Test connection — validate PAT by calling /v1/me.
+ * Test connection — call /v1/me which works for both PAT and OAuth (with
+ * `current_user:read` scope). Distinguishes auth modes in the error so a
+ * user looking at the message knows which credential to fix.
  */
 async function testConnection(): Promise<ConnectorTestResult> {
+  const oauthMode = !!process.env.FIGMA_OAUTH_ACCESS_TOKEN;
+  const modeTag = oauthMode ? "OAuth" : "PAT";
   try {
     const resp = await _figmaGet("/v1/me");
     if (resp.status === 200 && resp.data.handle) {
-      return { ok: true, message: `Figma connected — user: ${resp.data.handle}` };
+      return { ok: true, message: `Figma connected — user: ${resp.data.handle} (${modeTag})` };
     }
+    const bodySnippet = typeof resp.data === "string"
+      ? resp.data.slice(0, 200)
+      : JSON.stringify(resp.data).slice(0, 200);
     if (resp.status === 403) {
-      return { ok: false, error: "Figma authentication failed — check your Personal Access Token" };
+      const hint = oauthMode
+        ? "OAuth token rejected — likely missing `current_user:read` scope or token revoked. Disconnect and reconnect Figma in Settings."
+        : "Personal Access Token rejected — token expired, revoked, or invalid.";
+      return { ok: false, error: `Figma 403 (${modeTag}): ${hint} ${bodySnippet ? `[${bodySnippet}]` : ""}`.trim() };
     }
-    return { ok: false, error: `Unexpected response: HTTP ${resp.status}` };
+    if (resp.status === 401) {
+      return { ok: false, error: `Figma 401 (${modeTag}): credentials missing or malformed. ${bodySnippet}`.trim() };
+    }
+    return { ok: false, error: `Unexpected response: HTTP ${resp.status} (${modeTag}) ${bodySnippet}`.trim() };
   } catch (e: any) {
-    return { ok: false, error: e.message };
+    return { ok: false, error: `${e.message} (${modeTag})` };
   }
 }
 

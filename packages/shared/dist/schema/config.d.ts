@@ -24,9 +24,9 @@ export declare const frozenConfigSchema: z.ZodObject<{
     QA1_PASS: z.ZodDefault<z.ZodString>;
     SLACK_WEBHOOK: z.ZodOptional<z.ZodUnion<[z.ZodString, z.ZodString]>>;
     OWNER_SLACK_ID: z.ZodOptional<z.ZodString>;
-    ANSHIT_SLACK_ID: z.ZodOptional<z.ZodString>;
+    QA_SLACK_ID: z.ZodOptional<z.ZodString>;
     OWNER_JIRA_ID: z.ZodOptional<z.ZodString>;
-    ANSHIT_JIRA_ID: z.ZodOptional<z.ZodString>;
+    QA_JIRA_ID: z.ZodOptional<z.ZodString>;
     ALLOW_ANY_APPROVER: z.ZodDefault<z.ZodBoolean>;
     QA_URL: z.ZodDefault<z.ZodUnion<[z.ZodString, z.ZodString]>>;
     QA1_URL: z.ZodDefault<z.ZodUnion<[z.ZodString, z.ZodString]>>;
@@ -83,6 +83,10 @@ export declare const freshConfigSchema: z.ZodObject<{
     JIRA_COMMENTS_ENABLED: z.ZodDefault<z.ZodBoolean>;
     SKIP_SMOKE_CHECK: z.ZodDefault<z.ZodBoolean>;
     SAVE_DEBUG_OUTPUT: z.ZodDefault<z.ZodBoolean>;
+    GDRIVE_ENABLED: z.ZodDefault<z.ZodBoolean>;
+    FIGMA_ENABLED: z.ZodDefault<z.ZodBoolean>;
+    FIGMA_VISION_ENABLED: z.ZodDefault<z.ZodBoolean>;
+    POSTMAN_ENABLED: z.ZodDefault<z.ZodBoolean>;
     MAX_REJECTIONS: z.ZodDefault<z.ZodNumber>;
     MAX_PLAN_REJECTIONS: z.ZodDefault<z.ZodNumber>;
     MAX_PROMPT_TOKENS: z.ZodDefault<z.ZodNumber>;
@@ -101,9 +105,9 @@ export declare const freshConfigSchema: z.ZodObject<{
     CI_POLL: z.ZodDefault<z.ZodNumber>;
     LOG_LEVEL: z.ZodDefault<z.ZodEnum<{
         error: "error";
-        info: "info";
         trace: "trace";
         debug: "debug";
+        info: "info";
         warn: "warn";
     }>>;
     LOG_FORMAT: z.ZodDefault<z.ZodEnum<{
@@ -140,9 +144,9 @@ export declare const configSchema: z.ZodObject<{
         QA1_PASS: z.ZodDefault<z.ZodString>;
         SLACK_WEBHOOK: z.ZodOptional<z.ZodUnion<[z.ZodString, z.ZodString]>>;
         OWNER_SLACK_ID: z.ZodOptional<z.ZodString>;
-        ANSHIT_SLACK_ID: z.ZodOptional<z.ZodString>;
+        QA_SLACK_ID: z.ZodOptional<z.ZodString>;
         OWNER_JIRA_ID: z.ZodOptional<z.ZodString>;
-        ANSHIT_JIRA_ID: z.ZodOptional<z.ZodString>;
+        QA_JIRA_ID: z.ZodOptional<z.ZodString>;
         ALLOW_ANY_APPROVER: z.ZodDefault<z.ZodBoolean>;
         QA_URL: z.ZodDefault<z.ZodUnion<[z.ZodString, z.ZodString]>>;
         QA1_URL: z.ZodDefault<z.ZodUnion<[z.ZodString, z.ZodString]>>;
@@ -199,6 +203,10 @@ export declare const configSchema: z.ZodObject<{
         JIRA_COMMENTS_ENABLED: z.ZodDefault<z.ZodBoolean>;
         SKIP_SMOKE_CHECK: z.ZodDefault<z.ZodBoolean>;
         SAVE_DEBUG_OUTPUT: z.ZodDefault<z.ZodBoolean>;
+        GDRIVE_ENABLED: z.ZodDefault<z.ZodBoolean>;
+        FIGMA_ENABLED: z.ZodDefault<z.ZodBoolean>;
+        FIGMA_VISION_ENABLED: z.ZodDefault<z.ZodBoolean>;
+        POSTMAN_ENABLED: z.ZodDefault<z.ZodBoolean>;
         MAX_REJECTIONS: z.ZodDefault<z.ZodNumber>;
         MAX_PLAN_REJECTIONS: z.ZodDefault<z.ZodNumber>;
         MAX_PROMPT_TOKENS: z.ZodDefault<z.ZodNumber>;
@@ -217,9 +225,9 @@ export declare const configSchema: z.ZodObject<{
         CI_POLL: z.ZodDefault<z.ZodNumber>;
         LOG_LEVEL: z.ZodDefault<z.ZodEnum<{
             error: "error";
-            info: "info";
             trace: "trace";
             debug: "debug";
+            info: "info";
             warn: "warn";
         }>>;
         LOG_FORMAT: z.ZodDefault<z.ZodEnum<{
@@ -256,9 +264,9 @@ export declare const flatConfigSchema: z.ZodObject<{
     QA1_PASS: z.ZodDefault<z.ZodString>;
     SLACK_WEBHOOK: z.ZodOptional<z.ZodUnion<[z.ZodString, z.ZodString]>>;
     OWNER_SLACK_ID: z.ZodOptional<z.ZodString>;
-    ANSHIT_SLACK_ID: z.ZodOptional<z.ZodString>;
+    QA_SLACK_ID: z.ZodOptional<z.ZodString>;
     OWNER_JIRA_ID: z.ZodOptional<z.ZodString>;
-    ANSHIT_JIRA_ID: z.ZodOptional<z.ZodString>;
+    QA_JIRA_ID: z.ZodOptional<z.ZodString>;
     ALLOW_ANY_APPROVER: z.ZodDefault<z.ZodBoolean>;
     QA_URL: z.ZodDefault<z.ZodUnion<[z.ZodString, z.ZodString]>>;
     QA1_URL: z.ZodDefault<z.ZodUnion<[z.ZodString, z.ZodString]>>;
@@ -313,6 +321,10 @@ export declare const flatConfigSchema: z.ZodObject<{
     JIRA_COMMENTS_ENABLED: z.ZodDefault<z.ZodBoolean>;
     SKIP_SMOKE_CHECK: z.ZodDefault<z.ZodBoolean>;
     SAVE_DEBUG_OUTPUT: z.ZodDefault<z.ZodBoolean>;
+    GDRIVE_ENABLED: z.ZodDefault<z.ZodBoolean>;
+    FIGMA_ENABLED: z.ZodDefault<z.ZodBoolean>;
+    FIGMA_VISION_ENABLED: z.ZodDefault<z.ZodBoolean>;
+    POSTMAN_ENABLED: z.ZodDefault<z.ZodBoolean>;
     MAX_REJECTIONS: z.ZodDefault<z.ZodNumber>;
     MAX_PLAN_REJECTIONS: z.ZodDefault<z.ZodNumber>;
     MAX_PROMPT_TOKENS: z.ZodDefault<z.ZodNumber>;
@@ -331,9 +343,9 @@ export declare const flatConfigSchema: z.ZodObject<{
     CI_POLL: z.ZodDefault<z.ZodNumber>;
     LOG_LEVEL: z.ZodDefault<z.ZodEnum<{
         error: "error";
-        info: "info";
         trace: "trace";
         debug: "debug";
+        info: "info";
         warn: "warn";
     }>>;
     LOG_FORMAT: z.ZodDefault<z.ZodEnum<{
@@ -392,9 +404,9 @@ export declare function validateConfig(data: unknown): z.ZodSafeParseResult<{
         MAX_CONCURRENT_AGENTS: number;
         SLACK_WEBHOOK?: string | undefined;
         OWNER_SLACK_ID?: string | undefined;
-        ANSHIT_SLACK_ID?: string | undefined;
+        QA_SLACK_ID?: string | undefined;
         OWNER_JIRA_ID?: string | undefined;
-        ANSHIT_JIRA_ID?: string | undefined;
+        QA_JIRA_ID?: string | undefined;
         CLAUDE_MODEL?: string | undefined;
         ANTHROPIC_API_KEY?: string | undefined;
         VERIFY_LOGIN_EMAIL?: string | undefined;
@@ -430,6 +442,10 @@ export declare function validateConfig(data: unknown): z.ZodSafeParseResult<{
         JIRA_COMMENTS_ENABLED: boolean;
         SKIP_SMOKE_CHECK: boolean;
         SAVE_DEBUG_OUTPUT: boolean;
+        GDRIVE_ENABLED: boolean;
+        FIGMA_ENABLED: boolean;
+        FIGMA_VISION_ENABLED: boolean;
+        POSTMAN_ENABLED: boolean;
         MAX_REJECTIONS: number;
         MAX_PLAN_REJECTIONS: number;
         MAX_PROMPT_TOKENS: number;
@@ -446,7 +462,7 @@ export declare function validateConfig(data: unknown): z.ZodSafeParseResult<{
         MAX_STATE_SIZE: number;
         POLL_INTERVAL: number;
         CI_POLL: number;
-        LOG_LEVEL: "error" | "info" | "trace" | "debug" | "warn";
+        LOG_LEVEL: "error" | "trace" | "debug" | "info" | "warn";
         LOG_FORMAT: "text" | "json";
         QA_SMOKE_LEVEL: "basic" | "full" | "none";
         TEST_ARTIFACTS_DIR: string;
@@ -492,9 +508,9 @@ export declare function validateFrozenConfig(data: unknown): z.ZodSafeParseResul
     MAX_CONCURRENT_AGENTS: number;
     SLACK_WEBHOOK?: string | undefined;
     OWNER_SLACK_ID?: string | undefined;
-    ANSHIT_SLACK_ID?: string | undefined;
+    QA_SLACK_ID?: string | undefined;
     OWNER_JIRA_ID?: string | undefined;
-    ANSHIT_JIRA_ID?: string | undefined;
+    QA_JIRA_ID?: string | undefined;
     CLAUDE_MODEL?: string | undefined;
     ANTHROPIC_API_KEY?: string | undefined;
     VERIFY_LOGIN_EMAIL?: string | undefined;
@@ -531,6 +547,10 @@ export declare function validateFreshConfig(data: unknown): z.ZodSafeParseResult
     JIRA_COMMENTS_ENABLED: boolean;
     SKIP_SMOKE_CHECK: boolean;
     SAVE_DEBUG_OUTPUT: boolean;
+    GDRIVE_ENABLED: boolean;
+    FIGMA_ENABLED: boolean;
+    FIGMA_VISION_ENABLED: boolean;
+    POSTMAN_ENABLED: boolean;
     MAX_REJECTIONS: number;
     MAX_PLAN_REJECTIONS: number;
     MAX_PROMPT_TOKENS: number;
@@ -547,7 +567,7 @@ export declare function validateFreshConfig(data: unknown): z.ZodSafeParseResult
     MAX_STATE_SIZE: number;
     POLL_INTERVAL: number;
     CI_POLL: number;
-    LOG_LEVEL: "error" | "info" | "trace" | "debug" | "warn";
+    LOG_LEVEL: "error" | "trace" | "debug" | "info" | "warn";
     LOG_FORMAT: "text" | "json";
     QA_SMOKE_LEVEL: "basic" | "full" | "none";
     TEST_ARTIFACTS_DIR: string;
@@ -619,6 +639,10 @@ export declare function validateFlatConfig(data: unknown): z.ZodSafeParseResult<
     JIRA_COMMENTS_ENABLED: boolean;
     SKIP_SMOKE_CHECK: boolean;
     SAVE_DEBUG_OUTPUT: boolean;
+    GDRIVE_ENABLED: boolean;
+    FIGMA_ENABLED: boolean;
+    FIGMA_VISION_ENABLED: boolean;
+    POSTMAN_ENABLED: boolean;
     MAX_REJECTIONS: number;
     MAX_PLAN_REJECTIONS: number;
     MAX_PROMPT_TOKENS: number;
@@ -635,7 +659,7 @@ export declare function validateFlatConfig(data: unknown): z.ZodSafeParseResult<
     MAX_STATE_SIZE: number;
     POLL_INTERVAL: number;
     CI_POLL: number;
-    LOG_LEVEL: "error" | "info" | "trace" | "debug" | "warn";
+    LOG_LEVEL: "error" | "trace" | "debug" | "info" | "warn";
     LOG_FORMAT: "text" | "json";
     QA_SMOKE_LEVEL: "basic" | "full" | "none";
     TEST_ARTIFACTS_DIR: string;
@@ -644,9 +668,9 @@ export declare function validateFlatConfig(data: unknown): z.ZodSafeParseResult<
     VITE_PRODUCT_ID: number;
     SLACK_WEBHOOK?: string | undefined;
     OWNER_SLACK_ID?: string | undefined;
-    ANSHIT_SLACK_ID?: string | undefined;
+    QA_SLACK_ID?: string | undefined;
     OWNER_JIRA_ID?: string | undefined;
-    ANSHIT_JIRA_ID?: string | undefined;
+    QA_JIRA_ID?: string | undefined;
     CLAUDE_MODEL?: string | undefined;
     ANTHROPIC_API_KEY?: string | undefined;
     VERIFY_LOGIN_EMAIL?: string | undefined;

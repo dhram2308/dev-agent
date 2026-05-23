@@ -216,6 +216,40 @@ function startServer() {
                 console.warn('[http-server] Failed to wire OAuth resume handlers:', e.message);
             }
         }
+        // [OAuth] Wire TokenManager into agent-process so spawned agents receive
+        // fresh OAuth access tokens in their environment. See design.md Decision 10
+        // in the `oauth-connectors` change. Without this wire, GOOGLE_OAUTH_ACCESS_TOKEN
+        // / FIGMA_OAUTH_ACCESS_TOKEN / GITLAB_OAUTH_ACCESS_TOKEN never reach the child
+        // and connectors fall back to PAT/service-account paths.
+        const oauthEnabled = process.env.ENABLE_OAUTH !== 'false';
+        if (oauthEnabled) {
+            if (typeof agentProcess.setTokenManager === 'function') {
+                try {
+                    const tokenManager = require('../oauth/token-manager');
+                    agentProcess.setTokenManager({
+                        getAccessTokenSync: tokenManager.getAccessTokenSync,
+                        refresh: tokenManager.refresh,
+                    });
+                    // Warm the in-memory token cache (and recover any interrupted refreshes
+                    // via WAL — initFromStore calls recoverWAL internally). Fire-and-forget:
+                    // user-initiated agent spawns happen many ms after server boot, by which
+                    // time the cache is populated. If init fails the wire still works — calls
+                    // just return null and connectors fall back to non-OAuth paths.
+                    tokenManager.initFromStore().catch((e) => {
+                        const msg = e instanceof Error ? e.message : String(e);
+                        console.warn('[http-server] OAuth token-manager initFromStore failed (non-fatal):', msg);
+                    });
+                }
+                catch (e) {
+                    console.warn('[http-server] Failed to wire TokenManager into agent-process:', e.message);
+                }
+            }
+            else {
+                console.warn('[http-server] OAuth enabled but loaded agent-process module does not expose setTokenManager — ' +
+                    'spawned agents will not receive OAuth tokens. Connectors will fall back to PAT / service-account paths. ' +
+                    'Rebuild the agent package or set ENABLE_OAUTH=false to silence this warning.');
+            }
+        }
     }
     // ── Create HTTP Server ─────────────────────────────────────────
     server = http.createServer(async (request, res) => {

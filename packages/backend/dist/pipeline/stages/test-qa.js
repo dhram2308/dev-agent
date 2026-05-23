@@ -24,6 +24,7 @@ const utils_1 = require("../../lib/utils");
 const state_manager_1 = require("../../state/state-manager");
 const loader_1 = require("../../config/loader");
 const client_1 = require("../../http/client");
+const notification_gates_1 = require("../../lib/notification-gates");
 // ── Constants ────────────────────────────────────────────────────────
 const QA_TEST_TIMEOUT = 300_000; // 5 minutes
 const NETWORK_ERROR_CODES = new Set([
@@ -158,7 +159,9 @@ function createTestQaHandler(deps) {
             if (errMsg.includes('timeout')) {
                 (0, logger_1.logErr)('QA test suite timed out after 5 minutes');
                 (0, utils_1.addWarning)(state, 'test_qa', 'QA test suite timed out');
-                await slack.send(`Timeout -- QA Tests -- ${ticket}\nQA test suite exceeded 5 minutes.`, [cfg.slack.ownerSlackId || '']);
+                if ((0, notification_gates_1.isChannelEnabled)('test_qa', 'slack')) {
+                    await slack.send(`Timeout -- QA Tests -- ${ticket}\nQA test suite exceeded 5 minutes.`, [cfg.slack.ownerSlackId || '']);
+                }
                 try {
                     (0, state_manager_1.save)(state);
                 }
@@ -187,17 +190,25 @@ function createTestQaHandler(deps) {
                 const envDetail = envDownFails
                     .map((f) => `- [${f.env}] ${f.name}: ${f.error}`)
                     .join('\n');
-                await jira.addComment(ticket, `QA Environment Down\n\n` +
-                    `The following environments appear to be unreachable (network error, not test failure):\n${envDetail}\n\n` +
-                    `This is an infrastructure issue, not a code problem. Retrying after environment recovery.`);
-                await slack.send(`QA Environment DOWN -- ${ticket}\n` +
-                    `${envDownFails.length} module(s) unreachable (not test failures):\n${envDetail}`, [cfg.slack.ownerSlackId || '']);
+                if ((0, notification_gates_1.isChannelEnabled)('test_qa', 'jira')) {
+                    await jira.addComment(ticket, `QA Environment Down\n\n` +
+                        `The following environments appear to be unreachable (network error, not test failure):\n${envDetail}\n\n` +
+                        `This is an infrastructure issue, not a code problem. Retrying after environment recovery.`);
+                }
+                if ((0, notification_gates_1.isChannelEnabled)('test_qa', 'slack')) {
+                    await slack.send(`QA Environment DOWN -- ${ticket}\n` +
+                        `${envDownFails.length} module(s) unreachable (not test failures):\n${envDetail}`, [cfg.slack.ownerSlackId || '']);
+                }
             }
             else {
-                await jira.addComment(ticket, `QA Test Failed\n\n${detail}`);
-                await slack.send(`QA Test FAILED -- ${ticket}\n` +
-                    `${fails.length}/${results.length} module(s) failed:\n${detail}\n` +
-                    `Jira: ${jira.issueUrl(ticket)}`, [cfg.slack.ownerSlackId || '']);
+                if ((0, notification_gates_1.isChannelEnabled)('test_qa', 'jira')) {
+                    await jira.addComment(ticket, `QA Test Failed\n\n${detail}`);
+                }
+                if ((0, notification_gates_1.isChannelEnabled)('test_qa', 'slack')) {
+                    await slack.send(`QA Test FAILED -- ${ticket}\n` +
+                        `${fails.length}/${results.length} module(s) failed:\n${detail}\n` +
+                        `Jira: ${jira.issueUrl(ticket)}`, [cfg.slack.ownerSlackId || '']);
+                }
             }
             data.qa_test = results;
             (0, state_manager_1.save)(state);

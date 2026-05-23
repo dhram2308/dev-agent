@@ -37,9 +37,9 @@ const FROZEN_FIELDS = new Set([
     "QA1_PASS",
     "SLACK_WEBHOOK",
     "OWNER_SLACK_ID",
-    "ANSHIT_SLACK_ID",
+    "QA_SLACK_ID",
     "OWNER_JIRA_ID",
-    "ANSHIT_JIRA_ID",
+    "QA_JIRA_ID",
     // URLs
     "QA_URL",
     "QA1_URL",
@@ -109,9 +109,9 @@ function captureConfigSnapshot(cfg) {
         BRANCH_PROD: cfg.branch.prod,
         // Frozen: approver IDs
         OWNER_JIRA_ID: cfg.ids.owner,
-        ANSHIT_JIRA_ID: cfg.ids.anshit,
+        QA_JIRA_ID: cfg.ids.qa,
         OWNER_SLACK_ID: cfg.slack.ownerId,
-        ANSHIT_SLACK_ID: cfg.slack.anshitId,
+        QA_SLACK_ID: cfg.slack.qaId,
         // Frozen: QA credentials
         QA_MAIN_USER: cfg.qa.main.user,
         QA_MAIN_PASS_SET: !!cfg.qa.main.pass,
@@ -151,7 +151,7 @@ function detectConfigDrift(snapshot, cfg) {
         { field: "BRANCH_TS", snapshotVal: snapshot.BRANCH_TS, liveVal: cfg.branch.ts },
         { field: "BRANCH_QA", snapshotVal: snapshot.BRANCH_QA, liveVal: cfg.branch.qa },
         { field: "OWNER_JIRA_ID", snapshotVal: snapshot.OWNER_JIRA_ID, liveVal: cfg.ids.owner },
-        { field: "ANSHIT_JIRA_ID", snapshotVal: snapshot.ANSHIT_JIRA_ID, liveVal: cfg.ids.anshit },
+        { field: "QA_JIRA_ID", snapshotVal: snapshot.QA_JIRA_ID, liveVal: cfg.ids.qa },
         { field: "QA_URL", snapshotVal: snapshot.QA_URL, liveVal: cfg.qa.main.url },
         { field: "QA1_URL", snapshotVal: snapshot.QA1_URL, liveVal: cfg.qa.qa1.url },
     ];

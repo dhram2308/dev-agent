@@ -55,6 +55,7 @@ const constants_1 = require("@shared/constants");
 const logger_1 = require("../../lib/logger");
 const utils_1 = require("../../lib/utils");
 const graceful_shutdown_1 = require("../../lib/graceful-shutdown");
+const notification_gates_1 = require("../../lib/notification-gates");
 // ── OpenSpec CLI integration ─────────────────────────────────────────
 /**
  * Scaffold an OpenSpec change for the ticket.
@@ -203,32 +204,48 @@ async function stageExplorePlan(state, deps) {
     if (!data.explore_docs_checked) {
         const inaccessible = [];
         const ticketText = `${summary} ${description} ${ac}`;
-        // Check external URLs for known doc types
-        for (const url of externalUrls) {
-            const docType = deps.classifyDocUrl(url);
-            if (docType !== 'External Document') {
-                const criticality = deps.assessDocCriticality(docType, ticketText);
-                inaccessible.push({
-                    type: docType,
-                    url,
-                    criticality,
-                    instructions: deps.getDocPasteInstructions(docType),
-                });
-            }
-        }
-        // Auth-required URLs detected during fetch
+        // URLs whose content we already retrieved -- via OAuth connectors
+        // (Google Drive, Figma) or via the generic HTTP fetch loop. Anything
+        // in this set has usable content in ticket.connectorContents /
+        // fetchedUrlContents and must NOT be flagged as inaccessible.
+        const fetchedUrls = new Set();
+        const connectorContents = ticket.connectorContents || [];
+        for (const c of connectorContents)
+            fetchedUrls.add(c.url);
+        const fetchedUrlContents = ticket.fetchedUrlContents || [];
+        for (const c of fetchedUrlContents)
+            fetchedUrls.add(c.url);
+        // Auth-required URLs detected during fetch (probe failed, connector
+        // returned an auth error, etc.) -- these are the real failures.
         const authRequired = ticket.authRequiredUrls || [];
         for (const ar of authRequired) {
-            if (!inaccessible.some((d) => d.url === ar.url)) {
-                const criticality = deps.assessDocCriticality(ar.docType, ticketText);
-                inaccessible.push({
-                    type: ar.docType,
-                    url: ar.url,
-                    criticality,
-                    instructions: deps.getDocPasteInstructions(ar.docType),
-                    reason: ar.reason,
-                });
-            }
+            const criticality = deps.assessDocCriticality(ar.docType, ticketText);
+            inaccessible.push({
+                type: ar.docType,
+                url: ar.url,
+                criticality,
+                instructions: deps.getDocPasteInstructions(ar.docType),
+                reason: ar.reason,
+            });
+        }
+        // Recognised-service URLs that were neither fetched nor recorded as
+        // auth-required (e.g. matched UNFETCHABLE and got skipped silently).
+        // Still need a manual paste for those.
+        for (const url of externalUrls) {
+            if (fetchedUrls.has(url))
+                continue;
+            if (inaccessible.some((d) => d.url === url))
+                continue;
+            const docType = deps.classifyDocUrl(url);
+            if (docType === 'External Document')
+                continue;
+            const criticality = deps.assessDocCriticality(docType, ticketText);
+            inaccessible.push({
+                type: docType,
+                url,
+                criticality,
+                instructions: deps.getDocPasteInstructions(docType),
+            });
         }
         // Check unparseable attachments
         for (const att of attachments) {
@@ -254,14 +271,18 @@ async function stageExplorePlan(state, deps) {
             inaccessible.forEach((d) => (0, logger_1.logErr)(`  [${d.criticality}] ${d.type}: ${d.url}`));
             const docList = inaccessible.map((d, i) => `${i + 1}. [${d.criticality}] ${d.type}: ${d.url}\n   ${d.instructions}${d.reason ? ` (${d.reason})` : ''}`).join('\n');
             // Ask user for help via Jira + Slack
-            await jira.addComment(TICKET, `${hasCritical ? 'CRITICAL -- ' : ''}Documents Needed\n\n` +
-                `I cannot access the following documents linked in this ticket:\n${docList}\n\n` +
-                `Please paste the relevant content as a comment on this ticket, then comment "continue" to proceed.` +
-                `${hasCritical ? '\n\nCRITICAL documents are essential for implementation.' : ''}`);
-            await slack(`*Documents Needed -- ${TICKET}*${hasCritical ? ' (CRITICAL)' : ''}\n` +
-                `Agent cannot access:\n${docList}\n\n` +
-                `Paste the relevant content on the Jira ticket and comment "continue".\n` +
-                `${deps.jiraUrl(TICKET)}`, [cfg.slack.ownerId]);
+            if ((0, notification_gates_1.isChannelEnabled)('explore_plan', 'jira')) {
+                await jira.addComment(TICKET, `${hasCritical ? 'CRITICAL -- ' : ''}Documents Needed\n\n` +
+                    `I cannot access the following documents linked in this ticket:\n${docList}\n\n` +
+                    `Please paste the relevant content as a comment on this ticket, then comment "continue" to proceed.` +
+                    `${hasCritical ? '\n\nCRITICAL documents are essential for implementation.' : ''}`);
+            }
+            if ((0, notification_gates_1.isChannelEnabled)('explore_plan', 'slack')) {
+                await slack(`*Documents Needed -- ${TICKET}*${hasCritical ? ' (CRITICAL)' : ''}\n` +
+                    `Agent cannot access:\n${docList}\n\n` +
+                    `Paste the relevant content on the Jira ticket and comment "continue".\n` +
+                    `${deps.jiraUrl(TICKET)}`, [cfg.slack.ownerId]);
+            }
             // Wait for user to provide docs and say "continue"
             (0, logger_1.logWait)('Waiting for you to provide document content on Jira...');
             data.explore_wait_at = new Date().toISOString();
@@ -271,7 +292,9 @@ async function stageExplorePlan(state, deps) {
             while (true) {
                 if (deps.monotonicMs() - continueStart > deps.maxContinueWait) {
                     (0, logger_1.logWarn)(`Document wait timed out after ${deps.maxContinueWait / 60000} minutes -- proceeding with available context`);
-                    await slack(`*Document wait timed out -- ${TICKET}*\nProceeding with available context.`, [cfg.slack.ownerId]);
+                    if ((0, notification_gates_1.isChannelEnabled)('explore_plan', 'slack')) {
+                        await slack(`*Document wait timed out -- ${TICKET}*\nProceeding with available context.`, [cfg.slack.ownerId]);
+                    }
                     break;
                 }
                 const comments = await jira.getComments(TICKET, data.explore_wait_at);
@@ -296,7 +319,9 @@ async function stageExplorePlan(state, deps) {
                     if (!extraContext) {
                         (0, logger_1.logWarn)("G11: 'continue' posted but no supplementary content found -- re-prompting");
                         try {
-                            await jira.addComment(TICKET, "No supplementary content detected. Please paste the document content first, then comment 'continue'.");
+                            if ((0, notification_gates_1.isChannelEnabled)('explore_plan', 'jira')) {
+                                await jira.addComment(TICKET, "No supplementary content detected. Please paste the document content first, then comment 'continue'.");
+                            }
                         }
                         catch { /* best effort */ }
                         await sleep(deps.pollInterval);
@@ -517,7 +542,9 @@ async function stageExplorePlan(state, deps) {
         (0, logger_1.logInfo)(`Plan rejection iteration: ${data._plan_rejections}/${deps.maxPlanRejections}`);
         if (data._plan_rejections >= deps.maxPlanRejections) {
             (0, logger_1.logErr)(`Plan rejected ${data._plan_rejections} times (max: ${deps.maxPlanRejections}) -- halting pipeline`);
-            await slack(`*Plan Rejection Limit -- ${TICKET}*\nPlan was rejected ${data._plan_rejections} times. Pipeline halted.`, [cfg.slack.ownerId]);
+            if ((0, notification_gates_1.isChannelEnabled)('explore_plan', 'slack')) {
+                await slack(`*Plan Rejection Limit -- ${TICKET}*\nPlan was rejected ${data._plan_rejections} times. Pipeline halted.`, [cfg.slack.ownerId]);
+            }
             save(state);
             throw new Error(`Plan rejected ${data._plan_rejections} times -- exceeded MAX_PLAN_REJECTIONS`);
         }
@@ -525,11 +552,13 @@ async function stageExplorePlan(state, deps) {
     // Post plan for approval
     if (!data.explore_plan_posted) {
         const os = data.explore_openspec;
-        await slack(`*Implementation Plan Ready -- ${TICKET}*\n` +
-            `*${summary}*\n\n` +
-            `${os ? 'Full OpenSpec plan with Proposal/Design/Specs/Tasks.' : 'Plan ready for review.'}\n` +
-            `Review on the Agent Web UI -> Approve, Reject, or Refine.\n` +
-            `http://localhost:3000`, [cfg.slack.ownerId]);
+        if ((0, notification_gates_1.isChannelEnabled)('explore_plan', 'slack')) {
+            await slack(`*Implementation Plan Ready -- ${TICKET}*\n` +
+                `*${summary}*\n\n` +
+                `${os ? 'Full OpenSpec plan with Proposal/Design/Specs/Tasks.' : 'Plan ready for review.'}\n` +
+                `Review on the Agent Web UI -> Approve, Reject, or Refine.\n` +
+                `http://localhost:3000`, [cfg.slack.ownerId]);
+        }
         data.explore_plan_posted = true;
         data.explore_plan_at = new Date().toISOString();
         data._plan_was_posted_before = true;
@@ -547,7 +576,9 @@ async function stageExplorePlan(state, deps) {
         }
         if (deps.monotonicMs() - planPollStart > deps.maxApprovalTimeout) {
             (0, logger_1.logErr)(`Plan approval timeout after ${deps.maxApprovalTimeout / 3600000}h`);
-            await slack(`*Plan Approval Timeout -- ${TICKET}*\nPipeline halted.`, [cfg.slack.ownerId]);
+            if ((0, notification_gates_1.isChannelEnabled)('explore_plan', 'slack')) {
+                await slack(`*Plan Approval Timeout -- ${TICKET}*\nPipeline halted.`, [cfg.slack.ownerId]);
+            }
             save(state);
             throw new Error(`Plan approval timeout`);
         }

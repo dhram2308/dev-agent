@@ -9,6 +9,7 @@ const { save } = require("../../lib/state");
 const { runSingleAgent } = require("../../lib/agents-team");
 const { isShuttingDown, onShutdown } = require("../../lib/graceful-shutdown");
 const { localGetChanges } = require("../../lib/local-repo");
+const { _validateDevChanges } = require("./developer");
 // Module-level ref for shutdown hook cleanup
 let _activeBrowser = null;
 // Register Playwright cleanup on shutdown
@@ -45,6 +46,16 @@ async function runBrowserVerification(state, ctx) {
         logWarn("Part 2: Dev server not ready -- skipping browser verification");
         state.data._browser_verified = "SKIP";
         state.data._browser_verify_skip_reason = "dev_server_not_ready";
+        save(state);
+        return;
+    }
+    // M14: Honor the flag set by env-setup. If Playwright install failed,
+    // there's no point launching chromium — it'd throw at runtime. Skip
+    // cleanly with a clear reason.
+    if (state.data._browser_verify_available === false) {
+        logWarn("Part 2: Browser verify unavailable (Playwright install failed) -- skipping");
+        state.data._browser_verified = "SKIP";
+        state.data._browser_verify_skip_reason = "playwright_unavailable";
         save(state);
         return;
     }
@@ -121,16 +132,80 @@ async function runBrowserVerification(state, ctx) {
                 state.data._browser_verify_skip_reason = "timeout";
                 break;
             }
+            // H8: Health-check the dev server before each attempt. The server may
+            // have crashed during the previous attempt (HMR error, OOM, port
+            // collision). Without this check, we'd keep navigating to a dead URL
+            // and waste retries collecting empty evidence.
+            const devPid = state.data._nx_serve_pid;
+            if (!devPid || !isProcessAlive(devPid)) {
+                logWarn(`Part 2: Dev server (pid ${devPid}) is not alive — attempting restart before attempt ${attempt}`);
+                const restarted = await startDevServer(cfg.localRepo, state);
+                if (!restarted) {
+                    logErr("Part 2: Dev server restart failed — aborting verification");
+                    state.data._browser_verify_skip_reason = "dev_server_crashed";
+                    state.data._browser_verified = "SKIP";
+                    save(state);
+                    break;
+                }
+                logOk("Part 2: Dev server restarted");
+            }
             logInfo(`Part 2: Verification attempt ${attempt}/${maxRetries}`);
             // If retry: run fix agent first
             if (attempt > 1 && state.data._verify_known_gaps) {
                 logInfo("Part 2: Running fix agent for identified gaps...");
-                await runBrowserFixAgent(ctx, state.data._verify_known_gaps, attempt, state);
+                const fixOk = await runBrowserFixAgent(ctx, state.data._verify_known_gaps, attempt, state);
+                // M6: abort the loop after 2 consecutive fix-agent failures. The
+                // outer MAX_VERIFY_RETRIES cap still applies — this just prevents
+                // burning the remaining attempts on a fixer that's clearly stuck.
+                const consecutive = (state.data._verify_fix_failures || 0);
+                if (fixOk) {
+                    state.data._verify_fix_failures = 0;
+                }
+                else {
+                    state.data._verify_fix_failures = consecutive + 1;
+                    if (consecutive + 1 >= 2) {
+                        logWarn(`Part 2: Browser Fix Agent failed ${consecutive + 1} consecutive times — giving up on automated fixes`);
+                        state.data._browser_verify_skip_reason = "fix_agent_unstuck";
+                        state.data._browser_verified = "SKIP";
+                        save(state);
+                        break;
+                    }
+                }
+                save(state);
                 // Invalidate stale route cache -- fix agent may have changed routing
                 state.data._routes_detected = null;
-                // Wait for HMR to apply
-                logInfo("Part 2: Waiting 5s for HMR hot reload...");
-                await new Promise((r) => setTimeout(r, 5000));
+                // M15: Poll the dev server until it responds (Vite re-bundles after
+                // the fixer's writes) instead of a flat 5s sleep. Caps at 15s so a
+                // hung server doesn't stall the loop. Falls back to the original
+                // sleep if the polling helper isn't available.
+                try {
+                    const http = require("http");
+                    const start = Date.now();
+                    const maxWaitMs = 15_000;
+                    let ready = false;
+                    while (Date.now() - start < maxWaitMs) {
+                        ready = await new Promise((resolve) => {
+                            const req = http.get(`http://localhost:${serverPort}/`, { timeout: 1500 }, (res) => {
+                                res.resume();
+                                resolve(res.statusCode != null && res.statusCode < 500);
+                            });
+                            req.on("error", () => resolve(false));
+                            req.on("timeout", () => { req.destroy(); resolve(false); });
+                        });
+                        if (ready)
+                            break;
+                        await new Promise((r) => setTimeout(r, 500));
+                    }
+                    if (ready) {
+                        logOk(`Part 2: Dev server responsive after fixer (${Date.now() - start}ms)`);
+                    }
+                    else {
+                        logWarn(`Part 2: Dev server still not responsive after ${maxWaitMs}ms — proceeding anyway`);
+                    }
+                }
+                catch {
+                    await new Promise((r) => setTimeout(r, 5000));
+                }
             }
             // Login (or re-login on retry)
             const page = await context.newPage();
@@ -277,7 +352,15 @@ async function runBrowserVerification(state, ctx) {
         save(state);
     }
     finally {
+        // L6: Explicit cleanup of Playwright tracing/video before closing. If
+        // tracing/video weren't enabled, these calls throw — caught and
+        // ignored. Without this, debug-mode runs (which DO enable tracing)
+        // could leave .zip/.webm/HAR artifacts in the Playwright temp dir.
         if (context) {
+            try {
+                await context.tracing?.stop?.({ path: undefined });
+            }
+            catch { /* tracing not enabled */ }
             try {
                 await context.close();
             }
@@ -354,24 +437,43 @@ Rules:
  * Parse the Gap Analysis Agent output into structured verdict.
  */
 function parseGapAnalysisVerdict(output) {
-    const overallMatch = output.match(/OVERALL:\s*(PASS|NEEDS_FIX|SKIP)/i);
+    // M7: Normalize unicode arrows + smart quotes the model sometimes emits
+    // (→, ⟶, ⇒), then run the regex. Without this, `AC 1: foo → FAIL` was
+    // silently dropped because the regex only accepted the ASCII `->`.
+    const normalized = (output || "")
+        .replace(/[→⟶⇒]/g, "->")
+        .replace(/[""]/g, '"')
+        .replace(/['']/g, "'");
+    const overallMatch = normalized.match(/OVERALL:\s*(PASS|NEEDS_FIX|SKIP)/i);
     const overall = overallMatch ? overallMatch[1].toUpperCase() : "SKIP";
     const gaps = [];
-    const fixMatch = output.match(/FIX_INSTRUCTIONS:\s*(.+?)(?=\n\n|$)/is);
+    const fixMatch = normalized.match(/FIX_INSTRUCTIONS:\s*(.+?)(?=\n\n|$)/is);
     if (fixMatch && overall === "NEEDS_FIX") {
         gaps.push(fixMatch[1].trim());
     }
-    // T2.4: Accept both -> and -> arrow styles, and capture inline gap descriptions
-    const acPattern = /AC\s*\d+:.*?(?:->|->)\s*(FAIL|PARTIAL).*?\n\s*Gap:\s*(.+?)(?=\n(?:AC\s*\d+:|OVERALL:|$))/gis;
+    // T2.4 + M7: Accept "->", "→", "=>", capture inline gap descriptions, and
+    // make the trailing-line `Gap:` optional so a single-line verdict still
+    // contributes to `gaps`.
+    const acPattern = /AC\s*\d+:.*?->\s*(FAIL|PARTIAL).*?(?:\n\s*Gap:\s*(.+?))?(?=\n(?:AC\s*\d+:|OVERALL:|$))/gis;
     let match;
-    while ((match = acPattern.exec(output)) !== null) {
-        gaps.push(match[2].trim());
+    while ((match = acPattern.exec(normalized)) !== null) {
+        if (match[2])
+            gaps.push(match[2].trim());
+    }
+    // M7: If overall is NEEDS_FIX but we couldn't extract any structured
+    // gap, log the unparsed output so an operator can diagnose the format
+    // drift.
+    if (overall === "NEEDS_FIX" && gaps.length === 0) {
+        logWarn(`parseGapAnalysisVerdict: NEEDS_FIX with no gaps parsed — output may have format drift: ${normalized.substring(0, 400)}`);
     }
     return { overall, gaps, rawOutput: output };
 }
 /**
  * Run the Developer Fix Agent to address specific browser-identified gaps.
  */
+// M6: returns true on success, false on fix-agent failure so the caller can
+// short-circuit after consecutive failures instead of re-running a known-bad
+// fixer forever.
 async function runBrowserFixAgent(ctx, gaps, attempt, state) {
     const gapsList = Array.isArray(gaps) ? gaps.join("\n- ") : String(gaps);
     const prompt = `You are a Developer Fix Agent. The browser verification found specific gaps in the generated code.
@@ -401,7 +503,19 @@ Focus on fixing rendering issues, missing elements, or incorrect behavior that t
     });
     if (!fixResult) {
         logWarn(`Browser Fix Agent failed (attempt ${attempt}) -- continuing without fix`);
+        return false;
     }
+    // H2: Validate browser-fix output (GQ7 unresolved imports + F3 forbidden
+    // paths). A fix agent making HMR-targeted tweaks can still write to
+    // forbidden files or introduce a broken import.
+    try {
+        _validateDevChanges(state);
+    }
+    catch (validationErr) {
+        logWarn(`Browser Fix Agent output rejected by validation: ${validationErr.message.substring(0, 200)}`);
+        throw validationErr;
+    }
+    return true;
 }
 /**
  * Build MR description section for browser verification results.

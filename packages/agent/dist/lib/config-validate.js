@@ -108,10 +108,10 @@ function validateAllConfig(env = process.env) {
     }
     // Same approver warning
     const ownerJira = parsed.OWNER_JIRA_ID;
-    const anshitJira = parsed.ANSHIT_JIRA_ID;
-    if (ownerJira && anshitJira && ownerJira === anshitJira) {
+    const qaJira = parsed.QA_JIRA_ID;
+    if (ownerJira && qaJira && ownerJira === qaJira) {
         results.push({
-            field: "OWNER_JIRA_ID/ANSHIT_JIRA_ID",
+            field: "OWNER_JIRA_ID/QA_JIRA_ID",
             severity: Severity.WARN,
             message: "Both approver IDs are the same -- dual approval gate will be ineffective",
             group: "jira",
@@ -128,9 +128,9 @@ function validateAllConfig(env = process.env) {
         });
     }
     // Empty approvers + ALLOW_ANY_APPROVER check
-    if (!ownerJira && !anshitJira && !parsed.ALLOW_ANY_APPROVER) {
+    if (!ownerJira && !qaJira && !parsed.ALLOW_ANY_APPROVER) {
         results.push({
-            field: "OWNER_JIRA_ID/ANSHIT_JIRA_ID",
+            field: "OWNER_JIRA_ID/QA_JIRA_ID",
             severity: Severity.FATAL,
             message: "Both approver IDs empty and ALLOW_ANY_APPROVER is false. Set at least one approver or ALLOW_ANY_APPROVER=true.",
             group: "jira",
@@ -438,7 +438,7 @@ function applyConfigValue(schemaKey, value, cfg, topLevelExports) {
         // cfg.slack.*
         SLACK_WEBHOOK: (v) => { cfg.slack.webhook = v; },
         OWNER_SLACK_ID: (v) => { cfg.slack.ownerId = v; },
-        ANSHIT_SLACK_ID: (v) => { cfg.slack.anshitId = v; },
+        QA_SLACK_ID: (v) => { cfg.slack.qaId = v; },
         // cfg.git.*
         GIT_AUTHOR_NAME: (v) => { cfg.git.authorName = v; },
         GIT_AUTHOR_EMAIL: (v) => { cfg.git.authorEmail = v; },

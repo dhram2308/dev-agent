@@ -25,6 +25,7 @@ const state_manager_1 = require("../../state/state-manager");
 const loader_1 = require("../../config/loader");
 const client_1 = require("../../http/client");
 const constants_1 = require("@shared/constants");
+const notification_gates_1 = require("../../lib/notification-gates");
 // ── Helpers ──────────────────────────────────────────────────────
 /** Save state and then throw -- ensures state is never lost on error */
 function saveAndThrow(state, err) {
@@ -91,7 +92,9 @@ function createDeployProdHandler(deps) {
                         else if (errMsg.includes('406'))
                             detail += ' (pipeline failures or unresolved discussions)';
                         (0, logger_1.logErr)(detail);
-                        await slack.send(`Pre-Prod Merge Failed -- ${ticket}\n${detail}\nMR: ${data.preprod_mr_url}`, [cfg.slack.ownerSlackId || '']);
+                        if ((0, notification_gates_1.isChannelEnabled)('deploy_prod', 'slack')) {
+                            await slack.send(`Pre-Prod Merge Failed -- ${ticket}\n${detail}\nMR: ${data.preprod_mr_url}`, [cfg.slack.ownerSlackId || '']);
+                        }
                         saveAndThrow(state, new Error(detail));
                     }
                 }
@@ -100,7 +103,9 @@ function createDeployProdHandler(deps) {
                     if (checkMsg.includes('Pre-Prod MR merge failed'))
                         throw checkErr;
                     (0, logger_1.logErr)(`Pre-Prod merge error + could not check MR state: ${errObj.message}`);
-                    await slack.send(`Pre-Prod Merge Failed -- ${ticket}\n${errObj.message}\nMR: ${data.preprod_mr_url}`, [cfg.slack.ownerSlackId || '']);
+                    if ((0, notification_gates_1.isChannelEnabled)('deploy_prod', 'slack')) {
+                        await slack.send(`Pre-Prod Merge Failed -- ${ticket}\n${errObj.message}\nMR: ${data.preprod_mr_url}`, [cfg.slack.ownerSlackId || '']);
+                    }
                     saveAndThrow(state, errObj);
                 }
             }
@@ -145,9 +150,11 @@ function createDeployProdHandler(deps) {
                 }
                 if (!smokeOk) {
                     (0, logger_1.logErr)('Pre-Prod smoke test FAILED -- HALTING pipeline');
-                    await slack.send(`Pre-Prod Smoke FAILED -- ${ticket}\n` +
-                        `Pre-Prod (${preProdUrl}) is not responding. Pipeline HALTED before production deploy.\n` +
-                        `Fix the issue and re-run the agent.`, [cfg.slack.ownerSlackId || '']);
+                    if ((0, notification_gates_1.isChannelEnabled)('deploy_prod', 'slack')) {
+                        await slack.send(`Pre-Prod Smoke FAILED -- ${ticket}\n` +
+                            `Pre-Prod (${preProdUrl}) is not responding. Pipeline HALTED before production deploy.\n` +
+                            `Fix the issue and re-run the agent.`, [cfg.slack.ownerSlackId || '']);
+                    }
                     (0, utils_1.addWarning)(state, 'deploy_prod', 'Pre-Prod smoke test failed -- pipeline halted');
                     saveAndThrow(state, new Error('Pre-Prod smoke test failed -- cannot proceed to production'));
                 }
@@ -233,7 +240,9 @@ function createDeployProdHandler(deps) {
                         else if (errMsg.includes('406'))
                             detail += ' (pipeline failures or unresolved discussions)';
                         (0, logger_1.logErr)(detail);
-                        await slack.send(`Production Merge Failed -- ${ticket}\n${detail}\nMR: ${data.prod_mr_url}`, [cfg.slack.ownerSlackId || '']);
+                        if ((0, notification_gates_1.isChannelEnabled)('deploy_prod', 'slack')) {
+                            await slack.send(`Production Merge Failed -- ${ticket}\n${detail}\nMR: ${data.prod_mr_url}`, [cfg.slack.ownerSlackId || '']);
+                        }
                         saveAndThrow(state, new Error(detail));
                     }
                 }
@@ -242,7 +251,9 @@ function createDeployProdHandler(deps) {
                     if (checkMsg.includes('Production MR merge failed'))
                         throw checkErr;
                     (0, logger_1.logErr)(`Production merge error + could not check MR state: ${errObj.message}`);
-                    await slack.send(`Production Merge Failed -- ${ticket}\n${errObj.message}\nMR: ${data.prod_mr_url}`, [cfg.slack.ownerSlackId || '']);
+                    if ((0, notification_gates_1.isChannelEnabled)('deploy_prod', 'slack')) {
+                        await slack.send(`Production Merge Failed -- ${ticket}\n${errObj.message}\nMR: ${data.prod_mr_url}`, [cfg.slack.ownerSlackId || '']);
+                    }
                     saveAndThrow(state, errObj);
                 }
             }
@@ -280,18 +291,22 @@ function createDeployProdHandler(deps) {
                 if (preMergeSha) {
                     const rollbackSha = preMergeSha.substring(0, 12);
                     (0, logger_1.logErr)('X8: Production smoke FAILED -- sending rollback instructions');
-                    await slack.send(`PRODUCTION SMOKE FAILED -- ${ticket}\n` +
-                        `Production (${prodUrl}) is not responding after deploy.\n\n` +
-                        `Rollback command:\n` +
-                        `git checkout ${cfg.branches.prod}\n` +
-                        `git reset --hard ${rollbackSha}\n` +
-                        `git push --force origin ${cfg.branches.prod}\n\n` +
-                        `Pre-merge SHA: ${preMergeSha}`, [cfg.slack.ownerSlackId || '', ext.anshitSlackId || '']);
+                    if ((0, notification_gates_1.isChannelEnabled)('deploy_prod', 'slack')) {
+                        await slack.send(`PRODUCTION SMOKE FAILED -- ${ticket}\n` +
+                            `Production (${prodUrl}) is not responding after deploy.\n\n` +
+                            `Rollback command:\n` +
+                            `git checkout ${cfg.branches.prod}\n` +
+                            `git reset --hard ${rollbackSha}\n` +
+                            `git push --force origin ${cfg.branches.prod}\n\n` +
+                            `Pre-merge SHA: ${preMergeSha}`, [cfg.slack.ownerSlackId || '', ext.qaSlackId || '']);
+                    }
                 }
                 else {
-                    await slack.send(`PRODUCTION SMOKE FAILED -- ${ticket}\n` +
-                        `Production (${prodUrl}) is not responding after deploy.\n` +
-                        `No rollback SHA available -- manual investigation required.`, [cfg.slack.ownerSlackId || '', ext.anshitSlackId || '']);
+                    if ((0, notification_gates_1.isChannelEnabled)('deploy_prod', 'slack')) {
+                        await slack.send(`PRODUCTION SMOKE FAILED -- ${ticket}\n` +
+                            `Production (${prodUrl}) is not responding after deploy.\n` +
+                            `No rollback SHA available -- manual investigation required.`, [cfg.slack.ownerSlackId || '', ext.qaSlackId || '']);
+                    }
                 }
                 (0, utils_1.addWarning)(state, 'deploy_prod', `Production smoke failed -- rollback SHA: ${preMergeSha || 'unavailable'}`);
                 data._prod_smoke_checked = true;

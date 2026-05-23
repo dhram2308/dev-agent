@@ -4,7 +4,7 @@
 // toggle switches for each cell
 // ═══════════════════════════════════════════════════════════════
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import {
   useSettingsStore,
   NOTIFICATION_GATES,
@@ -163,6 +163,11 @@ const styles = {
     color: 'var(--danger)',
     fontSize: 13,
   },
+  successMsg: {
+    fontSize: 12,
+    color: 'var(--success)',
+    fontWeight: 500,
+  },
 } as const;
 
 // ── Toggle Switch ───────────────────────────────────────────
@@ -208,14 +213,19 @@ export function NotificationsTab(): JSX.Element {
   const fetchNotificationConfig = useSettingsStore((s) => s.fetchNotificationConfig);
   const saveNotificationConfig = useSettingsStore((s) => s.saveNotificationConfig);
   const toggleNotification = useSettingsStore((s) => s.toggleNotification);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     fetchNotificationConfig();
   }, [fetchNotificationConfig]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (notificationSaving) return;
-    saveNotificationConfig();
+    const ok = await saveNotificationConfig();
+    if (ok) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    }
   }, [notificationSaving, saveNotificationConfig]);
 
   if (notificationLoading) {
@@ -277,6 +287,7 @@ export function NotificationsTab(): JSX.Element {
       </div>
 
       <div style={styles.actionBar}>
+        {saved && <span style={styles.successMsg}>Saved</span>}
         <button
           type="button"
           style={{

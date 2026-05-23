@@ -4,7 +4,7 @@
 // with OAuth support for Figma, Google Drive, Postman
 // ═══════════════════════════════════════════════════════════════
 
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSettingsStore, CONFIG_GROUPS } from '../../store/settings';
 import { ConnectorCard, type OAuthInfo, type ConnectorConfigField } from './ConnectorCard';
 import { useOAuthLauncher } from '../../hooks/useOAuthLauncher';
@@ -26,6 +26,31 @@ const CONNECTOR_TO_GROUP: Record<string, string> = {
 
 // Providers that support OAuth flow (show Connect/Disconnect buttons)
 const OAUTH_PROVIDERS = new Set(['figma', 'google-drive']);
+
+// Providers that store a Personal Access Token in the keychain-backed credential
+// store (via `POST /api/connectors/:provider/pat`). For Figma, the PAT acts as
+// a fallback for cross-workspace files OAuth can't reach. For Postman, it's the
+// only auth mode (provider has no OAuth). See `pat-in-credential-store` change.
+const PAT_CAPABLE_PROVIDERS = new Set(['figma', 'postman']);
+
+// Hint text shown above the PAT input for each provider. Keep concise — the
+// disclosure is collapsed by default, so this only renders when the user opens it.
+const PAT_HINT: Record<string, { text: string; href: string; linkText: string; placeholder: string; instructions?: string }> = {
+  figma: {
+    text: "OAuth handles most files; a PAT covers files in workspaces your OAuth grant doesn't reach.",
+    href: 'https://www.figma.com/settings',
+    linkText: 'figma.com/settings',
+    placeholder: 'figd_…',
+    instructions: "Open figma.com/settings → scroll to 'Personal access tokens' → click 'Generate new token' → name it, give it read access → copy the figd_… value (Figma shows it only once).",
+  },
+  postman: {
+    text: 'Postman has no OAuth. Generate a PAT in your Postman account settings.',
+    href: 'https://www.postman.com/settings/me/api-keys',
+    linkText: 'postman.com/settings/me/api-keys',
+    placeholder: 'PMAK-…',
+    instructions: "Open postman.com/settings/me/api-keys → click 'Generate API Key' → copy the PMAK-… value.",
+  },
+};
 
 // Map connector IDs to OAuth provider names (backend registers as 'google', not 'google-drive')
 const OAUTH_PROVIDER_NAME: Record<string, string> = {
@@ -98,6 +123,148 @@ const styles = {
     gap: 'var(--sp-4)',
   },
 } as const;
+
+// ── KeychainPatInput ────────────────────────────────────────
+// Tiny inline component for the PAT-in-keychain disclosure. Lives inside the
+// PAT disclosure of ConnectorCard for Figma and Postman. Posts to the new
+// /api/connectors/:provider/pat route from `pat-in-credential-store` change.
+
+function KeychainPatInput({
+  provider,
+  alreadyStored,
+  onChange,
+}: {
+  provider: string;
+  alreadyStored: boolean;
+  onChange: () => void;
+}): JSX.Element {
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const hint = PAT_HINT[provider];
+
+  const handleSave = async (): Promise<void> => {
+    if (!value.trim()) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.savePat(provider, value.trim());
+      setMsg({ ok: true, text: 'Saved to keychain' });
+      setValue('');
+      onChange();
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRemove = async (): Promise<void> => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.removePat(provider);
+      setMsg({ ok: true, text: 'Removed from keychain' });
+      onChange();
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {hint && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+            {hint.text}
+          </p>
+          {hint.instructions && (
+            <p style={{ fontSize: 11, color: 'var(--text-tertiary)', margin: 0, lineHeight: 1.5 }}>
+              {hint.instructions}
+            </p>
+          )}
+          <a
+            href={hint.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              fontSize: 12,
+              color: 'var(--text-link, #60a5fa)',
+              textDecoration: 'none',
+              alignSelf: 'flex-start',
+              padding: '4px 10px',
+              border: '1px solid var(--text-link, #60a5fa)',
+              borderRadius: 4,
+              marginTop: 4,
+            }}
+          >
+            Open {hint.linkText} ↗
+          </a>
+        </div>
+      )}
+      {alreadyStored && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+          <span style={{ color: '#22c55e' }}>● PAT stored in keychain</span>
+          <button
+            type="button"
+            onClick={handleRemove}
+            disabled={busy}
+            style={{
+              padding: '4px 10px',
+              fontSize: 12,
+              borderRadius: 4,
+              border: '1px solid #ef4444',
+              background: 'transparent',
+              color: '#ef4444',
+              cursor: busy ? 'not-allowed' : 'pointer',
+            }}
+          >
+            Remove
+          </button>
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          type="password"
+          placeholder={hint?.placeholder ?? 'paste token'}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          style={{
+            flex: 1,
+            padding: '6px 10px',
+            fontSize: 12,
+            borderRadius: 4,
+            border: '1px solid var(--border-default)',
+            background: 'var(--bg-surface)',
+            color: 'var(--text-primary)',
+          }}
+        />
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={busy || !value.trim()}
+          style={{
+            padding: '6px 12px',
+            fontSize: 12,
+            borderRadius: 4,
+            border: '1px solid var(--border-default)',
+            background: 'var(--button-bg, #1e293b)',
+            color: 'var(--text-primary)',
+            cursor: busy || !value.trim() ? 'not-allowed' : 'pointer',
+            opacity: busy || !value.trim() ? 0.5 : 1,
+          }}
+        >
+          {alreadyStored ? 'Replace' : 'Save'}
+        </button>
+      </div>
+      {msg && (
+        <div style={{ fontSize: 11, color: msg.ok ? '#22c55e' : '#ef4444' }}>{msg.text}</div>
+      )}
+    </div>
+  );
+}
 
 // ── Component ───────────────────────────────────────────────
 
@@ -203,6 +370,29 @@ export function ConnectorsTab(): JSX.Element {
                   ? (oauthStatuses[toOAuthName(connector.id)] || oauthStatuses[connector.id])
                   : undefined;
 
+                // [pat-in-credential-store] Mount the keychain PAT input as
+                // patFallbackContent for providers in PAT_CAPABLE_PROVIDERS.
+                // Detect "already stored" by reading oauthStatuses[provider]
+                // — the store sets oauthStatus='PAT' for kind:'pat' entries.
+                const isPatCapable = PAT_CAPABLE_PROVIDERS.has(connector.id);
+                const patAlreadyStored = !!oauthStatuses?.[connector.id]
+                  && oauthStatuses[connector.id].oauthStatus === 'PAT';
+                const patFallbackContent = isPatCapable ? (
+                  <KeychainPatInput
+                    provider={connector.id}
+                    alreadyStored={patAlreadyStored}
+                    onChange={fetchOAuthStatuses}
+                  />
+                ) : undefined;
+                // Auto-expand the PAT disclosure for Figma right after the user
+                // completes OAuth, so they don't have to discover the disclosure
+                // toggle. Triggered only when (a) it's Figma, (b) OAuth is live,
+                // (c) no PAT is stored yet. Once stored or user dismisses, the
+                // auto-prompt stops. See `pat-in-credential-store` task 5.x.
+                const patAutoOpen = connector.id === 'figma'
+                  && oauthInfo?.oauthStatus === 'CONNECTED'
+                  && !patAlreadyStored;
+
                 return (
                   <ConnectorCard
                     key={connector.id}
@@ -221,6 +411,8 @@ export function ConnectorsTab(): JSX.Element {
                       isOAuth ? () => handleOAuthDisconnect(connector.id) : undefined
                     }
                     oauthLaunching={launching === toOAuthName(connector.id)}
+                    patFallbackContent={patFallbackContent}
+                    patAutoOpen={patAutoOpen}
                     configFields={configFieldsMap.get(connector.id)}
                     configValues={config}
                     onSaveConnectorConfig={handleSaveConnectorConfig}

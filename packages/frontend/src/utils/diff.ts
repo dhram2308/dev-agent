@@ -157,6 +157,47 @@ export function parseDiffStatsFromChanges(
 }
 
 // -- parseUnifiedDiff -----------------------------------------------
+// -- synthesizeFullFileHunk -----------------------------------------
+// For create/delete file changes the backend produces no unified diff
+// (there's no "before" or no "after" to compare against). To still
+// render them in split / unified mode like GitHub does — empty pane on
+// one side, full content on the other — we synthesize a single hunk
+// whose lines are all `add` (for `create`) or all `del` (for `delete`).
+//
+// For `update` actions that arrive with only `content` and no diff
+// (rare; usually the backend fills in `diff`), we fall back to
+// showing the new content on the right pane and leave the left blank.
+
+export function synthesizeFullFileHunk(
+  content: string,
+  action: 'create' | 'update' | 'delete',
+): DiffHunk[] {
+  // Strip a single trailing newline to avoid an empty phantom line.
+  const text = content.endsWith('\n') ? content.slice(0, -1) : content;
+  const lines = text.split('\n');
+  if (lines.length === 0 || (lines.length === 1 && lines[0] === '')) {
+    return [];
+  }
+
+  const type: DiffLine['type'] = action === 'delete' ? 'del' : 'add';
+  const diffLines: DiffLine[] = lines.map((content, i) => ({
+    type,
+    content,
+    oldNum: type === 'del' ? i + 1 : null,
+    newNum: type === 'add' ? i + 1 : null,
+  }));
+
+  const hunk: DiffHunk = {
+    header: `@@ ${action === 'delete' ? `-1,${lines.length} +0,0` : `-0,0 +1,${lines.length}`} @@`,
+    oldStart: action === 'delete' ? 1 : 0,
+    oldCount: action === 'delete' ? lines.length : 0,
+    newStart: action === 'delete' ? 0 : 1,
+    newCount: action === 'delete' ? 0 : lines.length,
+    lines: diffLines,
+  };
+  return [hunk];
+}
+
 // Parse unified diff text into structured hunks with line numbers
 
 export function parseUnifiedDiff(diffText: string): DiffHunk[] {

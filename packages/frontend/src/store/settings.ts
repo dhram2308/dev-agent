@@ -118,7 +118,7 @@ export interface SettingsStore {
 
   // Notification actions
   fetchNotificationConfig: () => Promise<void>;
-  saveNotificationConfig: () => Promise<void>;
+  saveNotificationConfig: () => Promise<boolean>;
   toggleNotification: (gate: string, channel: string) => void;
 
   // OAuth actions
@@ -381,7 +381,7 @@ export const CONFIG_GROUPS: ConfigGroup[] = [
     icon: 'postman',
     fields: [
       { key: 'POSTMAN_ENABLED', label: 'Enable Postman Fetch', type: 'boolean', description: 'Auto-fetch Postman collections referenced from Jira tickets. When off, the agent ignores Postman links and will not ask for their content.', required: false, frozen: false, defaultValue: false },
-      { key: 'POSTMAN_API_KEY', label: 'Postman API Key', type: 'password', description: 'Postman API key for fetching collections', required: false, frozen: true },
+      { key: 'POSTMAN_API_KEY', label: 'Postman API Key', type: 'password', description: 'Postman API key for fetching collections referenced from Jira tickets. Required when POSTMAN_ENABLED is on. Generate one at https://www.postman.com/settings/me/api-keys (Postman has no OAuth — API key is the only auth mode).', required: false, frozen: false },
     ],
   },
 ];
@@ -714,9 +714,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     try {
       await api.saveNotificationConfig(get().notificationConfig);
       set({ notificationSaving: false });
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       set({ notificationSaving: false, error: message });
+      return false;
     }
   },
 

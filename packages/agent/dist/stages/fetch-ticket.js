@@ -340,24 +340,40 @@ async function stageFetchTicket(state) {
     }
     // ── Layer 6b: Connector URL routing (before UNFETCHABLE filter) ──
     const authRequiredUrls = [];
+    // Hard cap on connector fetches per ticket. Tickets with more than 3
+    // connector-routable URLs (gdrive + figma + postman combined) push the
+    // overflow to the manual-paste path with reason "Connector limit reached"
+    // regardless of OAuth state. Adjust with care: each connector fetch budgets
+    // ~15 KB content, so raising this raises the per-ticket context size.
     const MAX_CONNECTOR_ITEMS = 3;
     const connectorContents = state.data.ticket.connectorContents || [];
+    const aliasUrls = [];
     const { parseBoolean } = require("../lib/config-schema");
     if (connectorContents.length === 0) {
         // Route connector URLs to authenticated modules
         const connectorUrls = [];
         const remainingUrls = [];
+        // [oauth-connectors Decision 11] Unset enable-flag falls back to OAuth-token
+        // presence: completing OAuth in the UI is itself a strong signal of intent
+        // to use the connector. Explicit true/false still wins (kill switch preserved).
+        const gdriveOn = parseBoolean(process.env.GDRIVE_ENABLED) ?? !!process.env.GOOGLE_OAUTH_ACCESS_TOKEN;
+        // Figma supports both OAuth and PAT. Either credential (OAUTH access token
+        // or FIGMA_TOKEN PAT) should auto-enable the connector. Explicit FIGMA_ENABLED
+        // still wins as a kill switch.
+        const figmaOn = parseBoolean(process.env.FIGMA_ENABLED)
+            ?? (!!process.env.FIGMA_OAUTH_ACCESS_TOKEN || !!process.env.FIGMA_TOKEN);
+        const postmanOn = parseBoolean(process.env.POSTMAN_ENABLED); // no OAuth path — explicit only
         for (const url of externalUrls) {
             let matched = false;
-            if (parseBoolean(process.env.GDRIVE_ENABLED) && gdrive.matchUrl(url)) {
+            if (gdriveOn && gdrive.matchUrl(url)) {
                 connectorUrls.push({ url, connector: "gdrive", match: gdrive.matchUrl(url) });
                 matched = true;
             }
-            else if (parseBoolean(process.env.FIGMA_ENABLED) && figma.matchUrl(url)) {
+            else if (figmaOn && figma.matchUrl(url)) {
                 connectorUrls.push({ url, connector: "figma", match: figma.matchUrl(url) });
                 matched = true;
             }
-            else if (parseBoolean(process.env.POSTMAN_ENABLED) && postman.matchUrl(url)) {
+            else if (postmanOn && postman.matchUrl(url)) {
                 connectorUrls.push({ url, connector: "postman", match: postman.matchUrl(url) });
                 matched = true;
             }
@@ -365,10 +381,36 @@ async function stageFetchTicket(state) {
                 remainingUrls.push(url);
         }
         if (connectorUrls.length > 0) {
-            logInfo(`Connector URLs found: ${connectorUrls.length} (cap: ${MAX_CONNECTOR_ITEMS})`);
+            // Dedupe by connector identity so two URLs that resolve to the same
+            // underlying document (e.g. a Figma file at the same node-id with
+            // different tracking params) don't each consume a cap slot.
+            const dedupKey = (cu) => {
+                if (cu.connector === "gdrive")
+                    return `gdrive:${cu.match.fileId}${cu.match.gid ? `#${cu.match.gid}` : ""}`;
+                if (cu.connector === "figma")
+                    return `figma:${cu.match.fileKey}${cu.match.nodeId ? `#${cu.match.nodeId}` : ""}`;
+                if (cu.connector === "postman")
+                    return `postman:${cu.match.collectionId}`;
+                return `unknown:${cu.url}`;
+            };
+            const seen = new Set();
+            const uniqueConnectorUrls = [];
+            for (const cu of connectorUrls) {
+                const key = dedupKey(cu);
+                if (seen.has(key)) {
+                    aliasUrls.push(cu.url);
+                    continue;
+                }
+                seen.add(key);
+                uniqueConnectorUrls.push(cu);
+            }
+            if (aliasUrls.length > 0) {
+                logInfo(`Deduped ${aliasUrls.length} connector URL(s) pointing to documents already queued`);
+            }
+            logInfo(`Connector URLs found: ${uniqueConnectorUrls.length} (cap: ${MAX_CONNECTOR_ITEMS})`);
             // Enforce 3-item cap
-            const toProcess = connectorUrls.slice(0, MAX_CONNECTOR_ITEMS);
-            const overflow = connectorUrls.slice(MAX_CONNECTOR_ITEMS);
+            const toProcess = uniqueConnectorUrls.slice(0, MAX_CONNECTOR_ITEMS);
+            const overflow = uniqueConnectorUrls.slice(MAX_CONNECTOR_ITEMS);
             // Fetch in parallel
             const connResults = await Promise.allSettled(toProcess.map(async (cu) => {
                 logInfo(`  Connector fetch [${cu.connector}]: ${cu.url}`);
@@ -449,6 +491,11 @@ async function stageFetchTicket(state) {
             }
         }
         state.data.ticket.connectorContents = connectorContents;
+        // Persist any deduped alias URLs so explore-plan can treat them as fetched
+        // (content lives on the primary URL; aliases point to the same document).
+        if (aliasUrls.length > 0) {
+            state.data.ticket.connectorAliases = aliasUrls;
+        }
         save(state);
     }
     else {

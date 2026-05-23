@@ -82,13 +82,13 @@ exports.frozenConfigSchema = zod_1.z.object({
     SLACK_WEBHOOK: optionalUrlSchema,
     /** Slack user ID for owner mentions */
     OWNER_SLACK_ID: zod_1.z.string().optional(),
-    /** Slack user ID for Anshit mentions */
-    ANSHIT_SLACK_ID: zod_1.z.string().optional(),
+    /** Slack user ID for QA mentions */
+    QA_SLACK_ID: zod_1.z.string().optional(),
     // ── Jira approvers ──────────────────────────────────────────
     /** Jira account ID for owner (approver 1) */
     OWNER_JIRA_ID: zod_1.z.string().optional(),
-    /** Jira account ID for Anshit (approver 2) */
-    ANSHIT_JIRA_ID: zod_1.z.string().optional(),
+    /** Jira account ID for QA (approver 2) */
+    QA_JIRA_ID: zod_1.z.string().optional(),
     /** Allow any Jira user to approve */
     ALLOW_ANY_APPROVER: zod_1.z.boolean().default(false),
     // ── Environment URLs ─────────────────────────────────────────
@@ -212,6 +212,14 @@ exports.freshConfigSchema = zod_1.z.object({
     SKIP_SMOKE_CHECK: zod_1.z.boolean().default(false),
     /** Save Claude prompt/output to .debug/ directory */
     SAVE_DEBUG_OUTPUT: zod_1.z.boolean().default(false),
+    /** Enable Google Drive / Docs auto-fetch for URLs in tickets */
+    GDRIVE_ENABLED: zod_1.z.boolean().default(false),
+    /** Enable Figma design-file auto-fetch for URLs in tickets */
+    FIGMA_ENABLED: zod_1.z.boolean().default(false),
+    /** Enable Figma image OCR via Anthropic Vision (requires ANTHROPIC_API_KEY) */
+    FIGMA_VISION_ENABLED: zod_1.z.boolean().default(false),
+    /** Enable Postman collection auto-fetch for URLs in tickets */
+    POSTMAN_ENABLED: zod_1.z.boolean().default(false),
     // ── Limits ───────────────────────────────────────────────────
     /** Max code review rejection cycles before halting */
     MAX_REJECTIONS: zod_1.z.number().int().min(1).max(20).default(3),
@@ -310,7 +318,7 @@ exports.flatConfigSchema = exports.frozenConfigSchema.merge(exports.freshConfigS
         });
     }
     // Cross-field validation #5: Both approver IDs must not be the same
-    if (cfg.OWNER_JIRA_ID && cfg.ANSHIT_JIRA_ID && cfg.OWNER_JIRA_ID === cfg.ANSHIT_JIRA_ID) {
+    if (cfg.OWNER_JIRA_ID && cfg.QA_JIRA_ID && cfg.OWNER_JIRA_ID === cfg.QA_JIRA_ID) {
         ctx.addIssue({
             code: zod_1.z.ZodIssueCode.custom,
             message: 'Both approver IDs are the same — dual approval gate will be ineffective.',
@@ -318,7 +326,7 @@ exports.flatConfigSchema = exports.frozenConfigSchema.merge(exports.freshConfigS
         });
     }
     // Cross-field validation #6: At least one approver OR ALLOW_ANY_APPROVER
-    if (!cfg.OWNER_JIRA_ID && !cfg.ANSHIT_JIRA_ID && !cfg.ALLOW_ANY_APPROVER) {
+    if (!cfg.OWNER_JIRA_ID && !cfg.QA_JIRA_ID && !cfg.ALLOW_ANY_APPROVER) {
         ctx.addIssue({
             code: zod_1.z.ZodIssueCode.custom,
             message: 'Both approver IDs empty and ALLOW_ANY_APPROVER is false. Set at least one approver or enable ALLOW_ANY_APPROVER.',

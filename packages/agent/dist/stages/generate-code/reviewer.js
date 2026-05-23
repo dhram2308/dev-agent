@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runReviewerAndSecurity = runReviewerAndSecurity;
-const { cfg, TICKET, REVIEWER_TIMEOUT_MS, DEVELOPER_TIMEOUT_MS, applyComplexityTimeout } = require("../../lib/config");
+const { cfg, TICKET, REVIEWER_TIMEOUT_MS, SECURITY_TIMEOUT_MS, DEVELOPER_TIMEOUT_MS, REVIEWER_MAX_TURNS, FIXER_MAX_TURNS, applyComplexityTimeout } = require("../../lib/config");
 const { logInfo, logOk, logErr, logWarn } = require("../../lib/logging");
 const { truncateWithIndicator, sanitizeForPrompt } = require("../../lib/utils");
 const { save } = require("../../lib/state");
@@ -9,6 +9,8 @@ const { runAgentsTeam, runSingleAgent } = require("../../lib/agents-team");
 const { localGetChanges, localGetOriginal } = require("../../lib/local-repo");
 const { categorizeIssues } = require("../../lib/jira");
 const { parseVerdict } = require("./fixer");
+const { _validateDevChanges } = require("./developer");
+const { buildDecisionsBlock } = require("./decisions-block");
 /**
  * Run Reviewer + Security Agents in parallel, then Fixer if needed.
  */
@@ -24,6 +26,9 @@ async function runReviewerAndSecurity(ctx, fileChanges, originalFiles) {
     const changedFilesList = fileChanges.map((c) => `- ${c.action}: ${c.file_path}`).join("\n");
     // F9/Z2: Include approved plan for Reviewer
     const planDigest = approvedPlan ? truncateWithIndicator(approvedPlan, 8000) : "(no plan available)";
+    // Decisions from clarifying-questions — all three agents here need them
+    // so they don't flag correctly-answered items as wrong.
+    const decisionsBlock = buildDecisionsBlock(state.data._qa_answers);
     const reviewerPrompt = `You are the **Reviewer Agent** at MasterIndia. Review the code changes in this repository.\n\n` +
         `YOU HAVE DIRECT ACCESS TO THE REPOSITORY. Use Read/Grep/Glob tools to verify code quality.\n\n` +
         `## Review checklist:\n` +
@@ -33,10 +38,16 @@ async function runReviewerAndSecurity(ctx, fileChanges, originalFiles) {
         `4. **Unnecessary new files**: Could any new file be an update to an existing file instead?\n` +
         `5. **Generic VITE_PRODUCT_ID checks**: Flag as CRITICAL if code uses generic multi-product conditionals (e.g. \`=== '1' || === '2'\`) instead of the exact enterprise product ID.\n` +
         `6. **Plan Compliance**: Compare changes against the approved plan below. Flag if Developer skipped steps, modified unplanned files, or deviated.\n` +
-        `7. **Non-enterprise scope**: Flag as CRITICAL if code modifies or references other product lines (SME, GST, TaxPro, etc.).\n\n` +
+        `7. **Non-enterprise scope**: Flag as CRITICAL if code modifies or references other product lines (SME, GST, TaxPro, etc.).\n` +
+        // M19/M20: Defense in depth — even if the Security Agent runs, the
+        // Reviewer should independently flag the most common ship-stoppers so
+        // the Fixer can pick up either signal.
+        `8. **Hardcoded secrets**: API keys, tokens, passwords, private keys in source? Flag as CRITICAL.\n` +
+        `9. **Injection risk**: String concatenation building SQL, shell commands, or API URLs from user input? Flag as CRITICAL.\n\n` +
         `## Approved Plan:\n${planDigest}\n\n` +
         `Ticket: ${TICKET} — ${sanitizeForPrompt(summary)}\n\n` +
         `## Changed files:\n${changedFilesList}\n\n` +
+        `${decisionsBlock}` +
         `Read the changed files, compare against existing patterns, and list all issues found.\n\n` +
         `**IMPORTANT**: End your response with EXACTLY one of: \`VERDICT: PASS\` or \`VERDICT: FAIL\``;
     const securityPrompt = `You are the **Security Agent**. Audit the code changes in this repository for security issues.\n\n` +
@@ -52,6 +63,7 @@ async function runReviewerAndSecurity(ctx, fileChanges, originalFiles) {
         `8. **Product Scope**: Ensure no cross-product data leakage (enterprise data stays enterprise).\n\n` +
         `Ticket: ${TICKET} — ${sanitizeForPrompt(summary)}\n\n` +
         `## Changed files:\n${changedFilesList}\n\n` +
+        `${decisionsBlock}` +
         `Read the changed files and list all security issues with severity (CRITICAL/HIGH/MEDIUM/LOW).\n\n` +
         `**IMPORTANT**: End your response with EXACTLY one of: \`VERDICT: PASS\` or \`VERDICT: FAIL\``;
     const { reviewResult, securityResult } = await runAgentsTeam({
@@ -61,16 +73,24 @@ async function runReviewerAndSecurity(ctx, fileChanges, originalFiles) {
                 name: "Reviewer Agent",
                 prompt: reviewerPrompt,
                 timeout: applyComplexityTimeout(REVIEWER_TIMEOUT_MS, state),
-                opts: { cwd: cfg.localRepo, maxTurns: 15, allowedTools: ["Read", "Grep", "Glob"] },
+                opts: { cwd: cfg.localRepo, maxTurns: REVIEWER_MAX_TURNS, allowedTools: ["Read", "Grep", "Glob"] },
                 required: true,
                 checkpointKey: "_reviewer_result",
             },
             {
                 name: "Security Agent",
                 prompt: securityPrompt,
-                timeout: applyComplexityTimeout(REVIEWER_TIMEOUT_MS, state),
-                opts: { cwd: cfg.localRepo, maxTurns: 10, allowedTools: ["Read", "Grep", "Glob"] },
-                required: false,
+                // M23: SECURITY_TIMEOUT_MS lets ops give the security audit a longer
+                // budget than the reviewer pass — deep grep + file reads can be
+                // slow. Falls back to REVIEWER_TIMEOUT_MS when unset.
+                timeout: applyComplexityTimeout(SECURITY_TIMEOUT_MS || REVIEWER_TIMEOUT_MS, state),
+                opts: { cwd: cfg.localRepo, maxTurns: REVIEWER_MAX_TURNS, allowedTools: ["Read", "Grep", "Glob"] },
+                // H4: Security audit is a hard gate. Marking `required: true` makes
+                // the team throw if the security agent errors/times out, so the
+                // stage retries via executeWithRecovery instead of silently shipping
+                // code with no security review (the prior `required: false` + empty
+                // output parsed as "no issues found").
+                required: true,
                 checkpointKey: "_security_result",
             },
         ],
@@ -89,8 +109,18 @@ async function runReviewerAndSecurity(ctx, fileChanges, originalFiles) {
     const reviewPassed = parseVerdict(reviewResult, "lgtm");
     const securityPassed = parseVerdict(securityResult, "secure");
     const hasReviewIssues = !reviewPassed;
-    const hasSecurityIssues = securityResult && securityResult.length > 20 && !securityPassed;
+    // H4: With security now required:true, an empty/short securityResult would
+    // have surfaced as a team failure. If we reach here with a result, treat
+    // anything that's not a clear PASS as an issue worth fixing — including
+    // short or malformed outputs (previously silently ignored).
+    const hasSecurityIssues = !securityPassed;
     if (hasReviewIssues || hasSecurityIssues) {
+        // H1: Wire up the rejection counter. Previously read but never written —
+        // the MAX_REJECTIONS guard at generate-code/index.ts was dead code.
+        // Bump once per fixer invocation (a fix loop = one rejection cycle).
+        state.data._codegen_rejections = (state.data._codegen_rejections || 0) + 1;
+        logInfo(`H1: codegen rejection #${state.data._codegen_rejections} (review issues: ${hasReviewIssues}, security issues: ${hasSecurityIssues})`);
+        save(state);
         const categorized = categorizeIssues(hasReviewIssues ? reviewResult : null, hasSecurityIssues ? securityResult : null);
         const allIssues = categorized.map((c) => `## ${c.label} (${c.type})\n${c.content}`).join("\n\n");
         const priorityOrder = categorized.map((c) => c.type).join(" > ");
@@ -109,9 +139,10 @@ async function runReviewerAndSecurity(ctx, fileChanges, originalFiles) {
                 `If non-enterprise scope was flagged, remove all references to other product lines (SME, GST, TaxPro, etc.).\n\n` +
                 `${allIssues}\n\n` +
                 `## Changed files:\n${changedFilesList}\n\n` +
+                `${decisionsBlock}` +
                 `Read each flagged file, apply the fixes, and confirm what you changed.`,
             timeout: applyComplexityTimeout(DEVELOPER_TIMEOUT_MS, state),
-            opts: { cwd: cfg.localRepo, maxTurns: 20, allowedTools: ["Read", "Write", "Edit", "Grep", "Glob"] },
+            opts: { cwd: cfg.localRepo, maxTurns: FIXER_MAX_TURNS, allowedTools: ["Read", "Write", "Edit", "Grep", "Glob"] },
             state,
             checkpointKey: "_fixer_result",
             required: true,
@@ -130,9 +161,20 @@ async function runReviewerAndSecurity(ctx, fileChanges, originalFiles) {
                     originalFiles[c.file_path] = orig;
             }
         }
+        // H2: Re-run GQ7 (unresolved imports) + F3 (forbidden paths) after the
+        // fixer modified the code. A fixer can easily reference a path that
+        // doesn't exist or write to .env / package.json — same risk surface as
+        // the Developer Agent. Throws (with state.data.feedback set) so the
+        // stage retries with feedback in the next developer prompt.
+        _validateDevChanges(state);
     }
     else {
         logOk("Review: LGTM · Security: SECURE");
+        // M21: Use a distinct flag for "nothing to fix" so a future re-entry
+        // can tell the difference between "fixer ran successfully" and
+        // "fixer was never needed". _fixed is still set to keep the existing
+        // D10 resume fast-path working.
+        state.data._review_clean = true;
         state.data._fixed = true;
         save(state);
     }

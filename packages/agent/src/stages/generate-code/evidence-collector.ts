@@ -242,29 +242,33 @@ function setupNetworkCapture(page: any): { summary: () => any; reset: () => void
  */
 function setupConsoleCapture(page: any): { errors: () => any[]; reset: () => void } {
   const MAX_ENTRIES = 200; // Cap to prevent unbounded memory growth
+  // M9: Cap by total bytes too. Without this, 200 × 500 chars = ~100KB
+  // of console text alone could bloat the gap-analysis prompt — third-
+  // party SDK spam (analytics, sentry, ads) commonly hits the entry cap
+  // but only contributes noise. Stop accepting NEW entries past
+  // MAX_TOTAL_BYTES; higher-severity entries are still preserved by the
+  // downstream classification + sort.
+  const MAX_TOTAL_BYTES = 32_000;
   const entries: any[] = [];
+  let totalBytes = 0;
 
   page.on("console", (msg: any) => {
-    if (entries.length >= MAX_ENTRIES) return;
+    if (entries.length >= MAX_ENTRIES || totalBytes >= MAX_TOTAL_BYTES) return;
     const type = msg.type();
     if (type === "error" || type === "warning") {
-      entries.push({
-        type,
-        text: msg.text().substring(0, 500),
-        url: msg.location()?.url || "",
-        timestamp: Date.now(),
-      });
+      const text = msg.text().substring(0, 500);
+      const url = msg.location()?.url || "";
+      totalBytes += text.length + url.length;
+      entries.push({ type, text, url, timestamp: Date.now() });
     }
   });
 
   page.on("pageerror", (err: any) => {
-    if (entries.length >= MAX_ENTRIES) return;
-    entries.push({
-      type: "pageerror",
-      text: err.message.substring(0, 500),
-      stack: err.stack ? err.stack.substring(0, 500) : "",
-      timestamp: Date.now(),
-    });
+    if (entries.length >= MAX_ENTRIES || totalBytes >= MAX_TOTAL_BYTES) return;
+    const text = err.message.substring(0, 500);
+    const stack = err.stack ? err.stack.substring(0, 500) : "";
+    totalBytes += text.length + stack.length;
+    entries.push({ type: "pageerror", text, stack, timestamp: Date.now() });
   });
 
   return {
@@ -311,6 +315,7 @@ function setupConsoleCapture(page: any): { errors: () => any[]; reset: () => voi
     },
     reset() {
       entries.length = 0;
+      totalBytes = 0;
     },
   };
 }

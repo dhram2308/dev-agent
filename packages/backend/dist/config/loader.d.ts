@@ -77,9 +77,9 @@ export interface ExtendedConfig {
     ciPoll: number;
     ciTimeout: number;
     jiraCommentsEnabled: boolean;
-    anshitJiraId?: string;
+    qaJiraId?: string;
     allowAnyApprover: boolean;
-    anshitSlackId?: string;
+    qaSlackId?: string;
     maxPlanRejections: number;
     maxPromptTokens: number;
     fetchConcurrency: number;

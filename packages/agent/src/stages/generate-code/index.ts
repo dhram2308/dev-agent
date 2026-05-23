@@ -223,6 +223,17 @@ async function stageGenerateCode(state: PipelineState): Promise<void> {
         if (orig) originalFiles[c.file_path] = orig;
       }
     }
+    // L7: Prune originalFiles entries that no longer correspond to an
+    // `update` action in the final changeset. A fixer that deleted a file
+    // and then re-created it (now an `add`/`create`, not an `update`)
+    // would leave a stale original in the map, which the diff viewer
+    // would pair against the new content as if it were an update.
+    const liveUpdatePaths = new Set(
+      fileChanges.filter((c: any) => c.action === "update").map((c: any) => c.file_path),
+    );
+    for (const k of Object.keys(originalFiles)) {
+      if (!liveUpdatePaths.has(k)) delete originalFiles[k];
+    }
 
     // Zero-files guard: verify at least one file was changed before push
     if (!fileChanges || fileChanges.length === 0) {

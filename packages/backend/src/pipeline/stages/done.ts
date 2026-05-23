@@ -23,6 +23,7 @@ import { loadConfig } from '../../config/loader';
 import { JiraService } from '../../services/jira';
 import { SlackService } from '../../services/slack';
 import type { PipelineState, StageHandler } from '@shared/types';
+import { isChannelEnabled } from '../../lib/notification-gates';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -79,21 +80,23 @@ export function createDoneHandler(deps: DoneDeps): StageHandler {
             ? `\n\nKnown Limitations:\n${warnings.map((w) => `- [${w.stage}] ${w.message}`).join('\n')}`
             : '';
 
-        await jira.addComment(
-          ticket,
-          `Deployment Complete\n` +
-          `\n` +
-          `${ticket}: ${ticketData?.summary || ''}\n` +
-          `\n` +
-          `Summary:\n` +
-          `- QA MR: ${data.qa_mr_url || '--'}\n` +
-          `- Pre-Prod MR: ${data.preprod_mr_url || '--'}\n` +
-          `- Production MR: ${data.prod_mr_url || '--'}\n` +
-          `\n` +
-          `Total time: ${elapsed} minutes\n` +
-          `All gates passed. Production is live.` +
-          warningText,
-        );
+        if (isChannelEnabled('done', 'jira')) {
+          await jira.addComment(
+            ticket,
+            `Deployment Complete\n` +
+            `\n` +
+            `${ticket}: ${ticketData?.summary || ''}\n` +
+            `\n` +
+            `Summary:\n` +
+            `- QA MR: ${data.qa_mr_url || '--'}\n` +
+            `- Pre-Prod MR: ${data.preprod_mr_url || '--'}\n` +
+            `- Production MR: ${data.prod_mr_url || '--'}\n` +
+            `\n` +
+            `Total time: ${elapsed} minutes\n` +
+            `All gates passed. Production is live.` +
+            warningText,
+          );
+        }
         data.final_comment = true;
         save(state);
       }
@@ -106,14 +109,16 @@ export function createDoneHandler(deps: DoneDeps): StageHandler {
           : 'unknown';
 
         const ticketData = data.ticket as { summary?: string } | undefined;
-        await slack.send(
-          `${ticket} deployed to Production\n` +
-          `${ticketData?.summary || ''}\n\n` +
-          `Jira: ${jira.issueUrl(ticket)}\n` +
-          `MR: ${data.prod_mr_url || '--'}\n` +
-          `Time: ${elapsed} min`,
-          [cfg.slack.ownerSlackId || ''],
-        );
+        if (isChannelEnabled('done', 'slack')) {
+          await slack.send(
+            `${ticket} deployed to Production\n` +
+            `${ticketData?.summary || ''}\n\n` +
+            `Jira: ${jira.issueUrl(ticket)}\n` +
+            `MR: ${data.prod_mr_url || '--'}\n` +
+            `Time: ${elapsed} min`,
+            [cfg.slack.ownerSlackId || ''],
+          );
+        }
         data.final_slack = true;
         save(state);
       }

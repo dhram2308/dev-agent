@@ -18,9 +18,9 @@ export interface ConfigSnapshot {
     BRANCH_PREPROD: string;
     BRANCH_PROD: string;
     OWNER_JIRA_ID?: string;
-    ANSHIT_JIRA_ID?: string;
+    QA_JIRA_ID?: string;
     OWNER_SLACK_ID?: string;
-    ANSHIT_SLACK_ID?: string;
+    QA_SLACK_ID?: string;
     QA_MAIN_USER?: string;
     QA_MAIN_PASS_SET: boolean;
     QA1_USER?: string;
