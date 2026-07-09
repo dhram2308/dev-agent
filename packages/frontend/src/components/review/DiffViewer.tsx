@@ -16,6 +16,11 @@ import { PlanTabs } from './PlanTabs';
 import type { ReviewData } from '../../types';
 import type { LiveEntry } from '../../store/codegenLive';
 
+/** DOM id for a file's section anchor in the concatenated diff list below. */
+function fileSectionId(file: string): string {
+  return `file-section-${encodeURIComponent(file)}`;
+}
+
 // Inject the live-pulse keyframe once. Safe in SSR because guarded by `document`.
 if (typeof document !== 'undefined' && !document.getElementById('mi-live-pulse-style')) {
   const s = document.createElement('style');
@@ -323,10 +328,14 @@ export function DiffViewer({ source = 'frozen', liveData = null, frozenData = nu
     }
   }, [reviewData, selectedFile, setSelectedFile]);
 
-  // Find the selected change
-  const selectedChange = reviewData?.changes?.find(
-    (c) => c.file === selectedFile,
-  );
+  // Jump to a file's section in the concatenated diff list below (GitLab-style:
+  // every changed file renders in one continuous scroll, each with its own
+  // sticky header — see DiffPane.tsx's `fileHeader` style — so clicking a file
+  // in the sidebar scrolls to it rather than swapping which single file shows).
+  const scrollToFile = useCallback((file: string) => {
+    setSelectedFile(file);
+    document.getElementById(fileSectionId(file))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [setSelectedFile]);
 
   const hasPlan = reviewData?.plan && Object.keys(reviewData.plan).length > 0;
   const hasChanges = reviewData?.changes && reviewData.changes.length > 0;
@@ -501,24 +510,28 @@ export function DiffViewer({ source = 'frozen', liveData = null, frozenData = nu
               <FileTree
                 changes={reviewData.changes!}
                 selectedFile={selectedFile}
-                onSelect={setSelectedFile}
+                onSelect={scrollToFile}
               />
             </div>
           )}
 
-          {/* Diff area */}
+          {/* Diff area — every changed file renders here, one after another,
+              in one continuous scroll (GitLab-style) rather than showing only
+              the sidebar's selected file. Each DiffPane's own file header is
+              `position: sticky; top: 0` (see DiffPane.tsx), so as this area
+              scrolls, the current file's header stays pinned until its
+              section scrolls fully past, then the next file's header takes
+              over automatically — no per-file scroll-tracking needed, this
+              is just how stacked `position: sticky` headers behave. */}
           <div style={styles.diffArea}>
-            {selectedChange ? (
-              <DiffPane
-                change={selectedChange}
-                viewMode={viewMode}
-              />
+            {hasChanges ? (
+              reviewData.changes!.map((change) => (
+                <div key={change.file} id={fileSectionId(change.file)}>
+                  <DiffPane change={change} viewMode={viewMode} />
+                </div>
+              ))
             ) : (
-              <div style={styles.empty}>
-                {hasChanges
-                  ? 'Select a file to view changes'
-                  : 'No file changes in this review'}
-              </div>
+              <div style={styles.empty}>No file changes in this review</div>
             )}
           </div>
         </div>
