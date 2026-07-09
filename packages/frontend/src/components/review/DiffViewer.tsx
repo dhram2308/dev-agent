@@ -21,6 +21,30 @@ function fileSectionId(file: string): string {
   return `file-section-${encodeURIComponent(file)}`;
 }
 
+/**
+ * Find the nearest scrollable ancestor of `el` — either the standalone
+ * Review page's own page scroll (falls through to `window`) or ChangesTab's
+ * bounded `overflow: auto` panel. Needed because the scroll-spy has to
+ * listen on whichever element is actually scrolling, not always the window.
+ */
+function findScrollParent(el: HTMLElement): Window | HTMLElement {
+  let node: HTMLElement | null = el.parentElement;
+  while (node) {
+    const style = window.getComputedStyle(node);
+    // `overflow-y: auto/scroll` alone isn't enough — e.g. this app's own
+    // <body> carries that rule globally but (with no bounded height) never
+    // actually has anything to scroll, so real scrolling happens at the
+    // window/<html> level instead. Require genuine overflow (scrollHeight >
+    // clientHeight) so a styled-but-inert ancestor like that doesn't get
+    // mistaken for the element that actually receives scroll events.
+    if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return window;
+}
+
 // Inject the live-pulse keyframe once. Safe in SSR because guarded by `document`.
 if (typeof document !== 'undefined' && !document.getElementById('mi-live-pulse-style')) {
   const s = document.createElement('style');
@@ -158,7 +182,16 @@ const styles = {
   },
   diffArea: {
     flex: 1,
-    overflowX: 'auto' as const,
+    // No `overflow` here at all, deliberately. Per spec, setting either
+    // overflow-x or overflow-y to non-`visible` forces the OTHER axis to
+    // become `auto` too if left unset (you can't have "scroll horizontally
+    // only") — that would make this element the nearest "scroll container"
+    // for CSS purposes, which breaks every DiffPane's sticky file header:
+    // they'd stick relative to this box's own (always-zero) internal
+    // scroll offset instead of the real page/panel scroll, so they'd never
+    // actually appear to stay put as the user scrolls. Long lines already
+    // get their own horizontal scroll per table cell (DiffPane's
+    // `lineContent` style), so this container doesn't need one itself.
     background: 'var(--bg-base)',
     borderRadius: '0 0 var(--radius-md) 0',
     minWidth: 0,
@@ -327,6 +360,53 @@ export function DiffViewer({ source = 'frozen', liveData = null, frozenData = nu
       setSelectedFile(reviewData.changes[0].file);
     }
   }, [reviewData, selectedFile, setSelectedFile]);
+
+  // Scroll-spy: keep the sidebar's highlighted file in sync with whichever
+  // file is actually scrolled under the sticky header, not just the last one
+  // clicked — mirrors GitLab, where scrolling through the diff alone moves
+  // the active file indicator along with it.
+  useEffect(() => {
+    const changes = reviewData?.changes;
+    if (!changes || changes.length === 0) return;
+
+    const sectionEls = changes
+      .map((c) => document.getElementById(fileSectionId(c.file)))
+      .filter((el): el is HTMLElement => el !== null);
+    if (sectionEls.length === 0) return;
+
+    const scrollParent = findScrollParent(sectionEls[0]);
+
+    let ticking = false;
+    const updateActiveFile = (): void => {
+      ticking = false;
+      const containerTop = scrollParent === window ? 0 : (scrollParent as HTMLElement).getBoundingClientRect().top;
+      // A couple pixels below the scroll container's top edge — roughly
+      // where the sticky header sits — so the file whose header has just
+      // reached that line is the one marked active.
+      const activationLine = containerTop + 4;
+      let activeIdx = 0;
+      for (let i = 0; i < sectionEls.length; i++) {
+        if (sectionEls[i].getBoundingClientRect().top <= activationLine) activeIdx = i;
+        else break;
+      }
+      const activeFile = changes[activeIdx].file;
+      if (useReviewStore.getState().selectedFile !== activeFile) {
+        setSelectedFile(activeFile);
+      }
+    };
+
+    const onScroll = (): void => {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(updateActiveFile);
+      }
+    };
+
+    scrollParent.addEventListener('scroll', onScroll, { passive: true });
+    updateActiveFile();
+
+    return () => scrollParent.removeEventListener('scroll', onScroll);
+  }, [reviewData?.changes, setSelectedFile]);
 
   // Jump to a file's section in the concatenated diff list below (GitLab-style:
   // every changed file renders in one continuous scroll, each with its own
