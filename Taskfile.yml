@@ -1,0 +1,284 @@
+# Taskfile — dev process management (backend + frontend)
+#
+# Requires https://taskfile.dev (`brew install go-task` / `go install
+# github.com/go-task/task/v3/cmd/task@latest`).
+#
+# Backend runs TS-native via `tsx watch` (packages/backend/dev-boot.js,
+# same entrypoint as `npm run dev:full` / scripts/agent-dev-mode.sh) and
+# the frontend runs via Vite. Both share one API_TOKEN so the frontend's
+# requests authenticate against the backend, generated once per run
+# into .run/api-token.
+#
+# Usage:
+#   task start                # backend + frontend, backgrounded
+#   task start-backend        # backend only (dev, tsx watch)
+#   task start-backend-prod   # backend only (production, compiled dist/)
+#   task start-frontend       # frontend only
+#   task stop                 # stop everything (dev + prod backend + frontend)
+#   task restart              # stop + start both (dev backend + frontend)
+#   task status               # show what's running
+#   task logs-backend         # tail -f backend (dev) log
+#   task logs-backend-prod    # tail -f backend (prod) log
+#   task logs-frontend        # tail -f frontend log
+#   task clear-cache          # clear Vite + tsc build caches
+#   task clean                # stop + remove .run/ (pids, logs, token)
+
+version: '3'
+
+vars:
+  RUN_DIR: '.run'
+  BACKEND_PORT: 3000
+  FRONTEND_PORT: 5173
+  BACKEND_PID_FILE: '{{.RUN_DIR}}/backend.pid'
+  FRONTEND_PID_FILE: '{{.RUN_DIR}}/frontend.pid'
+  BACKEND_PROD_PID_FILE: '{{.RUN_DIR}}/backend-prod.pid'
+  BACKEND_LOG: '{{.RUN_DIR}}/backend.log'
+  FRONTEND_LOG: '{{.RUN_DIR}}/frontend.log'
+  BACKEND_PROD_LOG: '{{.RUN_DIR}}/backend-prod.log'
+  TOKEN_FILE: '{{.RUN_DIR}}/api-token'
+
+tasks:
+
+  default:
+    desc: List available tasks
+    silent: true
+    cmds:
+      - task --list
+
+  # ── Internal helpers ──────────────────────────────────────────
+
+  _run-dir:
+    internal: true
+    silent: true
+    status:
+      - test -d {{.RUN_DIR}}
+    cmds:
+      - mkdir -p {{.RUN_DIR}}
+
+  _token:
+    internal: true
+    silent: true
+    deps: [_run-dir]
+    status:
+      - test -s {{.TOKEN_FILE}}
+    cmds:
+      - openssl rand -hex 24 > {{.TOKEN_FILE}}
+
+  # ── Start ──────────────────────────────────────────────────────
+
+  start:
+    desc: Start backend + frontend dev servers (backgrounded)
+    deps: [start-backend, start-frontend]
+    silent: true
+    cmds:
+      - echo ""
+      - echo "Frontend  http://localhost:{{.FRONTEND_PORT}}  ← use this"
+      - echo "Backend   http://localhost:{{.BACKEND_PORT}}   (API only)"
+      - echo ""
+      - echo "Logs  task logs-backend | task logs-frontend"
+      - echo "Stop  task stop"
+
+  start-backend:
+    desc: Start the backend dev server (tsx watch) in the background
+    deps: [_run-dir, _token]
+    status:
+      # `npx tsx watch` spawns a 3-deep process tree (npm exec -> tsx watch ->
+      # the actual node worker) and tsx's own watcher can respawn the worker
+      # on its own, so a single tracked pid is not a reliable liveness or
+      # kill target. Match by command-line pattern instead (see cmds below).
+      - pgrep -f "packages/backend/dev-boot.js" >/dev/null
+    cmds:
+      - |
+        bash -c '
+          pkill -9 -f "packages/backend/dev-boot.js" 2>/dev/null || true
+          pkill -9 -f "packages/backend/boot.js" 2>/dev/null || true
+          pids=$(lsof -ti:{{.BACKEND_PORT}} 2>/dev/null || true)
+          [ -n "$pids" ] && kill -9 $pids 2>/dev/null || true
+          rm -f {{.BACKEND_PROD_PID_FILE}}
+          API_TOKEN="$(cat {{.TOKEN_FILE}})" \
+            nohup npx tsx watch --clear-screen=false packages/backend/dev-boot.js \
+            > {{.BACKEND_LOG}} 2>&1 &
+          echo $! > {{.BACKEND_PID_FILE}}
+        '
+        sleep 1
+        echo "backend started (logs: {{.BACKEND_LOG}})"
+
+  start-frontend:
+    desc: Start the frontend Vite dev server in the background
+    deps: [_run-dir, _token]
+    status:
+      # See start-backend: match by pattern, not a single tracked pid.
+      - pgrep -f "vite --port {{.FRONTEND_PORT}}" >/dev/null
+    cmds:
+      - |
+        bash -c '
+          pkill -9 -f "vite --port {{.FRONTEND_PORT}}" 2>/dev/null || true
+          pids=$(lsof -ti:{{.FRONTEND_PORT}} 2>/dev/null || true)
+          [ -n "$pids" ] && kill -9 $pids 2>/dev/null || true
+          cd packages/frontend
+          VITE_API_TOKEN="$(cat ../../{{.TOKEN_FILE}})" \
+            nohup npx vite --port {{.FRONTEND_PORT}} \
+            > ../../{{.FRONTEND_LOG}} 2>&1 &
+          echo $! > ../../{{.FRONTEND_PID_FILE}}
+        '
+        sleep 1
+        echo "frontend started (logs: {{.FRONTEND_LOG}})"
+
+  start-backend-prod:
+    desc: Start the backend in production mode (compiled dist/, no watch — like `npm start`)
+    deps: [_run-dir, _token]
+    status:
+      - pgrep -f "packages/backend/boot.js" >/dev/null
+    cmds:
+      - |
+        if [ ! -f packages/backend/dist/server/http-server.js ]; then
+          echo "backend dist/ not built — run: npm run build:shared && npm run build:agent && npm run build:backend"
+          exit 1
+        fi
+        bash -c '
+          pkill -9 -f "packages/backend/boot.js" 2>/dev/null || true
+          pkill -9 -f "packages/backend/dev-boot.js" 2>/dev/null || true
+          pids=$(lsof -ti:{{.BACKEND_PORT}} 2>/dev/null || true)
+          [ -n "$pids" ] && kill -9 $pids 2>/dev/null || true
+          rm -f {{.BACKEND_PID_FILE}}
+          API_TOKEN="$(cat {{.TOKEN_FILE}})" NODE_ENV=production \
+            nohup node packages/backend/boot.js \
+            > {{.BACKEND_PROD_LOG}} 2>&1 &
+          echo $! > {{.BACKEND_PROD_PID_FILE}}
+        '
+        sleep 1
+        echo "backend (prod) started (logs: {{.BACKEND_PROD_LOG}})"
+
+  # ── Stop ───────────────────────────────────────────────────────
+
+  stop:
+    desc: Stop backend (dev + prod) + frontend dev servers
+    deps: [stop-backend, stop-backend-prod, stop-frontend]
+
+  stop-backend:
+    desc: Stop the backend dev server
+    silent: true
+    cmds:
+      # Kill by command-line pattern (catches the whole npx/tsx-watch
+      # process tree at once, not just one tracked pid — see start-backend).
+      - |
+        bash -c '
+          pkill -9 -f "packages/backend/dev-boot.js" 2>/dev/null || true
+          pids=$(lsof -ti:{{.BACKEND_PORT}} 2>/dev/null || true)
+          [ -n "$pids" ] && kill -9 $pids 2>/dev/null || true
+          rm -f {{.BACKEND_PID_FILE}}
+        '
+        echo "backend stopped"
+
+  stop-backend-prod:
+    desc: Stop the production-mode backend
+    silent: true
+    cmds:
+      - |
+        bash -c '
+          pkill -9 -f "packages/backend/boot.js" 2>/dev/null || true
+          pids=$(lsof -ti:{{.BACKEND_PORT}} 2>/dev/null || true)
+          [ -n "$pids" ] && kill -9 $pids 2>/dev/null || true
+          rm -f {{.BACKEND_PROD_PID_FILE}}
+        '
+        echo "backend (prod) stopped"
+
+  stop-frontend:
+    desc: Stop the frontend dev server
+    silent: true
+    cmds:
+      - |
+        bash -c '
+          pkill -9 -f "vite --port {{.FRONTEND_PORT}}" 2>/dev/null || true
+          pids=$(lsof -ti:{{.FRONTEND_PORT}} 2>/dev/null || true)
+          [ -n "$pids" ] && kill -9 $pids 2>/dev/null || true
+          rm -f {{.FRONTEND_PID_FILE}}
+        '
+        echo "frontend stopped"
+
+  # ── Restart ────────────────────────────────────────────────────
+
+  restart:
+    desc: Restart backend + frontend dev servers
+    cmds:
+      - task: stop
+      - task: start
+
+  restart-backend:
+    desc: Restart the backend dev server
+    cmds:
+      - task: stop-backend
+      - task: start-backend
+
+  restart-backend-prod:
+    desc: Restart the production-mode backend
+    cmds:
+      - task: stop-backend-prod
+      - task: start-backend-prod
+
+  restart-frontend:
+    desc: Restart the frontend dev server
+    cmds:
+      - task: stop-frontend
+      - task: start-frontend
+
+  # ── Status / logs ──────────────────────────────────────────────
+
+  status:
+    desc: Show whether backend/frontend dev servers are running
+    silent: true
+    cmds:
+      # Checked by command-line pattern, not a single tracked pid — see
+      # start-backend for why a tracked pid alone isn't reliable here.
+      - |
+        if pgrep -f "packages/backend/dev-boot.js" >/dev/null 2>&1; then
+          echo "backend       running (:{{.BACKEND_PORT}}) [dev]"
+        else
+          echo "backend       stopped [dev]"
+        fi
+      - |
+        if pgrep -f "packages/backend/boot.js" >/dev/null 2>&1; then
+          echo "backend       running (:{{.BACKEND_PORT}}) [prod]"
+        else
+          echo "backend       stopped [prod]"
+        fi
+      - |
+        if pgrep -f "vite --port {{.FRONTEND_PORT}}" >/dev/null 2>&1; then
+          echo "frontend      running (:{{.FRONTEND_PORT}})"
+        else
+          echo "frontend      stopped"
+        fi
+
+  logs-backend:
+    desc: Tail the backend dev server log
+    interactive: true
+    cmds:
+      - tail -f {{.BACKEND_LOG}}
+
+  logs-backend-prod:
+    desc: Tail the production-mode backend log
+    interactive: true
+    cmds:
+      - tail -f {{.BACKEND_PROD_LOG}}
+
+  logs-frontend:
+    desc: Tail the frontend dev server log
+    interactive: true
+    cmds:
+      - tail -f {{.FRONTEND_LOG}}
+
+  # ── Cleanup ────────────────────────────────────────────────────
+
+  clean:
+    desc: Stop dev servers and remove .run/ (pids, logs, token)
+    cmds:
+      - task: stop
+      - rm -rf {{.RUN_DIR}}
+
+  clear-cache:
+    desc: Clear Vite dep cache + TS incremental build caches (tsbuildinfo)
+    silent: true
+    cmds:
+      - rm -rf packages/frontend/node_modules/.vite
+      - rm -f packages/shared/tsconfig.tsbuildinfo packages/agent/tsconfig.tsbuildinfo packages/backend/tsconfig.tsbuildinfo packages/frontend/tsconfig.tsbuildinfo
+      - echo "cleared Vite + tsc caches"
