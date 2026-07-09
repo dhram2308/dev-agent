@@ -467,8 +467,7 @@ export function App(): JSX.Element {
   const isRunning = ticketState?.isRunning ?? activePipeline?.running ?? false;
   const hasActiveTicket = activeTicket !== null;
   const showResumeDialog = !!(hasActiveTicket && activePipeline && !isRunning &&
-    (activePipeline.status === 'paused' || activePipeline.status === 'expired' ||
-     activePipeline.status === 'gate_waiting'));
+    (activePipeline.status === 'paused' || activePipeline.status === 'expired'));
   const showLiveView = hasActiveTicket && (isRunning || ticketState !== null) && !showResumeDialog;
 
   // Render the current view

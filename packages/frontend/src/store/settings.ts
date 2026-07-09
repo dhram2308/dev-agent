@@ -110,7 +110,7 @@ export interface SettingsStore {
   // ── Actions ──
   setActiveTab: (tab: SettingsTab) => void;
   fetchConfig: () => Promise<void>;
-  saveConfig: () => Promise<void>;
+  saveConfig: () => Promise<boolean>;
   updateField: (key: string, value: unknown) => void;
   resetConfig: () => void;
   testConnection: (service: string) => Promise<void>;
@@ -638,9 +638,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         isDirty: false,
         connectors: deriveConnectorStatuses(DEFAULT_CONNECTORS, config),
       });
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       set({ saving: false, error: message });
+      return false;
     }
   },
 

@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSettingsStore, CONFIG_GROUPS } from '../../store/settings';
 import { ConnectorCard, type OAuthInfo, type ConnectorConfigField } from './ConnectorCard';
 import { useOAuthLauncher } from '../../hooks/useOAuthLauncher';
+import { useToast } from '../../contexts/ToastContext';
 import * as api from '../../lib/api';
 
 // Map a connector id to the config-group id that owns its settings.
@@ -140,20 +141,19 @@ function KeychainPatInput({
 }): JSX.Element {
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const { addToast } = useToast();
   const hint = PAT_HINT[provider];
 
   const handleSave = async (): Promise<void> => {
     if (!value.trim()) return;
     setBusy(true);
-    setMsg(null);
     try {
       await api.savePat(provider, value.trim());
-      setMsg({ ok: true, text: 'Saved to keychain' });
+      addToast('PAT saved to keychain', 'success');
       setValue('');
       onChange();
     } catch (e) {
-      setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
+      addToast(`Failed to save PAT — ${e instanceof Error ? e.message : String(e)}`, 'error');
     } finally {
       setBusy(false);
     }
@@ -161,13 +161,12 @@ function KeychainPatInput({
 
   const handleRemove = async (): Promise<void> => {
     setBusy(true);
-    setMsg(null);
     try {
       await api.removePat(provider);
-      setMsg({ ok: true, text: 'Removed from keychain' });
+      addToast('PAT removed from keychain', 'success');
       onChange();
     } catch (e) {
-      setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
+      addToast(`Failed to remove PAT — ${e instanceof Error ? e.message : String(e)}`, 'error');
     } finally {
       setBusy(false);
     }
@@ -259,9 +258,6 @@ function KeychainPatInput({
           {alreadyStored ? 'Replace' : 'Save'}
         </button>
       </div>
-      {msg && (
-        <div style={{ fontSize: 11, color: msg.ok ? '#22c55e' : '#ef4444' }}>{msg.text}</div>
-      )}
     </div>
   );
 }
@@ -308,11 +304,18 @@ export function ConnectorsTab(): JSX.Element {
     return map;
   }, []);
 
+  const { addToast } = useToast();
+
   // Save only specific connector config fields via API, then refresh store
   const handleSaveConnectorConfig = useCallback(async (values: Record<string, unknown>) => {
-    await api.saveConfig(values as Record<string, string>);
-    fetchConfig();
-  }, [fetchConfig]);
+    try {
+      await api.saveConfig(values as Record<string, string>);
+      addToast('Connector settings saved', 'success');
+      fetchConfig();
+    } catch (e) {
+      addToast(`Failed to save — ${e instanceof Error ? e.message : String(e)}`, 'error');
+    }
+  }, [fetchConfig, addToast]);
 
   // Build a map from connector id → ConnectorInfo for quick lookup
   const connectorMap = useMemo(() => {

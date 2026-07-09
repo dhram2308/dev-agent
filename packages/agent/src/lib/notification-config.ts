@@ -31,6 +31,7 @@ const CONFIG_PATH: string = path.join(__dirname, "..", "..", "..", "..", "notifi
 const GATES: readonly string[] = [
   "fetch_ticket",
   "explore_plan",
+  "generate_code",
   "gate_code_review",
   "deploy_qa",
   "test_qa",
@@ -40,7 +41,7 @@ const GATES: readonly string[] = [
   "done",
 ];
 
-const CHANNELS: readonly string[] = ["slack", "jira", "ui", "reminder1h", "reminder4h"];
+const CHANNELS: readonly string[] = ["slack", "jira", "ui", "reminder1h", "reminder4h", "log"];
 
 /** Returns a single gate's default config (all channels ON). */
 function defaultGateConfig(): NotificationConfig {

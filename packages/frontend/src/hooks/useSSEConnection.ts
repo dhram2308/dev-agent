@@ -206,11 +206,22 @@ export function useSSEConnection(): void {
   // Fetch pipeline list on mount and poll every 30s as safety net.
   // After each fetch, sync per-ticket stage from pipeline summaries
   // so the UI updates even when SSE state events are missing.
+  //
+  // Follower tabs never open an SSE connection (see `isLeader` above), so
+  // for them this poll is the only signal of liveness — a successful poll
+  // marks the tab as connected instead of leaving the "Disconnected"
+  // indicator stuck on permanently. Leader tabs keep being governed purely
+  // by the actual SSE connection state in the effect above.
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     const fetchAndSync = async () => {
-      await usePipelineStore.getState().fetchPipelines();
-      usePipelineStore.getState().syncStageFromPipelines();
+      try {
+        await usePipelineStore.getState().fetchPipelines();
+        usePipelineStore.getState().syncStageFromPipelines();
+        if (!isLeader) usePipelineStore.getState().setSseConnected(true);
+      } catch {
+        if (!isLeader) usePipelineStore.getState().setSseConnected(false);
+      }
     };
 
     // Initial fetch
@@ -222,7 +233,7 @@ export function useSSEConnection(): void {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, []);
+  }, [isLeader]);
 
   // Watch pipeline-store transitions to:
   //   (a) Clear a live entry when a ticket leaves `generate_code` — once

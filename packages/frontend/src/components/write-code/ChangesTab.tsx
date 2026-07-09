@@ -3,6 +3,7 @@ import { DiffViewer } from '../review/DiffViewer';
 import { usePipelineStore, useActiveTicketState } from '../../store/pipeline';
 import { useLiveForTicket } from '../../store/codegenLive';
 import { getApiToken } from '../../lib/api';
+import { useToast } from '../../contexts/ToastContext';
 import type { ReviewData } from '../../types';
 
 type ChangesSource = 'live' | 'state' | 'git' | 'none';
@@ -108,6 +109,7 @@ export function ChangesTab(): JSX.Element {
   const [resp, setResp] = useState<ChangesResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { addToast } = useToast();
 
   const fetchChanges = useCallback(async () => {
     if (!activeTicket) return;
@@ -122,11 +124,13 @@ export function ChangesTab(): JSX.Element {
       const body = (await res.json()) as ChangesResponse;
       setResp(body);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      addToast('Failed to load changes', 'error');
     } finally {
       setLoading(false);
     }
-  }, [activeTicket]);
+  }, [activeTicket, addToast]);
 
   useEffect(() => {
     if (isLive) return;

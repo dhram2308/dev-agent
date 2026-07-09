@@ -493,6 +493,14 @@ export function Sidebar(): JSX.Element {
           <nav style={styles.nav} role="tablist" aria-label="Pipeline steps">
             {STAGE_INFO.map((info, idx) => {
               const isCurrentStage = idx === currentIdx;
+              const handleActivate = (): void => {
+                const target = document.getElementById(`stage-section-${info.stage}`);
+                if (target) {
+                  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  target.classList.add('mi-stage-highlight');
+                  window.setTimeout(() => target.classList.remove('mi-stage-highlight'), 1500);
+                }
+              };
               return (
                 <button
                   key={info.stage}
@@ -502,8 +510,10 @@ export function Sidebar(): JSX.Element {
                   }}
                   role="tab"
                   aria-selected={isCurrentStage}
+                  aria-controls={`stage-section-${info.stage}`}
                   tabIndex={isCurrentStage ? 0 : -1}
                   title={`${info.label} (${info.who})`}
+                  onClick={handleActivate}
                 >
                   <span style={{ ...styles.dot, ...getDotStyle(idx, currentIdx, isRunning) }} />
                   <span style={styles.label}>{info.label}</span>

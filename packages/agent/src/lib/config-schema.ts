@@ -393,6 +393,28 @@ export const CONFIG_SCHEMA: Record<string, ConfigSchemaEntry> = {
     hotReload: true, riskLevel: "SAFE",
   },
 
+  // ── Git Branches ───────────────────────────────────────────────
+  BRANCH_TS: {
+    env: "BRANCH_TS", type: "string", default: "enterprise-ts",
+    required: true, sensitive: false, group: "git", description: "Source branch (TypeScript / feature work)",
+    hotReload: true, riskLevel: "DANGEROUS",
+  },
+  BRANCH_QA: {
+    env: "BRANCH_QA", type: "string", default: "enterprise-qa",
+    required: true, sensitive: false, group: "git", description: "QA target branch",
+    hotReload: true, riskLevel: "DANGEROUS",
+  },
+  BRANCH_PREPROD: {
+    env: "BRANCH_PREPROD", type: "string", default: "enterprise-pre-pro",
+    required: true, sensitive: false, group: "git", description: "Pre-production target branch",
+    hotReload: true, riskLevel: "DANGEROUS",
+  },
+  BRANCH_PROD: {
+    env: "BRANCH_PROD", type: "string", default: "enterprise-master",
+    required: true, sensitive: false, group: "git", description: "Production target branch",
+    hotReload: true, riskLevel: "DANGEROUS",
+  },
+
   // ── Git Author ─────────────────────────────────────────────────
   GIT_AUTHOR_NAME: {
     env: "GIT_AUTHOR_NAME", type: "string", default: "Yogendra",

@@ -32,6 +32,11 @@ import {
 import { getSseClients, setAgentProcsGetter, broadcastStateChange } from './sse';
 import { handleRequest, setAgentProcessHandlers } from './routes';
 import { cleanupStaleStates, readForDisplay } from '../state/state-manager';
+import { loadAndApplyEnv } from '../config/loader';
+
+// Load .env into process.env on startup so saved config values survive restarts.
+// API_TOKEN (injected by the Taskfile) is already set and won't be overridden.
+loadAndApplyEnv();
 
 // ── Resilience modules (safe require) ────────────────────────────
 

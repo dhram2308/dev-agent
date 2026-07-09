@@ -6,6 +6,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useReviewStore } from '../../store/review';
 import { usePipelineStore } from '../../store/pipeline';
+import { useToast } from '../../contexts/ToastContext';
 import * as api from '../../lib/api';
 import type { InlineCommentData } from '../../store/review';
 
@@ -309,6 +310,7 @@ function CommentForm({
   const addComment = useReviewStore((s) => s.addComment);
   const setCommentingOn = useReviewStore((s) => s.setCommentingOn);
   const activeTicket = usePipelineStore((s) => s.activeTicket);
+  const { addToast } = useToast();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Restore any previously-saved draft for this ticket/file/line (/parent for replies)
@@ -374,7 +376,7 @@ function CommentForm({
       try {
         await api.submitComment(activeTicket, file, line, text, parentId);
       } catch {
-        // Comment is already added locally, just ignore API errors
+        addToast('Comment saved locally — failed to sync with server', 'warn');
       }
     }
 

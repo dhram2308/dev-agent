@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { getLogFile } from '../lib/api';
+import { useToast } from '../contexts/ToastContext';
 
 interface LogFileArchiveViewerProps {
   ticket: string;
@@ -118,6 +119,7 @@ export function LogFileArchiveViewer({ ticket }: LogFileArchiveViewerProps): JSX
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { addToast } = useToast();
 
   const fetchLogs = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -127,11 +129,13 @@ export function LogFileArchiveViewer({ ticket }: LogFileArchiveViewerProps): JSX
       setLines(res.lines);
       setTotal(res.total);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      addToast('Failed to load log file', 'error');
     } finally {
       setLoading(false);
     }
-  }, [ticket, tail]);
+  }, [ticket, tail, addToast]);
 
   // Fetch on first expand and whenever the tail/ticket changes
   useEffect(() => {

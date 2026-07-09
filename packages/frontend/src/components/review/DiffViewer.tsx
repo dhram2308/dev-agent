@@ -7,6 +7,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { usePipelineStore } from '../../store/pipeline';
 import { useReviewStore } from '../../store/review';
+import { useToast } from '../../contexts/ToastContext';
 import * as api from '../../lib/api';
 import { FileTree } from './FileTree';
 import { DiffPane } from './DiffPane';
@@ -246,6 +247,7 @@ export function DiffViewer({ source = 'frozen', liveData = null, frozenData = nu
   const [activeTab, setActiveTab] = useState<ViewTab>('changes');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { addToast } = useToast();
 
   const isLive = source === 'live';
 
@@ -279,11 +281,13 @@ export function DiffViewer({ source = 'frozen', liveData = null, frozenData = nu
       const data = await api.getReviewData(activeTicket);
       usePipelineStore.getState().updateReviewData(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      addToast('Failed to load review data', 'error');
     } finally {
       setLoading(false);
     }
-  }, [activeTicket, isLive]);
+  }, [activeTicket, isLive, addToast]);
 
   useEffect(() => {
     if (isLive || frozenData) {

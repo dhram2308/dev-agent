@@ -10,6 +10,7 @@ import type { ConfigGroup } from '../../store/settings';
 import { CONNECTOR_GROUP_IDS } from '../../store/settings';
 import { ConfigField } from './ConfigField';
 import { TestConnectionButton } from './TestConnectionButton';
+import { useToast } from '../../contexts/ToastContext';
 
 // ── Styles ──────────────────────────────────────────────────
 
@@ -300,16 +301,23 @@ export function ConfigTab(): JSX.Element {
   const fetchConfig = useSettingsStore((s) => s.fetchConfig);
   const saveConfig = useSettingsStore((s) => s.saveConfig);
   const resetConfig = useSettingsStore((s) => s.resetConfig);
+  const { addToast } = useToast();
 
   // Fetch config on mount
   useEffect(() => {
     fetchConfig();
   }, [fetchConfig]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (!isDirty || saving) return;
-    saveConfig();
-  }, [isDirty, saving, saveConfig]);
+    const ok = await saveConfig();
+    if (ok) {
+      addToast('Configuration saved', 'success');
+    } else {
+      const msg = useSettingsStore.getState().error ?? 'Failed to save configuration';
+      addToast(msg, 'error');
+    }
+  }, [isDirty, saving, saveConfig, addToast]);
 
   if (loading) {
     return (

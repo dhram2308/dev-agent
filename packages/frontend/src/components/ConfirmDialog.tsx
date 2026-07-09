@@ -165,7 +165,7 @@ export function ConfirmDialog({
     <div
       style={styles.overlay}
       onClick={handleOverlayClick}
-      role="dialog"
+      role="alertdialog"
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
       aria-describedby="confirm-dialog-message"

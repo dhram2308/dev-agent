@@ -6,6 +6,7 @@
 
 import { useCallback, useState } from 'react';
 import { injectContext } from '../lib/api';
+import { useToast } from '../contexts/ToastContext';
 
 interface ContextInjectionPanelProps {
   ticket: string;
@@ -96,26 +97,22 @@ export function ContextInjectionPanel({ ticket, isRunning }: ContextInjectionPan
   const [expanded, setExpanded] = useState(false);
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [status, setStatus] = useState<{ kind: 'idle' | 'ok' | 'err'; msg: string }>({
-    kind: 'idle',
-    msg: '',
-  });
+  const { addToast } = useToast();
 
   const handleSubmit = useCallback(async () => {
     if (!text.trim()) return;
     setSubmitting(true);
-    setStatus({ kind: 'idle', msg: '' });
     try {
       await injectContext(ticket, text.trim());
-      setStatus({ kind: 'ok', msg: 'Context injected — the agent will see it on next iteration.' });
+      addToast('Context injected — the agent will see it on next iteration', 'info');
       setText('');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      setStatus({ kind: 'err', msg: `Failed: ${msg}` });
+      addToast(`Failed to inject context — ${msg}`, 'error');
     } finally {
       setSubmitting(false);
     }
-  }, [text, ticket]);
+  }, [text, ticket, addToast]);
 
   // Only show when agent is running
   if (!isRunning) return null;
@@ -173,17 +170,6 @@ export function ContextInjectionPanel({ ticket, isRunning }: ContextInjectionPan
               {submitting ? 'Sending...' : 'Inject'}
             </button>
           </div>
-          {status.kind !== 'idle' && (
-            <div
-              style={{
-                ...styles.status,
-                ...(status.kind === 'ok' ? styles.statusSuccess : styles.statusError),
-              }}
-              role="status"
-            >
-              {status.msg}
-            </div>
-          )}
         </div>
       )}
     </div>

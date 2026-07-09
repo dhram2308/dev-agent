@@ -11,6 +11,9 @@ agent-*.log
 .api-token
 .state-secret
 
+# Taskfile dev-server run artifacts (PIDs, logs, shared API token)
+/.run/
+
 # Build outputs
 packages/*/dist/
 packages/frontend/dist/

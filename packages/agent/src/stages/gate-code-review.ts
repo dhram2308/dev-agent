@@ -2,7 +2,7 @@
 
 import type { PipelineState } from '@mi/shared';
 
-const { cfg, TICKET, MAX_APPROVAL_TIMEOUT, MAX_REJECTIONS, POLL_INTERVAL, monotonicMs } = require("../lib/config");
+const { cfg, TICKET, MAX_APPROVAL_TIMEOUT, MAX_REJECTIONS, POLL_INTERVAL, APPROVAL_REMINDER_1H, APPROVAL_REMINDER_4H } = require("../lib/config");
 const { logStep, logOk, logErr, logInfo, logWarn, logWait, C } = require("../lib/logging");
 const { sleep } = require("../lib/http-client");
 const { save, checkUIApproval } = require("../lib/state");
@@ -53,15 +53,17 @@ async function stageGateCodeReview(state: PipelineState): Promise<void> {
   logInfo(`MR: ${(state.data as any).code_mr_url}`);
   logWait("Waiting for MR approval (Web UI or GitLab)…");
 
-  // Poll GitLab MR for approval / rejection
-  const gate1PollStart = monotonicMs(); // V9: monotonic clock
+  // Poll GitLab MR for approval / rejection. Elapsed time is measured from
+  // the persisted gate1_at timestamp (not a monotonic clock) so a process
+  // restart mid-poll doesn't reset the reminder/timeout window.
+  const gate1StartMs = new Date((state.data as any).gate1_at).getTime();
   let gate1PollCount = 0;
   while (true) {
     if (isShuttingDown()) {
       save(state);
       throw new Error("Shutdown in progress — exiting gate_code_review");
     }
-    if (monotonicMs() - gate1PollStart > MAX_APPROVAL_TIMEOUT) {
+    if (Date.now() - gate1StartMs > MAX_APPROVAL_TIMEOUT) {
       logErr(`Gate 1 code review timeout after ${MAX_APPROVAL_TIMEOUT / 3600000}h`);
       if (isChannelEnabled("gate_code_review", "slack")) {
         await slack(`\u23f0 *Code Review Timeout — ${TICKET}*\nPipeline halted.`, [cfg.slack.ownerId]);
@@ -69,6 +71,25 @@ async function stageGateCodeReview(state: PipelineState): Promise<void> {
       save(state);
       throw new Error(`Gate 1 code review timeout after ${MAX_APPROVAL_TIMEOUT / 3600000}h`);
     }
+
+    if (!(state.data as any).gate1_reminder_1h && (Date.now() - gate1StartMs) > APPROVAL_REMINDER_1H) {
+      logInfo("Sending 1h code review reminder…");
+      if (isChannelEnabled("gate_code_review", "reminder1h")) {
+        await slack(`Reminder — ${TICKET}: MR review pending for 1 hour. Please review. ${(state.data as any).code_mr_url}`, [cfg.slack.ownerId]);
+      }
+      (state.data as any).gate1_reminder_1h = new Date().toISOString();
+      save(state);
+    }
+
+    if (!(state.data as any).gate1_reminder_4h && (Date.now() - gate1StartMs) > APPROVAL_REMINDER_4H) {
+      logWarn("Sending 4h code review escalation…");
+      if (isChannelEnabled("gate_code_review", "reminder4h")) {
+        await slack(`Escalation — ${TICKET}: MR review pending for 4 hours! Pipeline is blocked. ${(state.data as any).code_mr_url}`, [cfg.slack.ownerId, cfg.slack.qaId]);
+      }
+      (state.data as any).gate1_reminder_4h = new Date().toISOString();
+      save(state);
+    }
+
     // Check Web UI approval first
     const uiResult = checkUIApproval(state, "gate1");
     if (uiResult) {
@@ -208,7 +229,7 @@ async function stageGateCodeReview(state: PipelineState): Promise<void> {
     const approvedCount = (approvals.approved_by || []).length;
     gate1PollCount++;
     if (gate1PollCount % 6 === 0) {
-      const waitMins = Math.floor((monotonicMs() - gate1PollStart) / 60000);
+      const waitMins = Math.floor((Date.now() - gate1StartMs) / 60000);
       logInfo(`Polling MR !${mrIid}… (${approvedCount} approvals) ${waitMins}m elapsed`);
     }
     await sleep(POLL_INTERVAL);

@@ -3,7 +3,7 @@
 // Shows approval/reject dialogs when pipeline is waiting at a gate
 // ═══════════════════════════════════════════════════════════════
 
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { usePipelineStore, useActiveTicketState } from '../store/pipeline';
 import { useReviewStore } from '../store/review';
@@ -12,6 +12,7 @@ import { RejectForm } from './approval/RejectForm';
 import { RefineForm } from './approval/RefineForm';
 import { Markdown } from './Markdown';
 import { PendingQuestionsPanel } from './PendingQuestionsPanel';
+import { ConfirmDialog } from './ConfirmDialog';
 import type { StageName, PipelineData } from '../types';
 
 // ── Styles ─────────────────────────────────────────────────────
@@ -161,65 +162,6 @@ const styles = {
     transition: 'all 0.2s',
     fontFamily: 'var(--font-sans)',
   },
-  // Dialog overlay
-  dialogOverlay: {
-    position: 'fixed' as const,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: 'var(--bg-overlay)',
-    zIndex: 2000,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    animation: 'fadeIn 0.15s ease-out',
-  },
-  dialogBox: {
-    background: 'var(--bg-surface)',
-    border: '1px solid var(--border-default)',
-    borderRadius: 'var(--radius-lg)',
-    padding: 'var(--sp-6)',
-    maxWidth: 400,
-    width: '90%',
-    animation: 'modalIn 0.3s var(--ease-spring)',
-  },
-  dialogTitle: {
-    fontSize: 16,
-    fontWeight: 700,
-    marginBottom: 'var(--sp-2)',
-  },
-  dialogMsg: {
-    fontSize: 13,
-    color: 'var(--text-secondary)',
-    marginBottom: 'var(--sp-5)',
-    lineHeight: 1.6,
-  },
-  dialogActions: {
-    display: 'flex',
-    gap: 'var(--sp-2)',
-    justifyContent: 'flex-end',
-  },
-  dialogCancel: {
-    padding: 'var(--sp-2) var(--sp-5)',
-    borderRadius: 'var(--radius-sm)',
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: 'pointer',
-    background: 'var(--bg-elevated)',
-    color: 'var(--text-secondary)',
-    border: '1px solid var(--border-default)',
-    fontFamily: 'var(--font-sans)',
-  },
-  dialogConfirm: {
-    padding: 'var(--sp-2) var(--sp-5)',
-    borderRadius: 'var(--radius-sm)',
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: 'pointer',
-    border: 'none',
-    fontFamily: 'var(--font-sans)',
-  },
   suggestions: {
     marginTop: 'var(--sp-3)',
     padding: 'var(--sp-3) var(--sp-4)',
@@ -308,8 +250,6 @@ export function GateApproval(): JSX.Element | null {
   const [showRefineForm, setShowRefineForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<'approve' | null>(null);
-
-  const dialogRef = useRef<HTMLDivElement>(null);
 
   // Determine if we're at a gate
   const gateWaiting = ticketState?.gateWaiting;
@@ -508,39 +448,14 @@ export function GateApproval(): JSX.Element | null {
       </div>
 
       {/* Confirmation dialog (approve only) */}
-      {confirmDialog === 'approve' && (
-        <div
-          style={styles.dialogOverlay}
-          onClick={(e) => { if (e.target === e.currentTarget) setConfirmDialog(null); }}
-        >
-          <div ref={dialogRef} style={styles.dialogBox} role="alertdialog" aria-labelledby="confirm-title" aria-describedby="confirm-msg">
-            <h3 id="confirm-title" style={styles.dialogTitle}>
-              Confirm Approval
-            </h3>
-            <p id="confirm-msg" style={styles.dialogMsg}>
-              Are you sure you want to approve {config.title.toLowerCase()}? The pipeline will proceed to the next stage.
-            </p>
-            <div style={styles.dialogActions}>
-              <button
-                style={styles.dialogCancel}
-                onClick={() => setConfirmDialog(null)}
-              >
-                Cancel
-              </button>
-              <button
-                style={{
-                  ...styles.dialogConfirm,
-                  background: 'var(--success)',
-                  color: '#fff',
-                }}
-                onClick={handleApprove}
-              >
-                Approve
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={confirmDialog === 'approve'}
+        title="Confirm Approval"
+        message={`Are you sure you want to approve ${config.title.toLowerCase()}? The pipeline will proceed to the next stage.`}
+        confirmText="Approve"
+        onConfirm={handleApprove}
+        onCancel={() => setConfirmDialog(null)}
+      />
     </>
   );
 }

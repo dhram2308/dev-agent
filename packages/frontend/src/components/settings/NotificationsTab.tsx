@@ -4,12 +4,13 @@
 // toggle switches for each cell
 // ═══════════════════════════════════════════════════════════════
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback } from 'react';
 import {
   useSettingsStore,
   NOTIFICATION_GATES,
   NOTIFICATION_CHANNELS,
 } from '../../store/settings';
+import { useToast } from '../../contexts/ToastContext';
 
 // ── Styles ──────────────────────────────────────────────────
 
@@ -163,11 +164,6 @@ const styles = {
     color: 'var(--danger)',
     fontSize: 13,
   },
-  successMsg: {
-    fontSize: 12,
-    color: 'var(--success)',
-    fontWeight: 500,
-  },
 } as const;
 
 // ── Toggle Switch ───────────────────────────────────────────
@@ -213,7 +209,7 @@ export function NotificationsTab(): JSX.Element {
   const fetchNotificationConfig = useSettingsStore((s) => s.fetchNotificationConfig);
   const saveNotificationConfig = useSettingsStore((s) => s.saveNotificationConfig);
   const toggleNotification = useSettingsStore((s) => s.toggleNotification);
-  const [saved, setSaved] = useState(false);
+  const { addToast } = useToast();
 
   useEffect(() => {
     fetchNotificationConfig();
@@ -223,10 +219,12 @@ export function NotificationsTab(): JSX.Element {
     if (notificationSaving) return;
     const ok = await saveNotificationConfig();
     if (ok) {
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
+      addToast('Notification settings saved', 'success');
+    } else {
+      const msg = useSettingsStore.getState().error ?? 'Failed to save notification settings';
+      addToast(msg, 'error');
     }
-  }, [notificationSaving, saveNotificationConfig]);
+  }, [notificationSaving, saveNotificationConfig, addToast]);
 
   if (notificationLoading) {
     return (
@@ -287,7 +285,6 @@ export function NotificationsTab(): JSX.Element {
       </div>
 
       <div style={styles.actionBar}>
-        {saved && <span style={styles.successMsg}>Saved</span>}
         <button
           type="button"
           style={{
