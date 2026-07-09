@@ -10,6 +10,7 @@ import { InlineComment } from './InlineComment';
 import {
   parseUnifiedDiff,
   synthesizeFullFileHunk,
+  computeLineDiff,
   computeCharHighlights,
   getFileExtension,
   actionColor,
@@ -867,21 +868,28 @@ function SplitDiff({
 
 export function DiffPane({ change, viewMode }: DiffPaneProps): JSX.Element {
   const hunks = useMemo(() => {
-    // 1. Backend provided a unified diff (the normal `update` case) →
-    //    parse it. Both unified + split renderers handle it.
+    // 1. Backend provided a precomputed unified diff → parse it. (Nothing
+    //    in this codebase currently produces `.diff`, but keep this path
+    //    first in case that changes.)
     if (change.diff) {
       return parseUnifiedDiff(change.diff);
     }
-    // 2. No diff but we have file content. Synthesize a hunk so the
-    //    split/unified renderer can show it side-by-side (empty left
-    //    pane + full content right for `create`; mirror for `delete`).
-    //    Previously this fell through to a plain-text dump which broke
-    //    the GitHub-style side-by-side experience for new files.
+    // 2. `update` with both before (`original`) and after (`content`) full
+    //    file text → compute a real two-sided diff ourselves. Without this,
+    //    updates fell through to branch 3 below, which renders every line
+    //    as pure addition — visually identical to a brand-new file.
+    if (change.action === 'update' && change.original !== undefined && change.content !== undefined) {
+      return computeLineDiff(change.original, change.content);
+    }
+    // 3. No diff, no original — `create`/`delete`, or an `update` whose
+    //    original content wasn't available. Synthesize a single-sided hunk
+    //    so the split/unified renderer can still show something (empty
+    //    left pane + full content right for `create`; mirror for `delete`).
     if (change.content) {
       return synthesizeFullFileHunk(change.content, change.action);
     }
     return [];
-  }, [change.diff, change.content, change.action]);
+  }, [change.diff, change.original, change.content, change.action]);
 
   const hasDiff = hunks.length > 0;
   const ext = getFileExtension(change.file);

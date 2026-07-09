@@ -80,12 +80,19 @@ function toReviewData(resp: ChangesResponse): ReviewData {
       file: c.file_path,
       action: c.action,
       content: c.content,
+      // Only meaningful for action === 'update' — the diff renderer uses this
+      // to compute a real two-sided diff instead of showing the file as if
+      // newly created (see DiffPane.tsx's computeLineDiff branch).
+      original: resp.original_files?.[c.file_path],
     })),
   };
 }
 
 function liveToReviewData(
-  entry: { changes: Array<{ file_path: string; action: 'create' | 'update' | 'delete'; content: string }> },
+  entry: {
+    changes: Array<{ file_path: string; action: 'create' | 'update' | 'delete'; content: string }>;
+    original_files?: Record<string, string>;
+  },
 ): ReviewData {
   return {
     gate: 'gate_code_review',
@@ -93,6 +100,7 @@ function liveToReviewData(
       file: c.file_path,
       action: c.action,
       content: c.content,
+      original: entry.original_files?.[c.file_path],
     })),
   };
 }

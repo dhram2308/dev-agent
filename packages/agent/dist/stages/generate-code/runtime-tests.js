@@ -486,7 +486,7 @@ async function runRuntimeTests(state, fileChanges, originalFiles) {
     for (const c of fileChanges) {
         if (c.action === "update" && !originalFiles[c.file_path]) {
             const orig = localGetOriginal(cfg.localRepo, c.file_path);
-            if (orig)
+            if (orig !== null)
                 originalFiles[c.file_path] = orig;
         }
     }

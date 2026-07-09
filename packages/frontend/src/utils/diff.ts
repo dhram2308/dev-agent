@@ -131,10 +131,12 @@ export function parseDiffStats(diffText: string): DiffStats {
 }
 
 // -- parseDiffStatsFromChanges --------------------------------------
-// Compute stats from ReviewData.changes array
+// Compute stats from ReviewData.changes array. Mirrors the same
+// diff/original/content fallback order DiffPane.tsx uses to render each
+// file, so the +/- counts here always match what's actually shown.
 
 export function parseDiffStatsFromChanges(
-  changes: Array<{ file: string; action: string; diff?: string }>,
+  changes: Array<{ file: string; action: string; diff?: string; content?: string; original?: string }>,
 ): DiffStats {
   let additions = 0;
   let deletions = 0;
@@ -146,6 +148,17 @@ export function parseDiffStatsFromChanges(
         if (line.startsWith('+') && !line.startsWith('+++')) additions++;
         else if (line.startsWith('-') && !line.startsWith('---')) deletions++;
       }
+    } else if (change.action === 'update' && change.original !== undefined && change.content !== undefined) {
+      for (const hunk of computeLineDiff(change.original, change.content)) {
+        for (const line of hunk.lines) {
+          if (line.type === 'add') additions++;
+          else if (line.type === 'del') deletions++;
+        }
+      }
+    } else if (change.content) {
+      const count = splitLines(change.content).length;
+      if (change.action === 'delete') deletions += count;
+      else additions += count;
     }
   }
 
@@ -196,6 +209,91 @@ export function synthesizeFullFileHunk(
     lines: diffLines,
   };
   return [hunk];
+}
+
+// -- computeLineDiff --------------------------------------------------
+// For `update` changes where the backend gives us both the pre-change
+// (`original`) and post-change (`content`) full file text but no
+// precomputed unified-diff string (nothing in this codebase ever produces
+// one), compute a real two-sided line diff ourselves via a classic LCS
+// (longest-common-subsequence) alignment. Without this, `update` changes
+// fell through to `synthesizeFullFileHunk`, which renders every line as
+// pure addition — visually identical to a brand-new file.
+//
+// Produces a single hunk spanning the whole file (context + changes
+// together); the existing per-hunk `foldHunk()` in DiffPane.tsx already
+// collapses long unchanged runs, so there's no need to chunk into
+// git-style multi-hunk output with gaps.
+//
+// Bounded to avoid an O(n*m) blowup on huge files: past MAX_DIFF_CELLS
+// total (old lines * new lines), fall back to the single-sided view
+// rather than block the main thread on a multi-million-cell DP table.
+
+const MAX_DIFF_CELLS = 1_000_000;
+
+function splitLines(text: string): string[] {
+  const trimmed = text.endsWith('\n') ? text.slice(0, -1) : text;
+  if (trimmed.length === 0) return [];
+  return trimmed.split('\n');
+}
+
+export function computeLineDiff(original: string, content: string): DiffHunk[] {
+  const oldLines = splitLines(original);
+  const newLines = splitLines(content);
+  const n = oldLines.length;
+  const m = newLines.length;
+
+  if (n * m > MAX_DIFF_CELLS) {
+    return synthesizeFullFileHunk(content, 'update');
+  }
+
+  // dp[i][j] = length of the LCS of oldLines[i..n) and newLines[j..m)
+  const dp: Uint32Array[] = new Array(n + 1);
+  for (let i = 0; i <= n; i++) dp[i] = new Uint32Array(m + 1);
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = oldLines[i] === newLines[j]
+        ? dp[i + 1][j + 1] + 1
+        : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+
+  const lines: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  let oldNum = 1;
+  let newNum = 1;
+  while (i < n && j < m) {
+    if (oldLines[i] === newLines[j]) {
+      lines.push({ type: 'ctx', content: oldLines[i], oldNum, newNum });
+      i++; j++; oldNum++; newNum++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      lines.push({ type: 'del', content: oldLines[i], oldNum, newNum: null });
+      i++; oldNum++;
+    } else {
+      lines.push({ type: 'add', content: newLines[j], oldNum: null, newNum });
+      j++; newNum++;
+    }
+  }
+  while (i < n) {
+    lines.push({ type: 'del', content: oldLines[i], oldNum, newNum: null });
+    i++; oldNum++;
+  }
+  while (j < m) {
+    lines.push({ type: 'add', content: newLines[j], oldNum: null, newNum });
+    j++; newNum++;
+  }
+
+  if (lines.length === 0) return [];
+
+  return [{
+    header: `@@ -1,${n} +1,${m} @@`,
+    oldStart: n > 0 ? 1 : 0,
+    oldCount: n,
+    newStart: m > 0 ? 1 : 0,
+    newCount: m,
+    lines,
+  }];
 }
 
 // Parse unified diff text into structured hunks with line numbers

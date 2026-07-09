@@ -151,7 +151,7 @@ async function runACVerification(state: PipelineState, fileChanges: any[], origi
       for (const c of fileChanges) {
         if (c.action === "update" && !originalFiles[c.file_path]) {
           const orig = localGetOriginal(cfg.localRepo, c.file_path);
-          if (orig) originalFiles[c.file_path] = orig;
+          if (orig !== null) originalFiles[c.file_path] = orig;
         }
       }
       (state.data as any).codeChanges = changes;

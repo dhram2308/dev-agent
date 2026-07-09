@@ -186,10 +186,61 @@ export async function answerQuestions(
   });
 }
 
+/**
+ * Raw shape actually returned by GET /api/review (packages/backend/src/server/routes.ts) —
+ * snake_case, file_path instead of file, and no `original` threaded into each
+ * change. `getReviewData` maps this into a proper `ReviewData` below so every
+ * caller gets consistently-shaped data, matching the declared return type
+ * instead of casting the raw JSON straight through.
+ */
+interface RawReviewResponse {
+  gate: string | null;
+  changes?: Array<{ file_path: string; action: 'create' | 'update' | 'delete'; content?: string; diff?: string }>;
+  original_files?: Record<string, string>;
+  mr_url?: string;
+  preprod_mr_url?: string;
+  plan?: string;
+  openspec?: Record<string, string> | null;
+  qa_test?: Array<{ module: string; status: 'pass' | 'fail' | 'inconclusive'; details?: string }>;
+}
+
+function mapRawReviewResponse(raw: RawReviewResponse): ReviewData {
+  const originalFiles = raw.original_files ?? {};
+  const changes = raw.changes?.map((c) => ({
+    file: c.file_path,
+    action: c.action,
+    content: c.content,
+    diff: c.diff,
+    // Only meaningful for action === 'update' — see DiffPane.tsx's computeLineDiff.
+    original: originalFiles[c.file_path],
+  }));
+
+  // PlanTabs expects a Record<string, string> of named tabs. The backend
+  // gives a single overview markdown string (`plan`) plus a separate
+  // OpenSpec artifact map (`openspec`) — combine them into one record
+  // rather than dropping either.
+  let plan: Record<string, string> | undefined;
+  if (raw.plan || raw.openspec) {
+    plan = {};
+    if (raw.plan) plan.Overview = raw.plan;
+    if (raw.openspec) Object.assign(plan, raw.openspec);
+  }
+
+  return {
+    gate: raw.gate ?? '',
+    changes,
+    plan,
+    mrUrl: raw.mr_url || raw.preprod_mr_url || undefined,
+    qaResults: raw.qa_test,
+  };
+}
+
 /** Get review data (diff, plan, QA results) for a gate */
 export async function getReviewData(ticket?: string): Promise<ReviewData | null> {
   const query = ticket ? `?ticket=${encodeURIComponent(ticket)}` : '';
-  return apiFetch(`/api/review${query}`);
+  const raw = await apiFetch<RawReviewResponse>(`/api/review${query}`);
+  if (!raw || !raw.gate) return null;
+  return mapRawReviewResponse(raw);
 }
 
 /** Post review decision with inline comments */

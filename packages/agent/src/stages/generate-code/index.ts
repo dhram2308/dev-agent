@@ -152,7 +152,7 @@ async function stageGenerateCode(state: PipelineState): Promise<void> {
         for (const c of fileChanges) {
           if (c.action === "update") {
             const orig = localGetOriginal(cfg.localRepo, c.file_path);
-            if (orig) originalFiles[c.file_path] = orig;
+            if (orig !== null) originalFiles[c.file_path] = orig;
           }
         }
         const changes = { changes: fileChanges, summary: (state.data as any)._dev_summary || "Resumed from checkpoint", test_notes: "See developer summary" };
@@ -180,7 +180,7 @@ async function stageGenerateCode(state: PipelineState): Promise<void> {
     for (const c of fileChanges) {
       if (c.action === "update") {
         const orig = localGetOriginal(cfg.localRepo, c.file_path);
-        if (orig) originalFiles[c.file_path] = orig;
+        if (orig !== null) originalFiles[c.file_path] = orig;
       }
     }
 
@@ -220,7 +220,7 @@ async function stageGenerateCode(state: PipelineState): Promise<void> {
     for (const c of fileChanges) {
       if (c.action === "update" && !originalFiles[c.file_path]) {
         const orig = localGetOriginal(cfg.localRepo, c.file_path);
-        if (orig) originalFiles[c.file_path] = orig;
+        if (orig !== null) originalFiles[c.file_path] = orig;
       }
     }
     // L7: Prune originalFiles entries that no longer correspond to an

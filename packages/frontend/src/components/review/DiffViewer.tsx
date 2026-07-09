@@ -263,6 +263,9 @@ export function DiffViewer({ source = 'frozen', liveData = null, frozenData = nu
         file: c.file_path,
         action: c.action,
         content: c.content,
+        // Only meaningful for action === 'update' — lets DiffPane compute a
+        // real two-sided diff instead of showing the file as newly created.
+        original: liveData.original_files?.[c.file_path],
       })),
     };
   }, [isLive, liveData]);

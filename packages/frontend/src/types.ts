@@ -175,6 +175,12 @@ export interface ReviewData {
     action: 'create' | 'update' | 'delete';
     diff?: string;
     content?: string;
+    /**
+     * Pre-change file content, for action === 'update' only. Lets the diff
+     * viewer compute a real two-sided diff instead of rendering the change
+     * as if the file were newly created — see DiffPane.tsx's computeLineDiff.
+     */
+    original?: string;
   }>;
   plan?: Record<string, string>;
   mrUrl?: string;

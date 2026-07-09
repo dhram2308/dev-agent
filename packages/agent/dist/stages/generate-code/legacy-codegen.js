@@ -147,7 +147,7 @@ async function legacyJsonCodegen(ctx) {
         if (c.action === "update") {
             try {
                 const orig = await gl.getFile(c.file_path, cfg.branch.ts);
-                if (orig)
+                if (orig !== null)
                     originalFiles[c.file_path] = orig;
             }
             catch { }
