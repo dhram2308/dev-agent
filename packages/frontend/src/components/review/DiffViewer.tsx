@@ -120,27 +120,42 @@ const styles = {
   },
   body: {
     display: 'flex',
+    alignItems: 'flex-start',
     flex: 1,
     minHeight: 0,
     border: '1px solid var(--border-subtle)',
     borderTop: 'none',
     borderRadius: '0 0 var(--radius-md) var(--radius-md)',
-    overflow: 'hidden' as const,
+    // No `overflow: hidden` here — that would establish this box as the
+    // nearest "scroll container" for CSS purposes and break `fileSidebar`'s
+    // sticky positioning (it needs to see past this element to whichever
+    // ancestor actually scrolls: the page itself for the standalone Review
+    // view, or ChangesTab's own bounded panel elsewhere). The bottom corner
+    // radii that `overflow: hidden` used to clip to are applied directly to
+    // fileSidebar/diffArea below instead.
   },
   fileSidebar: {
     width: 260,
     minWidth: 200,
     maxWidth: 360,
     borderRight: '1px solid var(--border-subtle)',
+    borderRadius: '0 0 0 var(--radius-md)',
     background: 'var(--bg-surface)',
-    overflowY: 'auto' as const,
     flexShrink: 0,
+    // GitLab-style sticky file tree: stays put as the diff content scrolls
+    // past it, with its own scrollbar if the file list is taller than the
+    // available space.
+    position: 'sticky' as const,
+    top: 0,
+    alignSelf: 'flex-start' as const,
+    maxHeight: '100vh',
+    overflowY: 'auto' as const,
   },
   diffArea: {
     flex: 1,
-    overflowY: 'auto' as const,
     overflowX: 'auto' as const,
     background: 'var(--bg-base)',
+    borderRadius: '0 0 var(--radius-md) 0',
     minWidth: 0,
   },
   loading: {
