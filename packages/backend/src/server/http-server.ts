@@ -30,7 +30,7 @@ import {
 } from '../lib/graceful-shutdown';
 
 import { getSseClients, setAgentProcsGetter, broadcastStateChange } from './sse';
-import { handleRequest, setAgentProcessHandlers } from './routes';
+import { handleRequest, setAgentProcessHandlers, setPlaygroundProcessHandlers } from './routes';
 import { cleanupStaleStates, readForDisplay } from '../state/state-manager';
 import { loadAndApplyEnv } from '../config/loader';
 
@@ -116,6 +116,41 @@ if (agentProcess && typeof agentProcess.setSseModule === 'function') {
     agentProcess.setSseModule(require('./sse'));
   } catch (e) {
     console.warn('[http-server] Failed to inject SSE module into agent-process:', (e as Error).message);
+  }
+}
+
+// Playground process management (single-stage runs — see playground-process.ts)
+interface PlaygroundProcessModule {
+  startPlaygroundRun: (opts: { runId: string; stage: string; ticket?: string | null; customInstruction?: string }) => { ok: boolean; error?: string };
+  stopPlaygroundRun: (runId: string) => { ok: boolean; error?: string };
+  getPlaygroundProcs: () => Record<string, AgentChildProcess>;
+  PLAYGROUND_WIRED_STAGES: Set<string>;
+  setSseModule?: (mod: unknown) => void;
+}
+
+let playgroundProcess: PlaygroundProcessModule | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  playgroundProcess = require('./playground-process');
+} catch {
+  try {
+    // Fall back to compiled agent package (packages/agent/dist/server/playground-process.js)
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    playgroundProcess = require('../../../agent/dist/server/playground-process');
+  } catch {
+    playgroundProcess = null;
+  }
+}
+
+// Same "inject the backend's live SSE module" rationale as agent-process.ts
+// above — without this, playground-process falls back to an orphan sse
+// instance with zero connected clients.
+if (playgroundProcess && typeof playgroundProcess.setSseModule === 'function') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    playgroundProcess.setSseModule(require('./sse'));
+  } catch (e) {
+    console.warn('[http-server] Failed to inject SSE module into playground-process:', (e as Error).message);
   }
 }
 
@@ -301,6 +336,16 @@ export function startServer(): Server {
         );
       }
     }
+  }
+
+  // Wire playground process handlers into routes
+  if (playgroundProcess) {
+    setPlaygroundProcessHandlers({
+      startPlaygroundRun: playgroundProcess.startPlaygroundRun,
+      stopPlaygroundRun: playgroundProcess.stopPlaygroundRun,
+      getPlaygroundProcs: playgroundProcess.getPlaygroundProcs,
+      PLAYGROUND_WIRED_STAGES: playgroundProcess.PLAYGROUND_WIRED_STAGES,
+    });
   }
 
   // ── Create HTTP Server ─────────────────────────────────────────

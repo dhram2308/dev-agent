@@ -3,17 +3,43 @@
 // Shows approval/reject dialogs when pipeline is waiting at a gate
 // ═══════════════════════════════════════════════════════════════
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { usePipelineStore, useActiveTicketState } from '../store/pipeline';
 import { useReviewStore } from '../store/review';
+import { useSettingsStore } from '../store/settings';
+import { usePlaygroundStore } from '../store/playground';
+import { useNavigationStore } from '../store/navigation';
 import { useToast } from '../contexts/ToastContext';
 import { RejectForm } from './approval/RejectForm';
 import { RefineForm } from './approval/RefineForm';
 import { Markdown } from './Markdown';
 import { PendingQuestionsPanel } from './PendingQuestionsPanel';
 import { ConfirmDialog } from './ConfirmDialog';
+import { getPlaygroundRuns, type PlaygroundRunRecord } from '../lib/api';
+import { AUTO_APPROVE_CONFIG_KEY } from '../lib/automation';
 import type { StageName, PipelineData } from '../types';
+
+// ── Automation policy wiring ───────────────────────────────────
+// AUTO_APPROVE_CONFIG_KEY (maps each gate to its CONFIG_SCHEMA policy key —
+// manual / playground_validated / always, see AutomationTab.tsx) lives in
+// lib/automation.ts so the Dashboard's automation status strip can reuse it
+// without duplicating the mapping. GATE_HISTORY_FIELDS below stays local —
+// it's only consumed here.
+//
+// GATE_HISTORY_FIELDS reuses the state.data field names the agent's own gate
+// handlers already accumulate (packages/agent/src/server/agent-process.ts's
+// STAGE_DATA_MAP) instead of the global, non-ticket-scoped
+// /api/notification-audit endpoint.
+const GATE_HISTORY_FIELDS: Partial<Record<StageName, string[]>> = {
+  explore_plan: ['explore_plan_ui_approved', 'explore_plan_ui_rejected', 'explore_plan_ui_feedback'],
+  gate_code_review: ['gate1_ui_approved', 'gate1_ui_rejected', 'gate1_ui_feedback'],
+  gate_preprod_approval: ['gate2a_ui_approved', 'gate2a_ui_rejected', 'gate2a_ui_feedback'],
+  gate_dual_approval: ['gate2b_ui_approved', 'gate2b_ui_rejected', 'gate2b_ui_feedback', 'gate2b_qa_approved'],
+};
+
+/** How long the auto-approve countdown runs before it actually approves. */
+const AUTO_APPROVE_COUNTDOWN_SEC = 120;
 
 // ── Styles ─────────────────────────────────────────────────────
 
@@ -181,6 +207,74 @@ const styles = {
     padding: '2px 0',
     lineHeight: 1.5,
   },
+  autoApproveBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--sp-3)',
+    padding: 'var(--sp-3) var(--sp-4)',
+    borderRadius: 'var(--radius-md)',
+    background: 'var(--warning-muted)',
+    border: '1px solid rgba(234,179,8,0.25)',
+    marginBottom: 'var(--sp-4)',
+    fontSize: 13,
+    color: 'var(--warning)',
+  },
+  cancelAutoBtn: {
+    padding: 'var(--sp-1) var(--sp-4)',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer',
+    background: 'transparent',
+    color: 'var(--warning)',
+    border: '1.5px solid var(--warning)',
+    fontFamily: 'var(--font-sans)',
+    whiteSpace: 'nowrap' as const,
+  },
+  validatedBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--sp-3)',
+    padding: 'var(--sp-3) var(--sp-4)',
+    borderRadius: 'var(--radius-md)',
+    background: 'var(--success-muted)',
+    border: '1px solid rgba(34,197,94,0.2)',
+    marginBottom: 'var(--sp-4)',
+    fontSize: 13,
+    color: 'var(--success)',
+  },
+  viewRunBtn: {
+    padding: 'var(--sp-1) var(--sp-4)',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer',
+    background: 'transparent',
+    color: 'var(--success)',
+    border: '1.5px solid var(--success)',
+    fontFamily: 'var(--font-sans)',
+    whiteSpace: 'nowrap' as const,
+  },
+  historyToggle: {
+    marginTop: 'var(--sp-3)',
+    padding: 'var(--sp-1) 0',
+    fontSize: 12,
+    fontWeight: 600,
+    color: 'var(--text-tertiary)',
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    fontFamily: 'var(--font-sans)',
+  },
+  historyList: {
+    marginTop: 'var(--sp-2)',
+    padding: 'var(--sp-3)',
+    borderRadius: 'var(--radius-sm)',
+    background: 'var(--bg-elevated)',
+    fontSize: 12,
+    color: 'var(--text-secondary)',
+    lineHeight: 1.8,
+  },
 } as const;
 
 // ── Gate info per stage ────────────────────────────────────────
@@ -251,14 +345,91 @@ export function GateApproval(): JSX.Element | null {
   const [submitting, setSubmitting] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<'approve' | null>(null);
 
-  // Determine if we're at a gate
+  // Gate identity, resolved early (before any conditional return) so every
+  // hook below runs unconditionally on every render, per rules-of-hooks —
+  // GateApproval mounts/unmounts its gate-specific content constantly as
+  // pipelines move between gate_waiting and running.
   const gateWaiting = ticketState?.gateWaiting;
+  const dataEarly: PipelineData = ticketState?.state?.data ?? {};
+  const pendingQuestionsRaw = (dataEarly as any)._pending_questions;
+  const hasPendingQuestionsEarly = Array.isArray(pendingQuestionsRaw) && pendingQuestionsRaw.length > 0;
+
+  // ── Automation: per-gate auto-approve policy ──────────────────
+  const settingsConfig = useSettingsStore((s) => s.config);
+  const fetchSettingsConfig = useSettingsStore((s) => s.fetchConfig);
+  const viewPlaygroundRun = usePlaygroundStore((s) => s.viewRun);
+  const setNavView = useNavigationStore((s) => s.setView);
+
+  const [autoApproveCancelled, setAutoApproveCancelled] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(AUTO_APPROVE_COUNTDOWN_SEC);
+  const [validatedRun, setValidatedRun] = useState<PlaygroundRunRecord | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Load config once (idempotent — cheap no-op if another component already did).
+  useEffect(() => {
+    if (Object.keys(useSettingsStore.getState().config).length === 0) {
+      fetchSettingsConfig();
+    }
+  }, [fetchSettingsConfig]);
+
+  // Look up the most recent completed Playground run for this (ticket, gate).
+  useEffect(() => {
+    setValidatedRun(null);
+    if (!activeTicket || !gateWaiting) return;
+    let cancelled = false;
+    getPlaygroundRuns(activeTicket, gateWaiting)
+      .then((res) => {
+        if (cancelled || !res.ok) return;
+        const latest = res.runs.find((r) => r.status === 'completed');
+        setValidatedRun(latest ?? null);
+      })
+      .catch(() => { /* best-effort — no validated-run banner if this fails */ });
+    return () => { cancelled = true; };
+  }, [activeTicket, gateWaiting]);
+
+  const policyKey = gateWaiting ? AUTO_APPROVE_CONFIG_KEY[gateWaiting] : undefined;
+  const policy = policyKey ? (settingsConfig[policyKey] as string | undefined) : undefined;
+  const autoApproveActive = !!gateWaiting && !hasPendingQuestionsEarly && !autoApproveCancelled && (
+    policy === 'always' || (policy === 'playground_validated' && !!validatedRun)
+  );
+
+  // Reset the countdown whenever a new gate starts waiting.
+  useEffect(() => {
+    setSecondsLeft(AUTO_APPROVE_COUNTDOWN_SEC);
+    setAutoApproveCancelled(false);
+  }, [gateWaiting, activeTicket]);
+
+  // Tick the countdown and auto-approve at zero.
+  useEffect(() => {
+    if (!autoApproveActive) return;
+    if (secondsLeft <= 0) {
+      if (activeTicket && gateWaiting) {
+        approveGateAction(activeTicket, gateWaiting)
+          .then(() => addToast('Auto-approved by policy — pipeline proceeding', 'success'))
+          .catch(() => addToast('Auto-approve failed — please approve manually', 'error'));
+      }
+      return;
+    }
+    const timer = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [autoApproveActive, secondsLeft, activeTicket, gateWaiting, approveGateAction, addToast]);
+
+  const handleViewValidatedRun = (): void => {
+    if (!validatedRun) return;
+    void viewPlaygroundRun(validatedRun.runId);
+    setNavView('playground');
+  };
+
   if (!gateWaiting || !activeTicket) return null;
 
   const config = GATE_CONFIGS[gateWaiting];
   if (!config) return null;
 
   const data: PipelineData = ticketState?.state?.data ?? {};
+  const historyFields = GATE_HISTORY_FIELDS[gateWaiting] ?? [];
+  const historyEntries = historyFields
+    .map((key) => ({ key, value: (data as Record<string, unknown>)[key] }))
+    .filter((entry) => entry.value !== undefined && entry.value !== null && entry.value !== false);
 
   // Handle approve
   const handleApprove = async (): Promise<void> => {
@@ -307,9 +478,10 @@ export function GateApproval(): JSX.Element | null {
   const openspecData = data.explore_openspec as Record<string, string | string[]> | undefined;
   const suggestions = data._agent_suggestions as string[] | undefined;
 
-  // Clarifying questions — block Approve until answered (Reject + Refine stay enabled)
-  const pendingQuestionsRaw = (data as any)._pending_questions;
-  const hasPendingQuestions = Array.isArray(pendingQuestionsRaw) && pendingQuestionsRaw.length > 0;
+  // Clarifying questions — block Approve until answered (Reject + Refine stay enabled).
+  // Computed early (hasPendingQuestionsEarly) so the auto-approve hooks above can
+  // see it too; aliased here under the name the JSX below already uses.
+  const hasPendingQuestions = hasPendingQuestionsEarly;
 
   // MR URL (for code review gate)
   const mrUrl = data.code_mr_url as string | undefined;
@@ -326,6 +498,39 @@ export function GateApproval(): JSX.Element | null {
 
         {/* Description */}
         <div style={styles.description}>{config.description}</div>
+
+        {/* Validated-in-Playground banner — links back to the run that proved
+            this stage's behavior before it reached a real gate. */}
+        {validatedRun && (
+          <div style={styles.validatedBanner}>
+            <span style={{ flex: 1 }}>
+              Validated in Playground on {new Date(validatedRun.finishedAt ?? validatedRun.startedAt).toLocaleString()}
+            </span>
+            <button type="button" style={styles.viewRunBtn} onClick={handleViewValidatedRun}>
+              View run
+            </button>
+          </div>
+        )}
+
+        {/* Auto-approve countdown — only shown when policy actually triggers it.
+            Gates stay in the pipeline exactly as today; this is just a visible,
+            cancellable countdown to an automatic approve. */}
+        {autoApproveActive && (
+          <div style={styles.autoApproveBanner}>
+            <span style={{ flex: 1 }}>
+              Will auto-approve in {Math.floor(secondsLeft / 60)}m {String(secondsLeft % 60).padStart(2, '0')}s unless you act
+              {policy === 'playground_validated' ? ' (validated in Playground)' : ' (policy: always)'}.
+            </span>
+            <button
+              type="button"
+              style={styles.cancelAutoBtn}
+              onClick={() => setAutoApproveCancelled(true)}
+              aria-label="Cancel auto-approve"
+            >
+              Cancel auto-approve
+            </button>
+          </div>
+        )}
 
         {/* Clarifying questions (explore_plan gate) — mounts above the plan
             preview and tabs when the Architect raised questions that the
@@ -444,6 +649,31 @@ export function GateApproval(): JSX.Element | null {
             onCancel={() => setShowRefineForm(false)}
             submitting={submitting}
           />
+        )}
+
+        {/* History — reuses the per-ticket state.data fields this gate already
+            accumulates (set/cleared by the agent's own gate handlers), rather
+            than the backend's global, non-ticket-scoped notification-audit log. */}
+        {historyEntries.length > 0 && (
+          <>
+            <button
+              type="button"
+              style={styles.historyToggle}
+              onClick={() => setShowHistory(!showHistory)}
+              aria-expanded={showHistory}
+            >
+              {showHistory ? '▾' : '▸'} History ({historyEntries.length})
+            </button>
+            {showHistory && (
+              <div style={styles.historyList}>
+                {historyEntries.map(({ key, value }) => (
+                  <div key={key}>
+                    <strong>{key}</strong>: {typeof value === 'string' ? value : JSON.stringify(value)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 

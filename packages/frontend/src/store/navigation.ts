@@ -1,16 +1,16 @@
 // ═══════════════════════════════════════════════════════════════
 // MI Dev Agent — Zustand Navigation Store
-// Hash-based routing with 3 views: dashboard, settings, review
+// Hash-based routing with 4 views: dashboard, settings, review, playground
 // Syncs URL hash to store on load and hashchange
 // ═══════════════════════════════════════════════════════════════
 
 import { create } from 'zustand';
 
 /** Available application views */
-export type AppView = 'dashboard' | 'settings' | 'review';
+export type AppView = 'dashboard' | 'settings' | 'review' | 'playground';
 
 /** All valid views for validation */
-const VALID_VIEWS: readonly AppView[] = ['dashboard', 'settings', 'review'] as const;
+const VALID_VIEWS: readonly AppView[] = ['dashboard', 'settings', 'review', 'playground'] as const;
 
 /** Parse the URL hash into a valid AppView, defaulting to 'dashboard' */
 function parseHash(): AppView {

@@ -42,6 +42,22 @@ export interface SSEReviewEvent {
   [key: string]: unknown;
 }
 
+export interface SSEPlaygroundLogEvent {
+  runId: string;
+  level?: string;
+  message?: string;
+  timestamp?: number;
+  [key: string]: unknown;
+}
+
+export interface SSEPlaygroundStatusEvent {
+  runId: string;
+  status: 'running' | 'completed' | 'failed' | 'stopped';
+  stage?: string;
+  ticket?: string | null;
+  [key: string]: unknown;
+}
+
 export interface SSEAgentProgressEvent {
   ticket: string;
   team: string;
@@ -75,6 +91,8 @@ export interface SSEHandlers {
   onCodegenLive?: (data: import('@mi/shared').CodegenLivePayload) => void;
   onCodegenLiveStop?: (data: import('@mi/shared').CodegenLiveStopPayload) => void;
   onAgentProgress?: (data: SSEAgentProgressEvent) => void;
+  onPlaygroundLog?: (data: SSEPlaygroundLogEvent) => void;
+  onPlaygroundStatus?: (data: SSEPlaygroundStatusEvent) => void;
 }
 
 /** Return type for the useSSE hook */
@@ -320,6 +338,26 @@ export function useSSE(
       try {
         const data = JSON.parse(e.data) as SSEAgentProgressEvent;
         handlersRef.current.onAgentProgress?.(data);
+      } catch {
+        // Malformed JSON -- skip
+      }
+    });
+
+    // Listen for "playground:log" events (live output from a Playground run).
+    addTracked('playground:log', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data) as SSEPlaygroundLogEvent;
+        handlersRef.current.onPlaygroundLog?.(data);
+      } catch {
+        // Malformed JSON -- skip
+      }
+    });
+
+    // Listen for "playground:status" events (run started/completed/failed/stopped).
+    addTracked('playground:status', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data) as SSEPlaygroundStatusEvent;
+        handlersRef.current.onPlaygroundStatus?.(data);
       } catch {
         // Malformed JSON -- skip
       }

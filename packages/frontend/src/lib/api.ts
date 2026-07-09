@@ -331,6 +331,62 @@ export async function saveNotificationConfig(
   });
 }
 
+// ── Playground API Methods ────────────────────────────────────
+
+/**
+ * Start a Playground run: a single pipeline stage executed in isolation,
+ * optionally borrowing an existing ticket's context (read-only), with an
+ * optional custom instruction override. Live output streams over the
+ * `playground:log` / `playground:status` SSE events, keyed by `runId`.
+ */
+export async function startPlaygroundRun(
+  stage: string,
+  ticket?: string,
+  customInstruction?: string,
+): Promise<{ ok: boolean; runId?: string; error?: string }> {
+  return apiFetch('/api/playground/start', {
+    method: 'POST',
+    body: JSON.stringify({ stage, ticket, customInstruction }),
+  });
+}
+
+/** Stop a running Playground run */
+export async function stopPlaygroundRun(runId: string): Promise<{ ok: boolean; error?: string }> {
+  return apiFetch('/api/playground/stop', {
+    method: 'POST',
+    body: JSON.stringify({ runId }),
+  });
+}
+
+/** Persisted Playground run metadata, as written by playground-process.ts */
+export interface PlaygroundRunRecord {
+  runId: string;
+  stage: string;
+  ticket: string | null;
+  customInstruction?: string;
+  startedAt: number;
+  finishedAt: number | null;
+  status: 'running' | 'completed' | 'failed' | 'stopped';
+  resultSummary?: string | null;
+}
+
+/** List recent Playground runs, optionally filtered by ticket and/or stage */
+export async function getPlaygroundRuns(
+  ticket?: string,
+  stage?: string,
+): Promise<{ ok: boolean; runs: PlaygroundRunRecord[] }> {
+  const params = new URLSearchParams();
+  if (ticket) params.set('ticket', ticket);
+  if (stage) params.set('stage', stage);
+  const qs = params.toString();
+  return apiFetch(`/api/playground/runs${qs ? `?${qs}` : ''}`);
+}
+
+/** Get a single Playground run's persisted detail */
+export async function getPlaygroundRun(runId: string): Promise<{ ok: boolean; run?: PlaygroundRunRecord; error?: string }> {
+  return apiFetch(`/api/playground/run/${encodeURIComponent(runId)}`);
+}
+
 export interface OAuthProviderStatus {
   provider: string;
   kind: 'oauth' | 'pat' | 'service_account' | 'webhook' | 'api_key';

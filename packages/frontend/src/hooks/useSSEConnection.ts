@@ -10,6 +10,7 @@ import { usePipelineStore } from '../store/pipeline';
 import { useSettingsStore, type OAuthStatusInfo } from '../store/settings';
 import { useCodegenLiveStore } from '../store/codegenLive';
 import { useAgentProgressStore } from '../store/agentProgress';
+import { usePlaygroundStore } from '../store/playground';
 import { getApiToken } from '../lib/api';
 import type { LogEntry, LogLevel, PipelineState, PipelineSummary, StageName } from '../types';
 
@@ -184,6 +185,20 @@ export function useSSEConnection(): void {
     onAgentProgress: (data) => {
       if (!data?.ticket || !data?.agent || !data?.phase) return;
       useAgentProgressStore.getState().applyEvent(data);
+    },
+
+    onPlaygroundLog: (data) => {
+      if (!data?.runId) return;
+      usePlaygroundStore.getState().appendLog(data.runId, {
+        level: data.level,
+        message: data.message,
+        timestamp: data.timestamp,
+      });
+    },
+
+    onPlaygroundStatus: (data) => {
+      if (!data?.runId || !data?.status) return;
+      usePlaygroundStore.getState().setStatus(data.runId, data.status);
     },
   }), []);
 

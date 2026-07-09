@@ -6,7 +6,7 @@
  * Uses shared types from @mi/shared for ApprovalGate.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-const { cfg, TICKET, POLL_INTERVAL, MAX_APPROVAL_TIMEOUT, APPROVAL_REMINDER_1H, APPROVAL_REMINDER_4H, monotonicMs } = require('./config');
+const { cfg, TICKET, POLL_INTERVAL, MAX_APPROVAL_TIMEOUT, APPROVAL_REMINDER_1H, APPROVAL_REMINDER_4H } = require('./config');
 const { logOk, logErr, logInfo, logWarn } = require('./logging');
 const { sleep } = require('./http-client');
 const { matchApprovalWord } = require('./utils');
@@ -17,30 +17,30 @@ const { slack } = require('./slack');
 const { isShuttingDown } = require('./graceful-shutdown');
 async function waitForApproval(state, sinceKey, requiredCount = 1, requiredIds = [], uiPrefix = null) {
     const since = state.data[sinceKey];
+    const startMs = Number.isFinite(new Date(since).getTime()) ? new Date(since).getTime() : Date.now();
     const approvedBy = new Set(state.data[`${sinceKey}_approvals`] || []);
     const notifiedUsers = new Set(state.data[`${sinceKey}_notified_users`] || []);
     const reminderKey1h = `${sinceKey}_reminder_1h`;
     const reminderKey4h = `${sinceKey}_reminder_4h`;
-    const pollStart = monotonicMs();
     let approvalPollCount = 0;
     while (approvedBy.size < requiredCount) {
         if (isShuttingDown()) {
             save(state);
             throw new Error("Shutdown in progress — exiting approval polling");
         }
-        if (monotonicMs() - pollStart > MAX_APPROVAL_TIMEOUT) {
+        if (Date.now() - startMs > MAX_APPROVAL_TIMEOUT) {
             logErr(`Approval timeout after ${MAX_APPROVAL_TIMEOUT / 3600000}h`);
             await slack(`\u23F0 *Approval Timeout — ${TICKET}*\nWaiting for approval exceeded ${MAX_APPROVAL_TIMEOUT / 3600000}h. Pipeline halted.`, [cfg.slack.ownerId]);
             save(state);
             throw new Error(`Approval timeout after ${MAX_APPROVAL_TIMEOUT / 3600000}h`);
         }
-        if (!state.data[reminderKey1h] && (monotonicMs() - pollStart) > APPROVAL_REMINDER_1H) {
+        if (!state.data[reminderKey1h] && (Date.now() - startMs) > APPROVAL_REMINDER_1H) {
             logInfo("X4: Sending 1h approval reminder…");
             await slack(`\u23F0 *Reminder — ${TICKET}*\nApproval pending for 1 hour. Please review.\n\u{1F4CB} ${jiraUrl(TICKET)}`, [cfg.slack.ownerId]);
             state.data[reminderKey1h] = new Date().toISOString();
             save(state);
         }
-        if (!state.data[reminderKey4h] && (monotonicMs() - pollStart) > APPROVAL_REMINDER_4H) {
+        if (!state.data[reminderKey4h] && (Date.now() - startMs) > APPROVAL_REMINDER_4H) {
             logWarn("X4: Sending 4h escalation reminder…");
             await slack(`\u{1F6A8} *Escalation — ${TICKET}*\nApproval pending for 4 hours! Pipeline is blocked.\n\u{1F4CB} ${jiraUrl(TICKET)}`, [cfg.slack.ownerId, cfg.slack.qaId]);
             state.data[reminderKey4h] = new Date().toISOString();
@@ -124,7 +124,7 @@ async function waitForApproval(state, sinceKey, requiredCount = 1, requiredIds =
             break;
         approvalPollCount++;
         if (approvalPollCount % 6 === 0) {
-            const waitMins = Math.floor((monotonicMs() - pollStart) / 60000);
+            const waitMins = Math.floor((Date.now() - startMs) / 60000);
             logInfo(`Polling approvals… (${approvedBy.size}/${requiredCount}) ${waitMins}m elapsed`);
         }
         await sleep(POLL_INTERVAL);

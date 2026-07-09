@@ -70,6 +70,25 @@ export function setAgentProcessHandlers(handlers: AgentProcessHandlers): void {
   _agentHandlers = handlers;
 }
 
+// Playground process management: startPlaygroundRun, stopPlaygroundRun, etc.
+// Registered via setPlaygroundProcessHandlers() from http-server.ts, same
+// late-binding rationale as AgentProcessHandlers above.
+interface PlaygroundProcessHandlers {
+  startPlaygroundRun: (opts: { runId: string; stage: string; ticket?: string | null; customInstruction?: string }) => { ok: boolean; error?: string };
+  stopPlaygroundRun: (runId: string) => { ok: boolean; error?: string };
+  getPlaygroundProcs: () => Record<string, AgentChildProcess>;
+  PLAYGROUND_WIRED_STAGES: Set<string>;
+}
+
+let _playgroundHandlers: PlaygroundProcessHandlers | null = null;
+
+/**
+ * Register Playground process handlers. Called by http-server.ts on startup.
+ */
+export function setPlaygroundProcessHandlers(handlers: PlaygroundProcessHandlers): void {
+  _playgroundHandlers = handlers;
+}
+
 // ── Resilience modules (safe require -- each may not exist yet) ──
 
 // Security: input sanitization + safe body parsing
@@ -230,6 +249,60 @@ export function safeStage(s: string | null | undefined): StageName | null {
   const st = (s || '').trim();
   if (!_agentHandlers) return null;
   return _agentHandlers.STAGE_DATA_MAP[st] !== undefined ? st as StageName : null;
+}
+
+/**
+ * Playground stage whitelist -- deliberately narrower than the full
+ * pipeline's STAGES list and enforced server-side (not just hidden in the
+ * UI). Only stages with no irreversible external side effect once
+ * simulated are exposed; deploy/gate/dual-approval stages stay out until
+ * the safe stages are proven out.
+ */
+const PLAYGROUND_ALLOWED_STAGES = new Set<string>(['fetch_ticket', 'explore_plan', 'generate_code']);
+
+// Project root -- packages/agent/src/server/playground-process.ts persists run
+// metadata to <root>/.state/playground/<runId>.json; read it back from here.
+const PLAYGROUND_STATE_DIR = path.join(__dirname, '..', '..', '..', '..', '.state', 'playground');
+
+interface PlaygroundRunRecord {
+  runId: string;
+  stage: string;
+  ticket: string | null;
+  customInstruction?: string;
+  startedAt: number;
+  finishedAt: number | null;
+  status: 'running' | 'completed' | 'failed' | 'stopped';
+  resultSummary?: string | null;
+}
+
+function readPlaygroundRun(runId: string): PlaygroundRunRecord | null {
+  try {
+    const filePath = path.join(PLAYGROUND_STATE_DIR, `${runId}.json`);
+    if (!fs.existsSync(filePath)) return null;
+    return JSON.parse(fs.readFileSync(filePath, 'utf8')) as PlaygroundRunRecord;
+  } catch {
+    return null;
+  }
+}
+
+function listPlaygroundRuns(): PlaygroundRunRecord[] {
+  try {
+    if (!fs.existsSync(PLAYGROUND_STATE_DIR)) return [];
+    const files = fs.readdirSync(PLAYGROUND_STATE_DIR).filter((f) => f.endsWith('.json'));
+    const runs = files
+      .map((f) => {
+        try {
+          return JSON.parse(fs.readFileSync(path.join(PLAYGROUND_STATE_DIR, f), 'utf8')) as PlaygroundRunRecord;
+        } catch {
+          return null;
+        }
+      })
+      .filter((r): r is PlaygroundRunRecord => r !== null);
+    runs.sort((a, b) => b.startedAt - a.startedAt);
+    return runs;
+  } catch {
+    return [];
+  }
 }
 
 // ── POST Body Parsing ───────────────────────────────────────────
@@ -1277,6 +1350,149 @@ export async function handleRequest(
       res.writeHead(status, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: false, error: msg }));
     }
+    return true;
+  }
+
+  // -- POST /api/playground/start --
+  // Validates input, then either delegates to the real single-stage runner
+  // (packages/agent/src/playground-runner.ts, via playground-process.ts —
+  // once a stage is in PLAYGROUND_WIRED_STAGES) or falls back to a stub
+  // that echoes the request back over the `playground:log` /
+  // `playground:status` SSE events (for stages not yet wired for real
+  // execution). This lets the picker show every allowed stage from day
+  // one while real execution rolls out stage-by-stage.
+  if (url.pathname === '/api/playground/start' && request.method === 'POST') {
+    try {
+      const raw = await parseBody(request, getBodySizeLimit('/api/playground/start'));
+      const { stage, ticket, customInstruction } = sanitizeBody('/api/playground/start', raw) as {
+        stage?: string; ticket?: string; customInstruction?: string;
+      };
+      if (!stage || !PLAYGROUND_ALLOWED_STAGES.has(stage)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Invalid or disallowed stage' }));
+        return true;
+      }
+      let t: string | null = null;
+      if (ticket) {
+        t = safeTicket(ticket);
+        if (!t) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'Invalid ticket format' }));
+          return true;
+        }
+      }
+      const instruction = typeof customInstruction === 'string' ? customInstruction.trim() : '';
+      if (instruction.length > 10000) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Custom instruction too long (max 10000 chars)' }));
+        return true;
+      }
+      const runId = `pg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+      if (_playgroundHandlers && _playgroundHandlers.PLAYGROUND_WIRED_STAGES.has(stage)) {
+        const startResult = _playgroundHandlers.startPlaygroundRun({ runId, stage, ticket: t, customInstruction: instruction });
+        if (!startResult.ok) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: startResult.error ?? 'Failed to start Playground run' }));
+          return true;
+        }
+        addLog(`[Playground] Started real run ${runId} for stage ${stage}`, 'system');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, runId }));
+        return true;
+      }
+
+      addLog(`[Playground] Stub run ${runId} for stage ${stage}`, 'system');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, runId }));
+      // Broadcast after the response is sent: the client only creates its
+      // local run entry once this POST resolves, so events broadcast
+      // beforehand would arrive over SSE before that entry exists and get
+      // silently dropped. The delay also stands in for real async stage
+      // execution, which genuinely takes time.
+      setTimeout(() => {
+        broadcast('playground:status', { runId, status: 'running', stage, ticket: t });
+        broadcast('playground:log', {
+          runId,
+          level: 'info',
+          message: `[PLAYGROUND] Would run stage "${stage}"`
+            + (t ? ` with context from ${t}` : '')
+            + (instruction ? ` — custom instruction: "${instruction}"` : ' — using default instruction')
+            + ' (not yet wired for real execution — stub echo)',
+        });
+        broadcast('playground:status', { runId, status: 'completed', stage, ticket: t });
+      }, 300);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: msg }));
+    }
+    return true;
+  }
+
+  // -- POST /api/playground/stop --
+  if (url.pathname === '/api/playground/stop' && request.method === 'POST') {
+    try {
+      const raw = await parseBody(request, getBodySizeLimit('/api/playground/stop'));
+      const { runId } = sanitizeBody('/api/playground/stop', raw) as { runId?: string };
+      if (!runId || typeof runId !== 'string') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'runId is required' }));
+        return true;
+      }
+      if (!_playgroundHandlers) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'No Playground run in progress' }));
+        return true;
+      }
+      const stopResult = _playgroundHandlers.stopPlaygroundRun(runId);
+      res.writeHead(stopResult.ok ? 200 : 400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(stopResult));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: msg }));
+    }
+    return true;
+  }
+
+  // -- GET /api/playground/runs -- Recent run metadata, optionally filtered --
+  // Backs the "validated in Playground" lookup in GateApproval.tsx: given a
+  // (ticket, stage) pair, find the most recent completed run.
+  if (url.pathname === '/api/playground/runs' && request.method === 'GET') {
+    try {
+      const runs = listPlaygroundRuns();
+      const ticketFilter = url.searchParams.get('ticket');
+      const stageFilter = url.searchParams.get('stage');
+      const filtered = runs.filter((r) =>
+        (!ticketFilter || r.ticket === ticketFilter) && (!stageFilter || r.stage === stageFilter),
+      );
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, runs: filtered }));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: msg }));
+    }
+    return true;
+  }
+
+  // -- GET /api/playground/run/:runId -- Single run detail --
+  if (url.pathname.startsWith('/api/playground/run/') && request.method === 'GET') {
+    const runId = decodeURIComponent(url.pathname.slice('/api/playground/run/'.length));
+    if (!/^[A-Za-z0-9_-]+$/.test(runId)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'Invalid runId format' }));
+      return true;
+    }
+    const run = readPlaygroundRun(runId);
+    if (!run) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'Run not found' }));
+      return true;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, run }));
     return true;
   }
 

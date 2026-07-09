@@ -8,6 +8,7 @@ import { useCallback, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { TicketForm } from './components/TicketForm';
 import { AgentStatus } from './components/AgentStatus';
+import { AutomationStatusStrip } from './components/AutomationStatusStrip';
 import { LogViewer } from './components/LogViewer';
 import { GateApproval } from './components/GateApproval';
 import { ResumeDialog } from './components/ResumeDialog';
@@ -26,6 +27,7 @@ import { AgentSwimLanes } from './components/AgentSwimLanes';
 import { useLiveForTicket } from './store/codegenLive';
 import { useAgentProgressStore } from './store/agentProgress';
 import { SettingsPage as SettingsPageImpl } from './components/settings/SettingsPage';
+import { PlaygroundPage as PlaygroundPageImpl } from './components/playground/PlaygroundPage';
 import { ShortcutsHelpModal } from './components/ShortcutsHelpModal';
 import { RateLimitBanner } from './components/RateLimitBanner';
 import { AuthRequiredBanner } from './components/AuthRequiredBanner';
@@ -183,6 +185,16 @@ function ReviewPage(): JSX.Element {
   return (
     <div style={{ padding: 'var(--sp-5)', maxWidth: 1400 }}>
       <DiffViewer />
+    </div>
+  );
+}
+
+// ── Playground Page ──────────────────────────────────────────────
+
+function PlaygroundPage(): JSX.Element {
+  return (
+    <div style={{ padding: 'var(--sp-5)', maxWidth: 1200 }}>
+      <PlaygroundPageImpl />
     </div>
   );
 }
@@ -364,6 +376,7 @@ function DashboardView({
           /* Active ticket: show pipeline detail + status + gate + logs */
           <>
             {activePipeline && <PipelineDetail pipeline={activePipeline} />}
+            <AutomationStatusStrip />
             <StuckBanner />
             <AgentStatus />
             <AgentSwimLanes />
@@ -477,6 +490,8 @@ export function App(): JSX.Element {
         return <SettingsPage />;
       case 'review':
         return <ReviewPage />;
+      case 'playground':
+        return <PlaygroundPage />;
       case 'dashboard':
       default:
         return (

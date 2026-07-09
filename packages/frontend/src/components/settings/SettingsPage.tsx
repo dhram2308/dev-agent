@@ -9,6 +9,7 @@ import { useSettingsStore, type SettingsTab } from '../../store/settings';
 import { ConfigTab } from './ConfigTab';
 import { NotificationsTab } from './NotificationsTab';
 import { ConnectorsTab } from './ConnectorsTab';
+import { AutomationTab } from './AutomationTab';
 import { DisplaySettings } from './DisplaySettings';
 
 // ── Styles ──────────────────────────────────────────────────
@@ -127,6 +128,15 @@ const TABS: TabDef[] = [
       </svg>
     ),
   },
+  {
+    id: 'automation',
+    label: 'Automation',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 8h3l2-5 2 10 2-5h3" />
+      </svg>
+    ),
+  },
 ];
 
 // ── Component ───────────────────────────────────────────────
@@ -194,6 +204,7 @@ export function SettingsPage(): JSX.Element {
         {activeTab === 'config' && <ConfigTab />}
         {activeTab === 'notifications' && <NotificationsTab />}
         {activeTab === 'connectors' && <ConnectorsTab />}
+        {activeTab === 'automation' && <AutomationTab />}
       </div>
     </div>
   );

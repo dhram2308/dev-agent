@@ -3,7 +3,10 @@
 // Stage progress bar, history, and metadata for selected pipeline
 // ═══════════════════════════════════════════════════════════════
 
-import { STAGE_INFO, type PipelineSummary } from '../types';
+import { STAGE_INFO, type PipelineSummary, type StageName } from '../types';
+import { usePlaygroundStore } from '../store/playground';
+import { useNavigationStore } from '../store/navigation';
+import { PLAYGROUND_ALLOWED_STAGES } from './playground/PlaygroundPage';
 
 // ── Styles ─────────────────────────────────────────────────────
 
@@ -79,6 +82,19 @@ const styles = {
     fontFamily: 'var(--font-mono)',
     fontSize: 10,
   },
+  playgroundBtn: {
+    marginLeft: 'auto',
+    padding: 'var(--sp-1) var(--sp-3)',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: 'pointer',
+    background: 'transparent',
+    color: 'var(--accent)',
+    border: '1px solid var(--accent)',
+    fontFamily: 'var(--font-sans)',
+    whiteSpace: 'nowrap' as const,
+  },
 } as const;
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -127,6 +143,12 @@ interface PipelineDetailProps {
 
 export function PipelineDetail({ pipeline }: PipelineDetailProps): JSX.Element {
   const stageIdx = STAGE_INFO.findIndex(s => s.stage === pipeline.stage);
+  const canVerifyInPlayground = PLAYGROUND_ALLOWED_STAGES.includes(pipeline.stage as StageName);
+
+  const handleVerifyInPlayground = (): void => {
+    usePlaygroundStore.getState().prefill(pipeline.stage as StageName, pipeline.ticket);
+    useNavigationStore.getState().setView('playground');
+  };
 
   return (
     <div style={styles.container}>
@@ -136,6 +158,16 @@ export function PipelineDetail({ pipeline }: PipelineDetailProps): JSX.Element {
         <span style={{ ...styles.statusPill, ...getStatusPillStyle(pipeline.status) }}>
           {statusText(pipeline.status)}
         </span>
+        {canVerifyInPlayground && (
+          <button
+            type="button"
+            style={styles.playgroundBtn}
+            onClick={handleVerifyInPlayground}
+            aria-label={`Run ${STAGE_INFO[stageIdx]?.label ?? pipeline.stage} in Playground`}
+          >
+            Run in Playground
+          </button>
+        )}
       </div>
 
       {/* Stage progress bar */}

@@ -9,7 +9,7 @@ import * as api from '../lib/api';
 
 // ── Types ───────────────────────────────────────────────────
 
-export type SettingsTab = 'config' | 'notifications' | 'connectors';
+export type SettingsTab = 'config' | 'notifications' | 'connectors' | 'automation';
 
 export type FieldType = 'string' | 'password' | 'number' | 'boolean' | 'enum';
 

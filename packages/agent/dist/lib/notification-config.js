@@ -27,6 +27,7 @@ const CONFIG_PATH = path_1.default.join(__dirname, "..", "..", "..", "..", "noti
 const GATES = [
     "fetch_ticket",
     "explore_plan",
+    "generate_code",
     "gate_code_review",
     "deploy_qa",
     "test_qa",
@@ -35,7 +36,7 @@ const GATES = [
     "deploy_prod",
     "done",
 ];
-const CHANNELS = ["slack", "jira", "ui", "reminder1h", "reminder4h"];
+const CHANNELS = ["slack", "jira", "ui", "reminder1h", "reminder4h", "log"];
 /** Returns a single gate's default config (all channels ON). */
 function defaultGateConfig() {
     return Object.fromEntries(CHANNELS.map((ch) => [ch, true]));

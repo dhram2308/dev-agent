@@ -358,6 +358,27 @@ exports.CONFIG_SCHEMA = {
         group: "slack", description: "Slack user ID for QA mentions",
         hotReload: true, riskLevel: "SAFE",
     },
+    // ── Git Branches ───────────────────────────────────────────────
+    BRANCH_TS: {
+        env: "BRANCH_TS", type: "string", default: "enterprise-ts",
+        required: true, sensitive: false, group: "git", description: "Source branch (TypeScript / feature work)",
+        hotReload: true, riskLevel: "DANGEROUS",
+    },
+    BRANCH_QA: {
+        env: "BRANCH_QA", type: "string", default: "enterprise-qa",
+        required: true, sensitive: false, group: "git", description: "QA target branch",
+        hotReload: true, riskLevel: "DANGEROUS",
+    },
+    BRANCH_PREPROD: {
+        env: "BRANCH_PREPROD", type: "string", default: "enterprise-pre-pro",
+        required: true, sensitive: false, group: "git", description: "Pre-production target branch",
+        hotReload: true, riskLevel: "DANGEROUS",
+    },
+    BRANCH_PROD: {
+        env: "BRANCH_PROD", type: "string", default: "enterprise-master",
+        required: true, sensitive: false, group: "git", description: "Production target branch",
+        hotReload: true, riskLevel: "DANGEROUS",
+    },
     // ── Git Author ─────────────────────────────────────────────────
     GIT_AUTHOR_NAME: {
         env: "GIT_AUTHOR_NAME", type: "string", default: "Yogendra",
@@ -870,6 +891,44 @@ exports.CONFIG_SCHEMA = {
         required: false, sensitive: false, group: "limits",
         description: "Max state file size before warning (bytes)", hotReload: true, riskLevel: "SAFE",
         min: 1_000_000, max: 100_000_000,
+    },
+    // ── Automation (per-gate auto-approve policy) ──────────────────
+    AUTO_APPROVE_EXPLORE_PLAN: {
+        env: "AUTO_APPROVE_EXPLORE_PLAN", type: "enum", default: "manual",
+        allowed: ["manual", "playground_validated", "always"], required: false, sensitive: false,
+        group: "automation", description: "Auto-approve policy for the Explore & Plan gate",
+        hotReload: true, riskLevel: "DANGEROUS",
+    },
+    AUTO_APPROVE_GATE_CODE_REVIEW: {
+        env: "AUTO_APPROVE_GATE_CODE_REVIEW", type: "enum", default: "manual",
+        allowed: ["manual", "playground_validated", "always"], required: false, sensitive: false,
+        group: "automation", description: "Auto-approve policy for the Code Review gate",
+        hotReload: true, riskLevel: "DANGEROUS",
+    },
+    AUTO_APPROVE_GATE_PREPROD_APPROVAL: {
+        env: "AUTO_APPROVE_GATE_PREPROD_APPROVAL", type: "enum", default: "manual",
+        allowed: ["manual", "playground_validated", "always"], required: false, sensitive: false,
+        group: "automation", description: "Auto-approve policy for the Pre-Prod gate",
+        hotReload: true, riskLevel: "DANGEROUS",
+    },
+    AUTO_APPROVE_GATE_DUAL_APPROVAL: {
+        env: "AUTO_APPROVE_GATE_DUAL_APPROVAL", type: "enum", default: "manual",
+        allowed: ["manual", "playground_validated", "always"], required: false, sensitive: false,
+        group: "automation", description: "Auto-approve policy for the Dual Approval (Production) gate",
+        hotReload: true, riskLevel: "DANGEROUS",
+    },
+    // ── Playground (single-stage sandbox runs) ─────────────────────
+    PLAYGROUND_MAX_RUNTIME_MS: {
+        env: "PLAYGROUND_MAX_RUNTIME_MS", type: "int", default: 900_000,
+        required: false, sensitive: false, group: "playground",
+        description: "Max wall-clock time for a single Playground run before it's killed (ms)",
+        hotReload: true, riskLevel: "CAUTION", min: 30_000, max: 3_600_000,
+    },
+    PLAYGROUND_MAX_CONCURRENT_RUNS: {
+        env: "PLAYGROUND_MAX_CONCURRENT_RUNS", type: "int", default: 3,
+        required: false, sensitive: false, group: "playground",
+        description: "Max Playground runs allowed at the same time",
+        hotReload: true, riskLevel: "CAUTION", min: 1, max: 10,
     },
 };
 // ── Schema query helpers ──────────────────────────────────────────

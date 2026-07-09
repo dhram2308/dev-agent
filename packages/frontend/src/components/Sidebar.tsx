@@ -11,6 +11,8 @@ import {
   stageIndex,
 } from '../store/pipeline';
 import { useNavigationStore, type AppView } from '../store/navigation';
+import { usePlaygroundStore } from '../store/playground';
+import { PLAYGROUND_ALLOWED_STAGES } from './playground/PlaygroundPage';
 import { STAGE_INFO, type StageName, type PipelineSummary } from '../types';
 
 // ── View navigation config ────────────────────────────────────
@@ -37,6 +39,11 @@ const VIEW_NAV_ITEMS: ViewNavItem[] = [
     view: 'review',
     label: 'Review',
     iconPath: 'M8 1C4.13 1 1 4.13 1 8s3.13 7 7 7 7-3.13 7-7-3.13-7-7-7zm3.22 5.28l-3.5 3.5a.75.75 0 01-1.06 0l-1.5-1.5a.75.75 0 111.06-1.06L7.22 8.22l2.97-2.97a.75.75 0 111.06 1.06z',
+  },
+  {
+    view: 'playground',
+    label: 'Playground',
+    iconPath: 'M2 3a1 1 0 011-1h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3zm3 2.5v5l4-2.5-4-2.5z',
   },
 ];
 
@@ -269,6 +276,25 @@ const styles = {
     flexShrink: 0,
     opacity: 0.7,
   },
+  stageRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+  },
+  verifyBtn: {
+    flexShrink: 0,
+    padding: '2px 6px',
+    marginRight: 'var(--sp-1)',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 9,
+    fontWeight: 600,
+    cursor: 'pointer',
+    background: 'transparent',
+    color: 'var(--accent)',
+    border: '1px solid var(--accent)',
+    fontFamily: 'var(--font-sans)',
+    whiteSpace: 'nowrap' as const,
+  },
 } as const;
 
 // ── Pipeline status dot styles ──────────────────────────────────
@@ -493,6 +519,7 @@ export function Sidebar(): JSX.Element {
           <nav style={styles.nav} role="tablist" aria-label="Pipeline steps">
             {STAGE_INFO.map((info, idx) => {
               const isCurrentStage = idx === currentIdx;
+              const canVerify = isCurrentStage && PLAYGROUND_ALLOWED_STAGES.includes(info.stage);
               const handleActivate = (): void => {
                 const target = document.getElementById(`stage-section-${info.stage}`);
                 if (target) {
@@ -501,23 +528,40 @@ export function Sidebar(): JSX.Element {
                   window.setTimeout(() => target.classList.remove('mi-stage-highlight'), 1500);
                 }
               };
+              const handleVerify = (e: React.MouseEvent): void => {
+                e.stopPropagation();
+                usePlaygroundStore.getState().prefill(info.stage, activeTicket);
+                setView('playground');
+              };
               return (
-                <button
-                  key={info.stage}
-                  style={{
-                    ...styles.navItem,
-                    ...(isCurrentStage ? styles.navItemActive : {}),
-                  }}
-                  role="tab"
-                  aria-selected={isCurrentStage}
-                  aria-controls={`stage-section-${info.stage}`}
-                  tabIndex={isCurrentStage ? 0 : -1}
-                  title={`${info.label} (${info.who})`}
-                  onClick={handleActivate}
-                >
-                  <span style={{ ...styles.dot, ...getDotStyle(idx, currentIdx, isRunning) }} />
-                  <span style={styles.label}>{info.label}</span>
-                </button>
+                <div key={info.stage} style={styles.stageRow}>
+                  <button
+                    style={{
+                      ...styles.navItem,
+                      ...(isCurrentStage ? styles.navItemActive : {}),
+                    }}
+                    role="tab"
+                    aria-selected={isCurrentStage}
+                    aria-controls={`stage-section-${info.stage}`}
+                    tabIndex={isCurrentStage ? 0 : -1}
+                    title={`${info.label} (${info.who})`}
+                    onClick={handleActivate}
+                  >
+                    <span style={{ ...styles.dot, ...getDotStyle(idx, currentIdx, isRunning) }} />
+                    <span style={styles.label}>{info.label}</span>
+                  </button>
+                  {canVerify && (
+                    <button
+                      type="button"
+                      style={styles.verifyBtn}
+                      onClick={handleVerify}
+                      title={`Verify ${info.label} in Playground`}
+                      aria-label={`Verify ${info.label} in Playground`}
+                    >
+                      Verify
+                    </button>
+                  )}
+                </div>
               );
             })}
           </nav>
