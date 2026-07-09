@@ -4,7 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback } from 'react';
-import { usePipelineStore, useActiveTicketState, useIsStuck, stageIndex } from '../store/pipeline';
+import { usePipelineStore, useActiveTicketState, stageIndex } from '../store/pipeline';
 import { STAGE_ORDER, STAGE_INFO } from '../types';
 import { AgentActivityBar } from './AgentActivityBar';
 
@@ -67,20 +67,6 @@ const styles = {
     fontSize: 10,
     color: 'var(--text-tertiary)',
     marginRight: 4,
-  },
-  stuckBanner: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--sp-2)',
-    padding: 'var(--sp-3) var(--sp-4)',
-    borderRadius: 'var(--radius-md)',
-    marginBottom: 'var(--sp-3)',
-    background: 'var(--warning-muted)',
-    border: '1px solid rgba(234,179,8,0.2)',
-    color: 'var(--warning)',
-    fontSize: 13,
-    fontWeight: 600,
-    animation: 'slideDown 0.3s ease-out',
   },
   stopButton: {
     padding: 'var(--sp-2) var(--sp-4)',
@@ -206,7 +192,6 @@ function getDotColor(status: StageStatus): string {
 
 export function AgentStatus(): JSX.Element | null {
   const ticketState = useActiveTicketState();
-  const isStuck = useIsStuck();
   const stopAgent = usePipelineStore((s) => s.stopAgent);
   const activeTicket = usePipelineStore((s) => s.activeTicket);
 
@@ -242,14 +227,6 @@ export function AgentStatus(): JSX.Element | null {
           transition: 'width 0.6s ease',
         }} />
       </div>
-
-      {/* Stuck banner */}
-      {isStuck && isRunning && (
-        <div style={styles.stuckBanner} role="alert">
-          <span aria-hidden="true">&#x23F3;</span>
-          <span>No activity detected for 10+ minutes. Pipeline may be stuck.</span>
-        </div>
-      )}
 
       {/* Error banner */}
       {ticketState.error && (

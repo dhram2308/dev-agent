@@ -19,9 +19,6 @@ import * as api from '../lib/api';
 /** Maximum number of log entries to keep in memory per ticket */
 const MAX_LOG_ENTRIES = 5000;
 
-/** Stuck detection threshold in milliseconds (10 minutes) */
-const STUCK_THRESHOLD_MS = 10 * 60 * 1000;
-
 /** Canonical ordering of pipeline stages for monotonic-guard dedup. */
 const STAGE_ORDER: Record<StageName, number> = {
   fetch_ticket: 0,
@@ -608,16 +605,6 @@ export function usePendingQuestions(
     const entry = s.tickets.get(ticket);
     const pending = (entry?.state?.data as any)?._pending_questions;
     return Array.isArray(pending) ? pending : [];
-  });
-}
-
-/** Get whether the active ticket is stuck (no activity for 10+ minutes) */
-export function useIsStuck(): boolean {
-  return usePipelineStore((s) => {
-    if (!s.activeTicket) return false;
-    const ts = s.tickets.get(s.activeTicket);
-    if (!ts?.isRunning || !ts.stageStartedAt) return false;
-    return Date.now() - ts.stageStartedAt > STUCK_THRESHOLD_MS;
   });
 }
 
