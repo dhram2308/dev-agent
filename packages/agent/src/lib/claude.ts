@@ -204,6 +204,29 @@ async function _callClaudeOnce(prompt: string, timeoutMs: number, opts: ClaudeCa
   });
 }
 
+// ── X2: Per-stage token usage tracking ─────────────────────────────
+// Estimates only (chars/4) — the Claude CLI runs with `--output-format text`,
+// which has no exact usage figures to parse. Accumulates into the same
+// state.data._metrics[stage] object the main pipeline loop (index.ts)
+// writes duration_ms into, keyed off getCurrentState() so every callClaude
+// call site (across every stage, including generate_code's multi-agent
+// team) is instrumented for free with no per-stage-handler changes.
+function recordTokenUsage(promptChars: number, outputChars: number): void {
+  try {
+    const state = getCurrentState();
+    const stage = state?.stage;
+    if (!state || !stage) return;
+    state.data._metrics = state.data._metrics || {};
+    const m = (state.data._metrics[stage] = state.data._metrics[stage] || { runs: [] });
+    m.promptTokensEstimated = (m.promptTokensEstimated || 0) + Math.round(promptChars / 4);
+    m.outputTokensEstimated = (m.outputTokensEstimated || 0) + Math.round(outputChars / 4);
+    m.callCount = (m.callCount || 0) + 1;
+    save(state);
+  } catch (e: any) {
+    console.warn("[Claude] Token usage tracking failed:", e.message);
+  }
+}
+
 // ── Public wrapper: logging + retry-on-timeout ────────────────────
 async function callClaude(prompt: string, timeoutMs: number = CLAUDE_TIMEOUT, opts: ClaudeCallOptions = {}): Promise<ClaudeResponse> {
   const agentName = opts.agentName || "Claude";
@@ -223,6 +246,7 @@ async function callClaude(prompt: string, timeoutMs: number = CLAUDE_TIMEOUT, op
     const result = await _callClaudeOnce(prompt, timeoutMs, opts);
     const elapsedSec = ((Date.now() - callStart) / 1000).toFixed(1);
     logOk(`[${agentName}] Complete in ${elapsedSec}s`);
+    recordTokenUsage(promptChars, result.length);
     return result;
   } catch (err: any) {
     const isTimeout = err.message && err.message.includes("timed out after");
@@ -235,6 +259,7 @@ async function callClaude(prompt: string, timeoutMs: number = CLAUDE_TIMEOUT, op
       const retryResult = await _callClaudeOnce(prompt, retryTimeout, { ...opts, maxTurns: retryMaxTurns });
       const elapsedSec = ((Date.now() - callStart) / 1000).toFixed(1);
       logOk(`[${agentName}] Complete in ${elapsedSec}s (after retry)`);
+      recordTokenUsage(promptChars, retryResult.length);
       return retryResult;
     }
 

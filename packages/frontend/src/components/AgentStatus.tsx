@@ -10,7 +10,7 @@ import { AgentActivityBar } from './AgentActivityBar';
 
 // ── Timer hook ─────────────────────────────────────────────────
 
-function useElapsedTime(startTime: number | null): string {
+export function useElapsedTime(startTime: number | null): string {
   const [, setTick] = useState(0);
 
   useEffect(() => {

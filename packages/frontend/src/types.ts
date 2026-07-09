@@ -56,6 +56,16 @@ export const GATE_STAGES: readonly StageName[] = [
   'gate_dual_approval',
 ] as const;
 
+/** Per-stage timing + estimated token usage entry — see PipelineData._metrics */
+export interface StageMetric {
+  start_ts?: number;
+  duration_ms?: number;
+  promptTokensEstimated?: number;
+  outputTokensEstimated?: number;
+  callCount?: number;
+  runs?: Array<{ start: number; end: number; durationMs: number; durationHuman?: string }>;
+}
+
 /** Pipeline state data object */
 export interface PipelineData {
   _pipeline_start?: number;
@@ -86,6 +96,13 @@ export interface PipelineData {
     errorMessage?: string;
   }>;
   _stage_timings?: Record<string, { start: number; end?: number }>;
+  /**
+   * Per-stage timing + estimated token usage, written by the main pipeline
+   * loop (packages/agent/src/index.ts) and callClaude (packages/agent/src/lib/claude.ts).
+   * Token counts are char-length/4 estimates — the Claude CLI is invoked with
+   * `--output-format text`, which has no exact usage figures to parse.
+   */
+  _metrics?: Record<string, StageMetric>;
   code_mr_url?: string;
   code_mr_iid?: string | number;
   preprod_mr_url?: string;

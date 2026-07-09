@@ -9,6 +9,7 @@ import { Sidebar } from './components/Sidebar';
 import { TicketForm } from './components/TicketForm';
 import { AgentStatus } from './components/AgentStatus';
 import { AutomationStatusStrip } from './components/AutomationStatusStrip';
+import { StageMetricsPanel } from './components/StageMetricsPanel';
 import { LogViewer } from './components/LogViewer';
 import { GateApproval } from './components/GateApproval';
 import { ResumeDialog } from './components/ResumeDialog';
@@ -379,6 +380,7 @@ function DashboardView({
             <AutomationStatusStrip />
             <StuckBanner />
             <AgentStatus />
+            <StageMetricsPanel />
             <AgentSwimLanes />
             <LiveCodegenDiff />
             <WriteCodeDetail />
