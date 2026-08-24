@@ -73,6 +73,31 @@ const styles = {
     color: 'var(--warning)',
     fontWeight: 600,
   },
+  governancePill: {
+    fontSize: 11,
+    padding: '3px 10px',
+    borderRadius: 10,
+    background: 'var(--bg-elevated)',
+    color: 'var(--text-tertiary)',
+    fontWeight: 600,
+    border: '1px solid var(--border-default)',
+  },
+  modeBadgeDirect: {
+    fontSize: 11,
+    padding: '3px 10px',
+    borderRadius: 10,
+    background: 'var(--accent-muted)',
+    color: 'var(--accent)',
+    fontWeight: 600,
+  },
+  modeBadgeOpenspec: {
+    fontSize: 11,
+    padding: '3px 10px',
+    borderRadius: 10,
+    background: 'var(--success-muted)',
+    color: 'var(--success)',
+    fontWeight: 600,
+  },
   description: {
     fontSize: 13,
     color: 'var(--text-secondary)',
@@ -487,6 +512,22 @@ export function GateApproval(): JSX.Element | null {
   const mrUrl = data.code_mr_url as string | undefined;
   const mrIid = data.code_mr_iid;
 
+  // Governance pill (every gate) — "Auto" covers both auto-approve policies
+  // (always / playground_validated); "Plan" means this gate waits for you.
+  const isAutoPolicy = policy === 'always' || policy === 'playground_validated';
+
+  // Plan-mode badge + description (explore_plan only) — advanceMode is seeded
+  // once by fetch_ticket and never re-evaluated; openspecData === undefined
+  // with advanceMode !== 'direct' means OpenSpec was attempted but its
+  // artifacts failed to parse, not that Direct mode is active by design.
+  const advanceMode = data.advanceMode as 'direct' | 'openspec' | undefined;
+  const isDirectMode = gateWaiting === 'explore_plan' && advanceMode === 'direct';
+  const gateDescription = gateWaiting === 'explore_plan'
+    ? (isDirectMode
+        ? 'The agent has generated an implementation plan. Review the plan and approve, reject, or request refinements.'
+        : config.description)
+    : config.description;
+
   return (
     <>
       <div style={styles.container}>
@@ -494,10 +535,16 @@ export function GateApproval(): JSX.Element | null {
         <div style={styles.header}>
           <div style={styles.title}>{config.title}</div>
           <span style={styles.gateBadge}>Waiting</span>
+          <span style={styles.governancePill}>{isAutoPolicy ? 'Auto' : 'Plan'}</span>
+          {config.showPlan && (
+            <span style={isDirectMode ? styles.modeBadgeDirect : styles.modeBadgeOpenspec}>
+              {isDirectMode ? 'Direct plan' : (openspecData ? 'OpenSpec plan' : 'OpenSpec parse failed')}
+            </span>
+          )}
         </div>
 
         {/* Description */}
-        <div style={styles.description}>{config.description}</div>
+        <div style={styles.description}>{gateDescription}</div>
 
         {/* Validated-in-Playground banner — links back to the run that proved
             this stage's behavior before it reached a real gate. */}

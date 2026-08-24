@@ -21,6 +21,8 @@ interface ConfigFieldProps {
   min?: number;
   max?: number;
   frozen?: boolean;
+  /** Renders a "DANGEROUS" badge — surfaces config-schema.ts's riskLevel metadata, which was previously silently dropped. */
+  dangerous?: boolean;
 }
 
 // ── Styles ──────────────────────────────────────────────────
@@ -58,6 +60,16 @@ const styles = {
     borderRadius: 'var(--radius-full)',
     background: 'var(--warning-muted)',
     color: 'var(--warning)',
+    fontWeight: 600,
+    marginLeft: 'var(--sp-1)',
+    letterSpacing: '0.03em',
+  },
+  dangerousBadge: {
+    fontSize: 9,
+    padding: '1px 5px',
+    borderRadius: 'var(--radius-full)',
+    background: 'var(--danger-muted)',
+    color: 'var(--danger)',
     fontWeight: 600,
     marginLeft: 'var(--sp-1)',
     letterSpacing: '0.03em',
@@ -214,6 +226,7 @@ export function ConfigField({
   min,
   max,
   frozen,
+  dangerous,
 }: ConfigFieldProps): JSX.Element {
   const [showPassword, setShowPassword] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -240,6 +253,7 @@ export function ConfigField({
             {label}
             {required && <span style={styles.required}>*</span>}
             {frozen && <span style={styles.frozenBadge}>FROZEN</span>}
+            {dangerous && <span style={styles.dangerousBadge}>DANGEROUS</span>}
           </div>
           <div style={styles.description}>{description}</div>
         </div>
@@ -283,6 +297,7 @@ export function ConfigField({
             {label}
             {required && <span style={styles.required}>*</span>}
             {frozen && <span style={styles.frozenBadge}>FROZEN</span>}
+            {dangerous && <span style={styles.dangerousBadge}>DANGEROUS</span>}
           </div>
           <div style={styles.description}>{description}</div>
         </div>
@@ -314,6 +329,7 @@ export function ConfigField({
             {label}
             {required && <span style={styles.required}>*</span>}
             {frozen && <span style={styles.frozenBadge}>FROZEN</span>}
+            {dangerous && <span style={styles.dangerousBadge}>DANGEROUS</span>}
           </div>
           <div style={styles.description}>{description}</div>
         </div>
@@ -355,6 +371,7 @@ export function ConfigField({
             {label}
             {required && <span style={styles.required}>*</span>}
             {frozen && <span style={styles.frozenBadge}>FROZEN</span>}
+            {dangerous && <span style={styles.dangerousBadge}>DANGEROUS</span>}
           </div>
           <div style={styles.description}>{description}</div>
         </div>
@@ -392,6 +409,7 @@ export function ConfigField({
           {label}
           {required && <span style={styles.required}>*</span>}
           {frozen && <span style={styles.frozenBadge}>FROZEN</span>}
+          {dangerous && <span style={styles.dangerousBadge}>DANGEROUS</span>}
         </div>
         <div style={styles.description}>{description}</div>
       </div>

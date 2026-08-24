@@ -104,6 +104,19 @@ export interface PipelineData {
   _pending_questions?: import('./codegen').PendingQuestion[];
   /** User answers to clarifying questions — persists across Refine iterations as binding constraints */
   _qa_answers?: import('./codegen').QuestionAnswer[];
+  /**
+   * Written once by fetch_ticket (never re-evaluated afterward, even across
+   * resumes) — 'openspec' (default) scaffolds formal proposal/design/specs/
+   * tasks artifacts in explore_plan; 'direct' produces a plain-text plan
+   * only. Absent on tickets that predate this field, equivalent to 'openspec'.
+   */
+  advanceMode?: 'direct' | 'openspec';
+  /**
+   * Per-ticket Claude model override applied to this ticket's next spawn
+   * only (agent-process.ts injects it as CLAUDE_MODEL) -- never affects the
+   * global CLAUDE_MODEL setting or any other concurrently running ticket.
+   */
+  _modelOverride?: string;
   [key: string]: unknown;
 }
 
@@ -150,7 +163,20 @@ export interface HealthReport {
     trend: { trend: 'growing' | 'stable' | 'shrinking' | 'insufficient_data'; currentMB: number };
   };
   services: Record<ServiceName, ServiceHealth>;
-  progress: { stuck: boolean; stuckMinutes: number; lastStageChange: string };
+  /**
+   * `cause` is classified from `services`' recorded failures (see
+   * health-monitor.ts's checkProgress), not from raw elapsed time alone --
+   * 'gate-wait' means a human-approval stage, which is never "stuck".
+   */
+  progress: {
+    stuck: boolean;
+    cause: 'network' | 'slow' | 'gate-wait';
+    stuckMinutes?: number;
+    elapsedMinutes?: number;
+    stage?: string;
+    threshold?: number;
+    message?: string;
+  };
   warnings: string[];
   warningCount: number;
 }

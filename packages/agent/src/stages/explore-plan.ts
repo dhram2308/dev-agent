@@ -724,8 +724,21 @@ async function stageExplorePlan(state: PipelineState): Promise<void> {
 
     logOk("Analysis complete");
 
-    logInfo("  → OpenSpec: scaffolding change…");
-    const scaffold = scaffoldOpenSpec(TICKET);
+    // Seeded once by fetch_ticket and immutable for this ticket's life
+    // (see fetch-ticket.ts) -- read the persisted field, never process.env,
+    // so a later global config change never affects a ticket already past
+    // fetch_ticket. Strict opt-in comparison: anything other than the exact
+    // string "direct" (undefined, null, a typo, a pre-existing ticket with
+    // no field at all) safely takes the proven OpenSpec path.
+    const advanceMode: "direct" | "openspec" = state.data.advanceMode === "direct" ? "direct" : "openspec";
+
+    let scaffold: any = null;
+    if (advanceMode === "direct") {
+      logInfo("  → Development Advance Mode: direct — skipping OpenSpec scaffold");
+    } else {
+      logInfo("  → OpenSpec: scaffolding change…");
+      scaffold = scaffoldOpenSpec(TICKET);
+    }
 
     const CAP = 16000;
     const trim = (s: string): string => {
@@ -809,7 +822,9 @@ async function stageExplorePlan(state: PipelineState): Promise<void> {
       `5. **Bundle related changes; separate unrelated changes.** Example: auth in one group; routing in another; localization in a third; tests in their own group.\n` +
       `6. **No kitchen-sink groups.** Any group titled "Misc", "Cleanup", "Various", or "Polish" will exceed the budget — break it up.\n` +
       `7. **Reference files explicitly.** List the exact file paths the group touches under each \`##\` heading (the post-parser uses this to detect cross-group collisions).\n\n` +
-      `## OUTPUT FORMAT — CRITICAL\nYou MUST output exactly 4 sections:\n\n---PROPOSAL---\n---DESIGN---\n---SPECS---\n---TASKS---\n\nAll 4 markers are REQUIRED.`;
+      (advanceMode === "direct"
+        ? `## OUTPUT FORMAT\nWrite the plan as plain markdown with \`##\` task-group headings per the TASK GROUP SIZING rules above. Do not include OpenSpec section markers (e.g. ---PROPOSAL---) -- this ticket is running in Direct mode.`
+        : `## OUTPUT FORMAT — CRITICAL\nYou MUST output exactly 4 sections:\n\n---PROPOSAL---\n---DESIGN---\n---SPECS---\n---TASKS---\n\nAll 4 markers are REQUIRED.`);
 
     const architectOutput: string = await runSingleAgent({
       name: "OpenSpec Architect Agent",
@@ -834,7 +849,15 @@ async function stageExplorePlan(state: PipelineState): Promise<void> {
         suggestions: state.data._agent_suggestions || [],
       };
     } else {
-      logWarn("OpenSpec artifact parsing failed — using raw architect output");
+      // Two distinct reasons land here, sharing the same null sentinel by
+      // design (a non-empty sentinel would satisfy GateApproval.tsx's
+      // "has keys" guard and render empty OpenSpec tabs) -- disambiguated
+      // for the operator via advanceMode, not the state shape itself.
+      if (advanceMode === "direct") {
+        logOk("Direct mode — plain-text plan produced, no OpenSpec artifacts by design");
+      } else {
+        logWarn("OpenSpec artifact parsing failed — using raw architect output");
+      }
       state.data.explore_plan = architectOutput;
       state.data.explore_openspec = null;
     }
@@ -885,8 +908,16 @@ async function stageExplorePlan(state: PipelineState): Promise<void> {
   // ── Post plan for approval ──
   if (!state.data.explore_plan_posted) {
     const os = state.data.explore_openspec as any;
+    // Distinguishes "Direct mode, by design" from "OpenSpec attempted, parse
+    // failed" -- both leave explore_openspec null, so os truthiness alone
+    // can't tell them apart; state.data.advanceMode can.
+    const planSummary = os
+      ? "Full OpenSpec plan."
+      : state.data.advanceMode === "direct"
+        ? "Plan ready (Direct mode)."
+        : "Plan ready.";
     if (isChannelEnabled("explore_plan", "slack")) {
-      await slack(`📋 *Implementation Plan Ready — ${TICKET}*\n*${(state.data.ticket as any).summary}*\n\n${os ? "Full OpenSpec plan." : "Plan ready."}\nReview on Web UI → Approve, Reject, or Refine.\n🌐 http://localhost:3000`, [cfg.slack.ownerId]);
+      await slack(`📋 *Implementation Plan Ready — ${TICKET}*\n*${(state.data.ticket as any).summary}*\n\n${planSummary}\nReview on Web UI → Approve, Reject, or Refine.\n🌐 http://localhost:3000`, [cfg.slack.ownerId]);
     }
     state.data.explore_plan_posted = true;
     state.data.explore_plan_at = new Date().toISOString();

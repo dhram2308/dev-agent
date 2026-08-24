@@ -958,6 +958,21 @@ function req(url: string, opts: HttpRequestOptions & { service?: string } = {}):
   return dedup.register(dedupKey, promise, cacheTtl);
 }
 
+// Best-effort bridge into the pipeline health monitor's per-service tracking
+// (packages/agent/src/lib/health-monitor.ts's _serviceHealth map). Lazily
+// required to avoid a load-order dependency, and never allowed to throw --
+// this is instrumentation, not part of the request's control flow.
+function _reportHealth(service: string, ok: boolean, err?: any): void {
+  try {
+    const healthMonitor = require('./health-monitor') as {
+      recordServiceSuccess: (service: string) => void;
+      recordServiceFailure: (service: string, err?: any) => void;
+    };
+    if (ok) healthMonitor.recordServiceSuccess(service);
+    else healthMonitor.recordServiceFailure(service, err);
+  } catch { /* health-monitor unavailable -- never break the request for this */ }
+}
+
 async function _reqInternal(url: string, opts: any, service: string, method: string): Promise<HttpResponse> {
   // -- Degradation check --
   const degraded = checkDegradation(service);
@@ -1056,6 +1071,7 @@ async function _reqInternal(url: string, opts: any, service: string, method: str
           // 2xx success
           breaker.recordSuccess();
           metrics.recordSuccess(service, latency, res.bytesIn || 0);
+          _reportHealth(service, true);
           log().logDebug(`HTTP ${res.status} ${method} ${currentUrl} (${latency}ms)`);
           return { status: res.status, data: res.data, headers: res.headers };
         }
@@ -1120,6 +1136,7 @@ async function _reqInternal(url: string, opts: any, service: string, method: str
           // Exhausted retries
           breaker.recordFailure();
           metrics.recordFailure(service, latency, cls.reason!);
+          _reportHealth(service, false, new Error(`HTTP ${res.status}: ${cls.reason}`));
           log().logWarn(`HTTP ${res.status} ${method} ${currentUrl} -- retries exhausted (${latency}ms)`);
         } else {
           // Non-retryable status (4xx other than 401/403)
@@ -1165,6 +1182,7 @@ async function _reqInternal(url: string, opts: any, service: string, method: str
         // Not retryable or retries exhausted
         breaker.recordFailure();
         metrics.recordFailure(service, latency, err.message);
+        _reportHealth(service, false, err);
         throw err;
       }
     }

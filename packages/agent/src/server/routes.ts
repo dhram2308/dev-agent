@@ -234,21 +234,12 @@ async function handleRequest(
       delete agentProcs[ticket];
     }
     const completedGates = (state && state.data && state.data._completedGates) || null;
-    let stuck = false;
-    let stuckMinutes = 0;
-    if (state && state.data && state.data._lastActivity && agentProcs[ticket]) {
-      const stuckDuration = Date.now() - new Date(state.data._lastActivity).getTime();
-      stuckMinutes = Math.floor(stuckDuration / 60000);
-      if (stuckDuration > 10 * 60 * 1000) stuck = true;
-    }
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
       running: !!agentProcs[ticket],
       state,
       logCount: getLogBuffer().length,
       health,
-      stuck,
-      stuckMinutes,
       _completedGates: completedGates,
       activeAgents: Object.keys(agentProcs),
     }));

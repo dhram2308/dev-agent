@@ -969,6 +969,12 @@ export const CONFIG_SCHEMA: Record<string, ConfigSchemaEntry> = {
     group: "automation", description: "Auto-approve policy for the Dual Approval (Production) gate",
     hotReload: true, riskLevel: "DANGEROUS",
   },
+  DEVELOPMENT_ADVANCE_MODE: {
+    env: "DEVELOPMENT_ADVANCE_MODE", type: "enum", default: "openspec",
+    allowed: ["direct", "openspec"], required: false, sensitive: false,
+    group: "automation", description: "explore_plan output: 'openspec' scaffolds formal proposal/design/specs/tasks artifacts (default, unchanged behavior); 'direct' produces a plain-text plan only. Applies to the next ticket started — does not affect tickets already past fetch_ticket.",
+    hotReload: true, riskLevel: "CAUTION",
+  },
 
   // ── Playground (single-stage sandbox runs) ─────────────────────
   PLAYGROUND_MAX_RUNTIME_MS: {

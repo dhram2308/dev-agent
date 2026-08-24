@@ -108,8 +108,36 @@ export interface PipelineData {
   preprod_mr_url?: string;
   preprod_mr_iid?: string | number;
   explore_plan?: string;
-  explore_openspec?: Record<string, string>;
+  explore_openspec?: Record<string, string> | null;
   _agent_suggestions?: string[];
+  /**
+   * Written once by fetch_ticket (never re-evaluated afterward, even across
+   * resumes) — determines whether explore_plan scaffolds formal OpenSpec
+   * artifacts ("openspec", the default) or a lighter plain-text plan
+   * ("direct"). Absent on tickets that predate this field, which is
+   * equivalent to "openspec".
+   */
+  advanceMode?: 'direct' | 'openspec';
+  /**
+   * Per-ticket Claude model override, applied to this ticket's next spawn
+   * only (via agent-process.ts injecting it into the child's env as
+   * CLAUDE_MODEL) — does not affect the global CLAUDE_MODEL setting or any
+   * other concurrently running ticket.
+   */
+  _modelOverride?: string;
+  /** Written by health-monitor.ts's runHealthCheck(), read by the stuck-stage popup. */
+  _health?: {
+    progress?: {
+      stuck: boolean;
+      cause: 'network' | 'slow' | 'gate-wait';
+      stuckMinutes?: number;
+      elapsedMinutes?: number;
+      stage: string;
+      threshold?: number;
+      message?: string;
+    };
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 

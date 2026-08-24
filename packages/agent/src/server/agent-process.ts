@@ -221,6 +221,19 @@ function startAgent(ticket: string): AgentStartResult {
     const envVars: Record<string, string | undefined> = { ...process.env, ...loadEnv(), TICKET: ticket };
     if (worktreePath) envVars.WORKTREE_PATH = worktreePath;
 
+    // Per-ticket overrides, persisted in state.data by a previous /api/start
+    // call (see routes.ts's resume handling) -- applied only to this ticket's
+    // child process env, never to the global config. Scoped to this ticket
+    // only; other concurrently running tickets are unaffected.
+    try {
+      const existingState = getState(ticket);
+      const modelOverride = existingState?.data?._modelOverride as string | undefined;
+      if (modelOverride) {
+        envVars.CLAUDE_MODEL = modelOverride;
+        addLog(`Using per-ticket model override for ${ticket}: ${modelOverride}`, "system", ticket);
+      }
+    } catch { /* state may not exist yet on a fresh start -- no override to apply */ }
+
     // [OAuth] Inject fresh OAuth access tokens from TokenManager (if available)
     if (_tokenManager) {
       const oauthProviders = [

@@ -125,6 +125,7 @@ function pickStageData(stage: StageName, data: Record<string, unknown>): Array<{
       break;
     }
     case 'explore_plan': {
+      push('mode', data.advanceMode ?? 'openspec');
       const openspec = data.explore_openspec as Record<string, unknown> | undefined;
       if (openspec?.changeName) push('change', openspec.changeName);
       if (typeof data.explore_plan === 'string') push('plan chars', data.explore_plan.length);

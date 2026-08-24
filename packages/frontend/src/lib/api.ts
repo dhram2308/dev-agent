@@ -94,14 +94,24 @@ async function apiFetch<T>(
 
 // ── Public API Methods ─────────────────────────────────────────
 
-/** Start the agent pipeline for a ticket with optional mode */
+/**
+ * Start the agent pipeline for a ticket with optional mode.
+ * `modelOverride`, when set, is only applied on `mode: 'resume'` — see
+ * routes.ts's /api/start handler — and scopes a Claude model change to this
+ * ticket alone (used by the stuck-stage popup's "Switch Model & Retry").
+ */
 export async function startAgent(
   ticket: string,
   mode?: 'resume' | 'fresh',
+  modelOverride?: string,
 ): Promise<{ ok: boolean; message?: string; error?: string; expired?: boolean }> {
   return apiFetch('/api/start', {
     method: 'POST',
-    body: JSON.stringify({ ticket, ...(mode ? { mode } : {}) }),
+    body: JSON.stringify({
+      ticket,
+      ...(mode ? { mode } : {}),
+      ...(modelOverride ? { modelOverride } : {}),
+    }),
   });
 }
 
@@ -131,8 +141,6 @@ interface StateResponse {
   state: PipelineState | null;
   logCount: number;
   health: { alive: boolean; reason?: string };
-  stuck: boolean;
-  stuckMinutes: number;
   _completedGates: string[] | null;
   activeAgents: string[];
 }
@@ -148,6 +156,21 @@ export async function resetAgent(ticket?: string): Promise<{ ok: boolean }> {
   return apiFetch('/api/reset', {
     method: 'POST',
     body: JSON.stringify({ ticket }),
+  });
+}
+
+/**
+ * Reset a ticket's pipeline back to a given stage, clearing that stage's
+ * cached data fields so it re-runs from scratch — used by the stuck-stage
+ * popup's "Retry Stage" action.
+ */
+export async function resetStage(
+  ticket: string,
+  stage: string,
+): Promise<{ ok: boolean; stage?: string; clearedFields?: string[]; error?: string }> {
+  return apiFetch('/api/reset-stage', {
+    method: 'POST',
+    body: JSON.stringify({ ticket, stage }),
   });
 }
 

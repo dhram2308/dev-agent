@@ -69,10 +69,20 @@ export interface PipelineStore {
   syncStageFromPipelines: () => void;
 
   // Agent control
-  startAgent: (ticket: string, mode?: 'resume' | 'fresh') => Promise<void>;
+  startAgent: (ticket: string, mode?: 'resume' | 'fresh', modelOverride?: string) => Promise<void>;
   stopAgent: (ticket?: string) => Promise<void>;
   resetAgent: (ticket?: string) => Promise<void>;
   deletePipeline: (ticket: string) => Promise<void>;
+
+  // Stuck-stage recovery actions
+  /** Reset the ticket's current stage and re-run it (clears that stage's cached fields). */
+  retryStage: (ticket: string) => Promise<void>;
+  /**
+   * Kill the ticket's running process (preserving its state) and respawn it
+   * in resume mode with a per-ticket Claude model override applied. Scoped
+   * to this ticket only -- never touches the global CLAUDE_MODEL setting.
+   */
+  switchModelAndRetry: (ticket: string, model: string) => Promise<void>;
 
   // Gate actions
   approveGate: (ticket: string, gate: string) => Promise<void>;
@@ -261,7 +271,7 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
 
   // ── Agent control ──
 
-  startAgent: async (ticket, mode) => {
+  startAgent: async (ticket, mode, modelOverride) => {
     const { tickets } = get();
     // Ensure ticket exists in store
     if (!tickets.has(ticket)) {
@@ -269,7 +279,7 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
     }
 
     try {
-      await api.startAgent(ticket, mode);
+      await api.startAgent(ticket, mode, modelOverride);
 
       // Update the ticket state to running
       const next = new Map(get().tickets);
@@ -333,6 +343,41 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
       await api.deletePipeline(ticket);
       get().removeTicket(ticket);
       // pipelines list will update via SSE broadcast
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      get().setError(ticket, message);
+    }
+  },
+
+  // ── Stuck-stage recovery ──
+
+  retryStage: async (ticket) => {
+    const ts = get().tickets.get(ticket);
+    if (!ts) return;
+    try {
+      await api.resetStage(ticket, ts.stage);
+      // The pipeline is already running against this stage -- resetting its
+      // cached fields is enough to make it re-run; no restart/resume needed.
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      get().setError(ticket, message);
+    }
+  },
+
+  switchModelAndRetry: async (ticket, model) => {
+    try {
+      // Kill without deleting state (unlike /api/reset) -- we want to
+      // preserve the ticket's progress and just respawn with a different
+      // model, not wipe it back to a fresh start.
+      await api.stopAgent(ticket);
+      await api.startAgent(ticket, 'resume', model);
+
+      const next = new Map(get().tickets);
+      const existing = next.get(ticket);
+      if (existing) {
+        next.set(ticket, { ...existing, isRunning: true, error: null });
+      }
+      set({ tickets: next });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       get().setError(ticket, message);
@@ -611,6 +656,35 @@ export function usePendingQuestions(
 /** Get all ticket IDs as an array */
 export function useTicketIds(): string[] {
   return usePipelineStore((s) => Array.from(s.tickets.keys()));
+}
+
+/** Stuck-stage classification for the active ticket, or null if not stuck. */
+export interface StuckClassification {
+  cause: 'network' | 'slow' | 'gate-wait';
+  stuckMinutes: number;
+  message?: string;
+}
+
+/**
+ * Read the active ticket's stuck classification from `state.data._health.progress`
+ * (written by the agent's health-monitor) rather than recomputing thresholds
+ * client-side. Returns null when the ticket isn't running or isn't classified
+ * as stuck -- `gate-wait` is never surfaced here since gate stages are never
+ * "stuck" by design (see health-monitor.ts's checkProgress).
+ */
+export function useStuckClassification(): StuckClassification | null {
+  return usePipelineStore((s) => {
+    if (!s.activeTicket) return null;
+    const ts = s.tickets.get(s.activeTicket);
+    if (!ts?.isRunning) return null;
+    const progress = (ts.state?.data as any)?._health?.progress;
+    if (!progress || !progress.stuck || progress.cause === 'gate-wait') return null;
+    return {
+      cause: progress.cause,
+      stuckMinutes: progress.stuckMinutes ?? 0,
+      message: progress.message,
+    };
+  });
 }
 
 /** Get the active ticket's logs */

@@ -623,6 +623,15 @@ async function stageFetchTicket(state: PipelineState): Promise<void> {
   (state.data.ticket as any).complexity = complexity;
   logInfo(`X7: Complexity: ${complexity.level} (score: ${complexity.score}, timeout multiplier: ${complexity.timeoutMultiplier}x)`);
 
+  // Seed advanceMode exactly once -- fetch_ticket never re-runs for a given
+  // ticket, so this value is immutable for the rest of this ticket's life,
+  // including across resumes, regardless of later global config changes.
+  // Downstream readers (explore-plan.ts) must consult this persisted field,
+  // never process.env, directly.
+  if (state.data.advanceMode === undefined) {
+    state.data.advanceMode = process.env.DEVELOPMENT_ADVANCE_MODE === "direct" ? "direct" : "openspec";
+  }
+
   state.stage = "explore_plan";
   save(state);
 }

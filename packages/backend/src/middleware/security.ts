@@ -899,6 +899,9 @@ export const ENDPOINT_SCHEMAS: EndpointSchemas = {
   '/api/start': {
     ticket: { type: 'ticket', required: true },
     mode: { type: 'string', allowed: ['resume', 'fresh'] },
+    // Per-ticket Claude model override for the stuck-stage "Switch Model &
+    // Retry" action -- only applied on resume, see routes.ts's /api/start handler.
+    modelOverride: { type: 'string', maxLength: 200 },
   },
   '/api/stop': {
     ticket: { type: 'ticket' },

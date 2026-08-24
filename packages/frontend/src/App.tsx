@@ -17,7 +17,7 @@ import { GateNotificationBar } from './components/GateNotificationBar';
 import { PipelineDetail } from './components/PipelineDetail';
 import { ErrorOverlay } from './components/ErrorOverlay';
 import { ContextInjectionPanel } from './components/ContextInjectionPanel';
-import { StuckBanner } from './components/StuckBanner';
+import { StuckPopup } from './components/StuckPopup';
 import { LogFileArchiveViewer } from './components/LogFileArchiveViewer';
 import { TicketTabBar } from './components/TicketTabBar';
 import { QAProgressPanel } from './components/QAProgressPanel';
@@ -378,7 +378,7 @@ function DashboardView({
           <>
             {activePipeline && <PipelineDetail pipeline={activePipeline} />}
             <AutomationStatusStrip />
-            <StuckBanner />
+            <StuckPopup />
             <AgentStatus />
             <StageMetricsPanel />
             <AgentSwimLanes />

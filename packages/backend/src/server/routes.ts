@@ -497,8 +497,8 @@ export async function handleRequest(
   if (url.pathname === '/api/start' && request.method === 'POST') {
     try {
       const raw = await parseBody(request, getBodySizeLimit('/api/start'));
-      const { ticket, mode } = sanitizeBody('/api/start', raw) as {
-        ticket?: string; mode?: 'resume' | 'fresh';
+      const { ticket, mode, modelOverride } = sanitizeBody('/api/start', raw) as {
+        ticket?: string; mode?: 'resume' | 'fresh'; modelOverride?: string;
       };
       if (!ticket || !ticket.trim()) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -570,6 +570,13 @@ export async function handleRequest(
             history.push({ at: new Date().toISOString(), fromStage: state.stage });
             data._resumeHistory = history;
             data._lastActivity = new Date().toISOString();
+
+            // Per-ticket model override (stuck-stage "Switch Model & Retry") --
+            // scoped to this ticket only, applied to its next spawn's env by
+            // agent-process.ts. Never touches the global CLAUDE_MODEL setting.
+            if (modelOverride && modelOverride.trim()) {
+              data._modelOverride = modelOverride.trim();
+            }
 
             // Write updated state back
             const secret = stateSecret();
@@ -654,14 +661,6 @@ export async function handleRequest(
     }
 
     const completedGates = (state?.data?._completedGates as string[] | undefined) || null;
-    let stuck = false;
-    let stuckMinutes = 0;
-    const lastActivity = state?.data?._lastActivity as string | undefined;
-    if (lastActivity && agentProcs[ticket]) {
-      const stuckDuration = Date.now() - new Date(lastActivity).getTime();
-      stuckMinutes = Math.floor(stuckDuration / 60000);
-      if (stuckDuration > 10 * 60 * 1000) stuck = true;
-    }
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
@@ -669,8 +668,6 @@ export async function handleRequest(
       state,
       logCount: getLogBuffer().length,
       health,
-      stuck,
-      stuckMinutes,
       _completedGates: completedGates,
       activeAgents: Object.keys(agentProcs),
     }));
