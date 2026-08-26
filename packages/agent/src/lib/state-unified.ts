@@ -349,7 +349,15 @@ function mergeUIFieldsFromDisk(memoryState: PipelineState, diskState: PipelineSt
     if (CONCURRENCY_FIELD_PATTERN.test(key)) {
       const mem = (memoryState.data as any)[key];
       const disk = (diskState.data as any)[key];
-      if (mem === undefined || mem === null) {
+      // Only adopt disk's value when in-memory never touched this field
+      // (undefined = "don't know about it, another writer might"). An
+      // explicit `null` means a caller intentionally cleared a stale
+      // checkpoint (e.g. after a repo reset discarded the underlying
+      // file changes) — treating that the same as "unknown" silently
+      // resurrected checkpoints that had just been invalidated, causing
+      // the next stage entry to "succeed via checkpoint" against work
+      // that no longer existed on disk.
+      if (mem === undefined) {
         (memoryState.data as any)[key] = disk;
       } else if (key === "_agents_history" && Array.isArray(mem) && Array.isArray(disk)) {
         // Union by (name, startedAt) — preserves entries either side knows about

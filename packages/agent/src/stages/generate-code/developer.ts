@@ -382,11 +382,12 @@ async function runDeveloperAgent(ctx: any): Promise<void> {
       // worktree before downstream validation reads cfg.localRepo's state.
       if (useSubWorktrees) {
         const indices = taskGroups.map((_, i) => i);
-        const result = mergeSubWorktrees(TICKET, indices, cfg.localRepo);
+        const declaredFiles = taskGroups.map((g) => g.files);
+        const result = mergeSubWorktrees(TICKET, indices, cfg.localRepo, declaredFiles);
         logOk(`M1: merged ${result.applied} file(s) from ${indices.length} sub-worktrees into canonical`);
         if (result.conflicts.length > 0) {
           for (const c of result.conflicts) {
-            const msg = `M1: ${c.file} modified by multiple agents (${c.agents.join(", ")}) — first-wins applied`;
+            const msg = `M1: ${c.file} modified by multiple agents (${c.agents.join(", ")}) — resolved by declared ownership where possible`;
             logWarn(msg);
             addWarning(state, "generate_code", msg);
           }
@@ -467,11 +468,12 @@ async function runDeveloperAgent(ctx: any): Promise<void> {
           // first attempt) and produced new content in others.
           if (useSubWorktrees) {
             const indices = taskGroups.map((_, i) => i);
-            const result = mergeSubWorktrees(TICKET, indices, cfg.localRepo);
+            const declaredFiles = taskGroups.map((g) => g.files);
+            const result = mergeSubWorktrees(TICKET, indices, cfg.localRepo, declaredFiles);
             logOk(`M1: merged ${result.applied} file(s) from ${indices.length} sub-worktrees into canonical (after Fix E retry)`);
             if (result.conflicts.length > 0) {
               for (const c of result.conflicts) {
-                const msg = `M1: ${c.file} modified by multiple agents (${c.agents.join(", ")}) — first-wins applied`;
+                const msg = `M1: ${c.file} modified by multiple agents (${c.agents.join(", ")}) — resolved by declared ownership where possible`;
                 logWarn(msg);
                 addWarning(state, "generate_code", msg);
               }
@@ -526,11 +528,12 @@ async function runDeveloperAgent(ctx: any): Promise<void> {
           .map((_, i) => i)
           .filter((i) => Boolean((state.data as any)[`_dev_group_${i}`]));
         if (succeededIndices.length > 0) {
-          const result = mergeSubWorktrees(TICKET, succeededIndices, cfg.localRepo);
+          const declaredFiles = taskGroups.map((g) => g.files);
+          const result = mergeSubWorktrees(TICKET, succeededIndices, cfg.localRepo, declaredFiles);
           logInfo(`M1: merged ${result.applied} file(s) from ${succeededIndices.length} succeeded sub-worktrees before single-agent fallback`);
           if (result.conflicts.length > 0) {
             for (const c of result.conflicts) {
-              addWarning(state, "generate_code", `M1: ${c.file} modified by multiple agents (${c.agents.join(", ")}) — first-wins applied`);
+              addWarning(state, "generate_code", `M1: ${c.file} modified by multiple agents (${c.agents.join(", ")}) — resolved by declared ownership where possible`);
             }
           }
         }
@@ -610,14 +613,10 @@ async function runDeveloperAgent(ctx: any): Promise<void> {
   // GQ7 + F3: Validate changes
   _validateDevChanges(state);
 
-  // D10: Developer checkpoint
-  (state.data as any)._dev_complete = true;
-  (state.data as any)._dev_summary = devResult.substring(0, 2000);
-  save(state);
-
   // Step 3 — Extract changes from git status
   logInfo("Extracting file changes from local repo…");
   let devFileChanges = localGetChanges(cfg.localRepo);
+  let devSummaryForCheckpoint = devResult;
 
   if (devFileChanges.length === 0) {
     logWarn("Developer Agent made no file changes — retrying with simplified prompt…");
@@ -666,13 +665,40 @@ async function runDeveloperAgent(ctx: any): Promise<void> {
     // empty changeset from the first attempt. The retry produced real
     // changes — validate them now so GQ7/F3 aren't bypassed by the retry.
     _validateDevChanges(state);
+    devSummaryForCheckpoint = retryResult;
   }
   logOk(`${devFileChanges.length} file(s) changed`);
+
+  // D10: Developer checkpoint. Set only now — after both the initial
+  // validation AND the 0-files retry path (if taken) have confirmed real,
+  // GQ7/F3-clean file changes exist on disk. Setting this any earlier let
+  // a validated-but-empty first attempt (0 files, so GQ7 trivially passes)
+  // mark the stage complete before the retry ran, so a later GQ7 failure
+  // in the retry left `_dev_complete=true` on disk pointing at a repo the
+  // GQ7 handler had already reset to clean — causing every subsequent
+  // re-entry to skip straight to review/fix against zero real changes.
+  (state.data as any)._dev_complete = true;
+  (state.data as any)._dev_summary = devSummaryForCheckpoint.substring(0, 2000);
+  save(state);
 }
 
 /**
  * Shared validation for developer agent output (GQ7 + F3).
  */
+// GQ7/F3 failures call localResetRepo() to discard the broken changes, but
+// the per-agent checkpoints (_dev_group_N, _dev_single_result,
+// _dev_retry_result) still hold that attempt's cached text output. Left in
+// place, the next stage entry sees those checkpoints populated and skips
+// re-running the corresponding agent entirely — "succeeding" via checkpoint
+// against a repo that was just reset to clean, producing zero real changes
+// with no way to self-heal. Clear them so a genuine regeneration happens.
+function _clearStaleDevCheckpoints(state: PipelineState): void {
+  const keys = ["_dev_group_0", "_dev_group_1", "_dev_group_2", "_dev_group_3", "_dev_group_4",
+    "_dev_single_result", "_dev_retry_result"];
+  for (const k of keys) (state.data as any)[k] = null;
+  save(state);
+}
+
 function _validateDevChanges(state: PipelineState): void {
   // GQ7: Import Resolution Validation
   //
@@ -707,6 +733,15 @@ function _validateDevChanges(state: PipelineState): void {
         for (const m of c.content.matchAll(re)) {
           const importPath = m[1];
           if (!importPath || seenInFile.has(importPath)) continue;
+          // The regex matches "import|export ... from '...'" as plain text
+          // and can't tell code from commentary. Without this check, a
+          // pre-existing `// export {X} from './Y'` — dead code, never
+          // executed — gets reported as a live unresolved import forever,
+          // regardless of what any Developer Agent does, since nobody is
+          // "fixing" a bug that doesn't exist in the code they wrote.
+          const lineStart = c.content.lastIndexOf("\n", m.index) + 1;
+          const linePrefix = c.content.substring(lineStart, m.index);
+          if (linePrefix.includes("//")) continue;
           seenInFile.add(importPath);
           const resolved = path.normalize(path.join(fileDir, importPath));
           const found = RESOLVE_EXTENSIONS.some((ext) =>
@@ -721,6 +756,60 @@ function _validateDevChanges(state: PipelineState): void {
   } catch (importErr: any) {
     logDebug(`GQ7: Import resolution check failed: ${importErr.message}`);
   }
+
+  // Auto-heal: a recurring, robust failure mode observed in practice is the
+  // Developer Agent accidentally REACTIVATING a pre-existing commented-out
+  // import while editing an unrelated part of the same file (e.g. adding a
+  // new barrel export near an old dead one). This isn't a hallucinated
+  // path — the exact same import already exists elsewhere in the file as a
+  // `//`-commented line, proving it was dead code before this edit. Rather
+  // than fail the whole attempt (and have the model reproduce the same
+  // transcription slip on retry, since nothing in its feedback tells it
+  // WHY the line reappeared), detect this specific pattern and safely
+  // re-comment the reactivated line.
+  if (unresolvedImports.length > 0) {
+    const stillUnresolved: typeof unresolvedImports = [];
+    const healedFiles = new Set<string>();
+    for (const ui of unresolvedImports) {
+      const filePath = path.join(cfg.localRepo, ui.file);
+      let content: string;
+      try { content = fs.readFileSync(filePath, "utf8"); } catch { stillUnresolved.push(ui); continue; }
+      const lines = content.split("\n");
+      const importPathEsc = ui.import.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const commentedRe = new RegExp(`^\\s*//.*['"]${importPathEsc}['"]`);
+      const liveRe = new RegExp(`^(\\s*)((?:import|export)[^\\n]*['"]${importPathEsc}['"][^\\n]*)$`);
+      const hasCommentedSibling = lines.some((l) => commentedRe.test(l));
+      let healed = false;
+      if (hasCommentedSibling) {
+        for (let i = 0; i < lines.length; i++) {
+          if (/^\s*\/\//.test(lines[i])) continue; // already a comment
+          const m = lines[i].match(liveRe);
+          if (m) {
+            lines[i] = `${m[1]}// ${m[2]}`;
+            healed = true;
+            break;
+          }
+        }
+      }
+      if (healed) {
+        try {
+          fs.writeFileSync(filePath, lines.join("\n"));
+          healedFiles.add(ui.file);
+        } catch (e: any) {
+          logWarn(`GQ7 auto-heal: failed to write ${ui.file}: ${e.message.substring(0, 100)}`);
+          stillUnresolved.push(ui);
+        }
+      } else {
+        stillUnresolved.push(ui);
+      }
+    }
+    if (healedFiles.size > 0) {
+      logOk(`GQ7 auto-heal: re-commented ${unresolvedImports.length - stillUnresolved.length} import(s) matching a pre-existing dead comment in: ${[...healedFiles].join(", ")}`);
+    }
+    unresolvedImports.length = 0;
+    unresolvedImports.push(...stillUnresolved);
+  }
+
   if (unresolvedImports.length > 0) {
     logErr(`GQ7: ${unresolvedImports.length} unresolved relative import(s) — failing Developer Agent so it retries:`);
     for (const ui of unresolvedImports.slice(0, 10)) {
@@ -749,7 +838,12 @@ function _validateDevChanges(state: PipelineState): void {
     // path below. Leaving broken imports on disk made debugger inspection
     // ambiguous and risked a stray `localGetChanges` picking them up.
     try { localResetRepo(cfg.localRepo); } catch (e: any) { logWarn(`L10: post-GQ7 reset failed: ${e.message.substring(0, 100)}`); }
-    throw new Error(errorMsg);
+    _clearStaleDevCheckpoints(state);
+    // Tagged so error-recovery's classifier treats this as retryable
+    // (it otherwise contains "does not exist", which matches the
+    // generic PERMANENT_PATTERNS and would wrongly halt the stage
+    // instead of retrying with the feedback stashed above).
+    throw Object.assign(new Error(errorMsg), { code: "GQ7_RETRYABLE" });
   }
 
   // F3: Validate changed files against forbidden paths.
@@ -788,7 +882,12 @@ function _validateDevChanges(state: PipelineState): void {
     logErr(`F3: Developer modified forbidden files: ${violations.join(", ")}`);
     logInfo("Reverting local repo to clean state…");
     localResetRepo(cfg.localRepo);
-    throw new Error(`Developer Agent modified forbidden files: ${violations.join(", ")}. Pipeline halted.`);
+    _clearStaleDevCheckpoints(state);
+    // Tagged so error-recovery's classifier doesn't treat the word
+    // "forbidden" in this message as an auth/403 error (AUTH_PATTERNS
+    // matches /forbidden/i) — this is a security policy violation, not
+    // an invalid-credential condition, and should halt as PERMANENT.
+    throw Object.assign(new Error(`Developer Agent modified forbidden files: ${violations.join(", ")}. Pipeline halted.`), { code: "F3_FORBIDDEN_FILES" });
   }
 }
 
@@ -806,4 +905,5 @@ export {
   TASK_GROUP_FILES_WARN,
   TASK_GROUP_FILES_HARD,
   _canRetryParallelTeam,
+  _clearStaleDevCheckpoints,
 };

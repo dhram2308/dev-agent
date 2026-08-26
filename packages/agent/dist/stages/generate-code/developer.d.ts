@@ -28,6 +28,7 @@ declare function runDeveloperAgent(ctx: any): Promise<void>;
 /**
  * Shared validation for developer agent output (GQ7 + F3).
  */
+declare function _clearStaleDevCheckpoints(state: PipelineState): void;
 declare function _validateDevChanges(state: PipelineState): void;
-export { runDeveloperAgent, parseTaskGroups, _validateDevChanges, _auditTaskGroupSizes, TASK_GROUP_FILES_WARN, TASK_GROUP_FILES_HARD, _canRetryParallelTeam, };
+export { runDeveloperAgent, parseTaskGroups, _validateDevChanges, _auditTaskGroupSizes, TASK_GROUP_FILES_WARN, TASK_GROUP_FILES_HARD, _canRetryParallelTeam, _clearStaleDevCheckpoints, };
 //# sourceMappingURL=developer.d.ts.map

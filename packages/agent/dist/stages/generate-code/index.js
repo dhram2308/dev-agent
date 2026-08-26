@@ -8,7 +8,7 @@ const { save } = require("../../lib/state");
 const { slack } = require("../../lib/slack");
 const { localGetChanges, localGetOriginal, localResetRepo } = require("../../lib/local-repo");
 const { pushCodeToGitLab } = require("../push-code");
-const { runDeveloperAgent } = require("./developer");
+const { runDeveloperAgent, _clearStaleDevCheckpoints } = require("./developer");
 const { runReviewerAndSecurity } = require("./reviewer");
 const { runBuildCheck } = require("./build-check");
 const { runRuntimeTests } = require("./runtime-tests");
@@ -159,7 +159,21 @@ async function stageGenerateCode(state) {
             }
             // D10: Skip developer if already complete on re-entry
             if (!state.data._dev_complete) {
-                await runDeveloperAgent(ctx);
+                try {
+                    await runDeveloperAgent(ctx);
+                }
+                catch (devErr) {
+                    // Any throw out of runDeveloperAgent means the attempt didn't
+                    // produce a validated changeset — clear the per-agent checkpoints
+                    // (_dev_group_N, _dev_single_result, _dev_retry_result) so the
+                    // next entry re-runs for real instead of "succeeding" via a
+                    // checkpoint whose underlying files were already reset/discarded.
+                    // Catches every failure path uniformly (GQ7/F3 already clear
+                    // themselves; this backstops the "0 file changes"/max-turns
+                    // paths and any future one).
+                    _clearStaleDevCheckpoints(state);
+                    throw devErr;
+                }
             }
             else {
                 logOk("Developer already complete (checkpoint) — skipping to review");

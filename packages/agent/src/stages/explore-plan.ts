@@ -685,13 +685,33 @@ async function stageExplorePlan(state: PipelineState): Promise<void> {
       const explorerOpts = cfg.localRepo
         ? { cwd: cfg.localRepo, maxTurns: 20, allowedTools: ["Read", "Grep", "Glob"] }
         : {};
+      // Requirements/Risk Analyst agents are pure text-synthesis over context
+      // already embedded in their prompts (ticketCtx, folderOverview, file
+      // list as text) — they were never meant to touch the filesystem. With
+      // opts: {} they got Claude Code's default tool access but no cwd, so
+      // any tool call they made landed in the *orchestrator's own* repo
+      // (dev-agent) instead of the target codebase — confusing them into
+      // burning turns exploring the wrong tree (surfaced as spurious
+      // max-turns failures, or a HARD refusal once a run noticed the
+      // mismatch). Disabling tools entirely forces them to rely on the
+      // provided context as designed, matching their actual role.
+      // Disabling tools alone didn't fix the max-turns(4) failures — 4 is
+      // Claude Code's hardcoded default when opts.maxTurns is unset
+      // (lib/claude.ts), and it's simply too tight for these agents'
+      // large (~10-15k char) prompts even for pure text synthesis. Worse,
+      // Fix B's adaptive retry can only scale a turn budget that was
+      // explicitly set — with maxTurns left undefined it has nothing to
+      // scale from, so every retry reused the same default 4 until the
+      // failure-count cap gave up on the agent entirely. Set an explicit,
+      // generous baseline so both problems are fixed together.
+      const noToolOpts = { allowedTools: [], maxTurns: 10 };
 
       analysisResult = await runAgentsTeam({
         teamName: "Analysis Team",
         agents: [
-          { name: "Requirements Agent", prompt: requirementsPrompt, timeout: applyComplexityTimeout(360_000, state), opts: {}, required: true, checkpointKey: "_agent_requirements" },
+          { name: "Requirements Agent", prompt: requirementsPrompt, timeout: applyComplexityTimeout(360_000, state), opts: noToolOpts, required: true, checkpointKey: "_agent_requirements" },
           { name: "Code Explorer Agent", prompt: explorerPrompt, timeout: applyComplexityTimeout(420_000, state), opts: explorerOpts, required: false, checkpointKey: "_agent_explorer" },
-          { name: "Risk Analyst Agent", prompt: riskPrompt, timeout: applyComplexityTimeout(300_000, state), opts: {}, required: false, checkpointKey: "_agent_risk" },
+          { name: "Risk Analyst Agent", prompt: riskPrompt, timeout: applyComplexityTimeout(300_000, state), opts: noToolOpts, required: false, checkpointKey: "_agent_risk" },
         ],
         state,
         merge: (results: any[]) => {

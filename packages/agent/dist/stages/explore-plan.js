@@ -639,12 +639,32 @@ async function stageExplorePlan(state) {
             const explorerOpts = cfg.localRepo
                 ? { cwd: cfg.localRepo, maxTurns: 20, allowedTools: ["Read", "Grep", "Glob"] }
                 : {};
+            // Requirements/Risk Analyst agents are pure text-synthesis over context
+            // already embedded in their prompts (ticketCtx, folderOverview, file
+            // list as text) — they were never meant to touch the filesystem. With
+            // opts: {} they got Claude Code's default tool access but no cwd, so
+            // any tool call they made landed in the *orchestrator's own* repo
+            // (dev-agent) instead of the target codebase — confusing them into
+            // burning turns exploring the wrong tree (surfaced as spurious
+            // max-turns failures, or a HARD refusal once a run noticed the
+            // mismatch). Disabling tools entirely forces them to rely on the
+            // provided context as designed, matching their actual role.
+            // Disabling tools alone didn't fix the max-turns(4) failures — 4 is
+            // Claude Code's hardcoded default when opts.maxTurns is unset
+            // (lib/claude.ts), and it's simply too tight for these agents'
+            // large (~10-15k char) prompts even for pure text synthesis. Worse,
+            // Fix B's adaptive retry can only scale a turn budget that was
+            // explicitly set — with maxTurns left undefined it has nothing to
+            // scale from, so every retry reused the same default 4 until the
+            // failure-count cap gave up on the agent entirely. Set an explicit,
+            // generous baseline so both problems are fixed together.
+            const noToolOpts = { allowedTools: [], maxTurns: 10 };
             analysisResult = await runAgentsTeam({
                 teamName: "Analysis Team",
                 agents: [
-                    { name: "Requirements Agent", prompt: requirementsPrompt, timeout: applyComplexityTimeout(360_000, state), opts: {}, required: true, checkpointKey: "_agent_requirements" },
+                    { name: "Requirements Agent", prompt: requirementsPrompt, timeout: applyComplexityTimeout(360_000, state), opts: noToolOpts, required: true, checkpointKey: "_agent_requirements" },
                     { name: "Code Explorer Agent", prompt: explorerPrompt, timeout: applyComplexityTimeout(420_000, state), opts: explorerOpts, required: false, checkpointKey: "_agent_explorer" },
-                    { name: "Risk Analyst Agent", prompt: riskPrompt, timeout: applyComplexityTimeout(300_000, state), opts: {}, required: false, checkpointKey: "_agent_risk" },
+                    { name: "Risk Analyst Agent", prompt: riskPrompt, timeout: applyComplexityTimeout(300_000, state), opts: noToolOpts, required: false, checkpointKey: "_agent_risk" },
                 ],
                 state,
                 merge: (results) => {
@@ -681,8 +701,21 @@ async function stageExplorePlan(state) {
             logOk("  Analysis Team complete");
         }
         logOk("Analysis complete");
-        logInfo("  → OpenSpec: scaffolding change…");
-        const scaffold = scaffoldOpenSpec(TICKET);
+        // Seeded once by fetch_ticket and immutable for this ticket's life
+        // (see fetch-ticket.ts) -- read the persisted field, never process.env,
+        // so a later global config change never affects a ticket already past
+        // fetch_ticket. Strict opt-in comparison: anything other than the exact
+        // string "direct" (undefined, null, a typo, a pre-existing ticket with
+        // no field at all) safely takes the proven OpenSpec path.
+        const advanceMode = state.data.advanceMode === "direct" ? "direct" : "openspec";
+        let scaffold = null;
+        if (advanceMode === "direct") {
+            logInfo("  → Development Advance Mode: direct — skipping OpenSpec scaffold");
+        }
+        else {
+            logInfo("  → OpenSpec: scaffolding change…");
+            scaffold = scaffoldOpenSpec(TICKET);
+        }
         const CAP = 16000;
         const trim = (s) => {
             if (s.length <= CAP)
@@ -765,7 +798,9 @@ async function stageExplorePlan(state) {
             `5. **Bundle related changes; separate unrelated changes.** Example: auth in one group; routing in another; localization in a third; tests in their own group.\n` +
             `6. **No kitchen-sink groups.** Any group titled "Misc", "Cleanup", "Various", or "Polish" will exceed the budget — break it up.\n` +
             `7. **Reference files explicitly.** List the exact file paths the group touches under each \`##\` heading (the post-parser uses this to detect cross-group collisions).\n\n` +
-            `## OUTPUT FORMAT — CRITICAL\nYou MUST output exactly 4 sections:\n\n---PROPOSAL---\n---DESIGN---\n---SPECS---\n---TASKS---\n\nAll 4 markers are REQUIRED.`;
+            (advanceMode === "direct"
+                ? `## OUTPUT FORMAT\nWrite the plan as plain markdown with \`##\` task-group headings per the TASK GROUP SIZING rules above. Do not include OpenSpec section markers (e.g. ---PROPOSAL---) -- this ticket is running in Direct mode.`
+                : `## OUTPUT FORMAT — CRITICAL\nYou MUST output exactly 4 sections:\n\n---PROPOSAL---\n---DESIGN---\n---SPECS---\n---TASKS---\n\nAll 4 markers are REQUIRED.`);
         const architectOutput = await runSingleAgent({
             name: "OpenSpec Architect Agent",
             prompt: architectPrompt,
@@ -788,7 +823,16 @@ async function stageExplorePlan(state) {
             };
         }
         else {
-            logWarn("OpenSpec artifact parsing failed — using raw architect output");
+            // Two distinct reasons land here, sharing the same null sentinel by
+            // design (a non-empty sentinel would satisfy GateApproval.tsx's
+            // "has keys" guard and render empty OpenSpec tabs) -- disambiguated
+            // for the operator via advanceMode, not the state shape itself.
+            if (advanceMode === "direct") {
+                logOk("Direct mode — plain-text plan produced, no OpenSpec artifacts by design");
+            }
+            else {
+                logWarn("OpenSpec artifact parsing failed — using raw architect output");
+            }
             state.data.explore_plan = architectOutput;
             state.data.explore_openspec = null;
         }
@@ -833,8 +877,16 @@ async function stageExplorePlan(state) {
     // ── Post plan for approval ──
     if (!state.data.explore_plan_posted) {
         const os = state.data.explore_openspec;
+        // Distinguishes "Direct mode, by design" from "OpenSpec attempted, parse
+        // failed" -- both leave explore_openspec null, so os truthiness alone
+        // can't tell them apart; state.data.advanceMode can.
+        const planSummary = os
+            ? "Full OpenSpec plan."
+            : state.data.advanceMode === "direct"
+                ? "Plan ready (Direct mode)."
+                : "Plan ready.";
         if (isChannelEnabled("explore_plan", "slack")) {
-            await slack(`📋 *Implementation Plan Ready — ${TICKET}*\n*${state.data.ticket.summary}*\n\n${os ? "Full OpenSpec plan." : "Plan ready."}\nReview on Web UI → Approve, Reject, or Refine.\n🌐 http://localhost:3000`, [cfg.slack.ownerId]);
+            await slack(`📋 *Implementation Plan Ready — ${TICKET}*\n*${state.data.ticket.summary}*\n\n${planSummary}\nReview on Web UI → Approve, Reject, or Refine.\n🌐 http://localhost:3000`, [cfg.slack.ownerId]);
         }
         state.data.explore_plan_posted = true;
         state.data.explore_plan_at = new Date().toISOString();

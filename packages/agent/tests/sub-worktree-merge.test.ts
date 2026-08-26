@@ -132,10 +132,7 @@ describe('mergeSubWorktrees', () => {
     try {
       // Create a brand-new file inside the existing `src/` directory.
       // `git status --porcelain` reports it as `?? src/created.ts`,
-      // which localGetChanges maps to a `create` action. Creating into
-      // a brand-new subdirectory would get collapsed to `?? src/new/`
-      // by git's default reporting — a separate issue worth knowing
-      // about but not what M1's merge needs to fix.
+      // which localGetChanges maps to a `create` action.
       fs.writeFileSync(path.join(sub0, 'src', 'created.ts'), 'export const fresh = true;\n');
 
       const result = mergeSubWorktrees(ticket, [0], canonicalDir);
@@ -143,6 +140,32 @@ describe('mergeSubWorktrees', () => {
       expect(result.applied).toBe(1);
       expect(fs.existsSync(path.join(canonicalDir, 'src', 'created.ts'))).toBe(true);
       expect(fs.readFileSync(path.join(canonicalDir, 'src', 'created.ts'), 'utf8')).toContain('fresh');
+    } finally {
+      cleanupSubs(ticket, 1);
+    }
+  });
+
+  it('AUT-9773 fix: merges every file inside a brand-new subdirectory, not just the first', () => {
+    // Regression test for the git-status collapsing bug: without `-uall`,
+    // `git status --porcelain` reports an entirely-new, untracked
+    // directory as a single `?? src/NewFeature/` line instead of listing
+    // each file inside it. localGetChanges then tries to read that
+    // "file" (actually a directory), gets null content, and every real
+    // file inside silently disappears from the changeset — even though
+    // sibling files that reference them (e.g. a barrel import) merge in
+    // fine, producing a broken merged tree with dangling imports.
+    const ticket = uniqueTicket();
+    const sub0 = makeFakeSubWorktree(ticket, 0);
+    try {
+      fs.mkdirSync(path.join(sub0, 'src', 'NewFeature'), { recursive: true });
+      fs.writeFileSync(path.join(sub0, 'src', 'NewFeature', 'index.ts'), 'export const x = 1;\n');
+      fs.writeFileSync(path.join(sub0, 'src', 'NewFeature', 'helper.ts'), 'export const y = 2;\n');
+
+      const result = mergeSubWorktrees(ticket, [0], canonicalDir);
+
+      expect(result.applied).toBe(2);
+      expect(fs.existsSync(path.join(canonicalDir, 'src', 'NewFeature', 'index.ts'))).toBe(true);
+      expect(fs.existsSync(path.join(canonicalDir, 'src', 'NewFeature', 'helper.ts'))).toBe(true);
     } finally {
       cleanupSubs(ticket, 1);
     }
@@ -192,6 +215,82 @@ describe('mergeSubWorktrees', () => {
     const result = mergeSubWorktrees(ticket, [0, 1, 2], canonicalDir);
     expect(result.applied).toBe(0);
     expect(result.conflicts).toHaveLength(0);
+  });
+
+  it('AUT-9773 fix: declared owner wins a conflict even when a lower-index agent strayed out of scope', () => {
+    // Regression test: an agent that touches a shared file it was never
+    // assigned (out-of-scope) could beat the actual declared owner
+    // simply by having a lower index in the old first-wins scheme,
+    // silently discarding the correct, in-scope edit. Reproduces the
+    // exact AUT-9773 case: Group 0 (not assigned index.tsx) stomped
+    // Group 1's (assigned) correct edit because 0 < 1.
+    const ticket = uniqueTicket();
+    const sub0 = makeFakeSubWorktree(ticket, 0);
+    const sub1 = makeFakeSubWorktree(ticket, 1);
+    try {
+      fs.writeFileSync(path.join(sub0, 'src', 'a.ts'), 'export const a = "from-out-of-scope-0";\n');
+      fs.writeFileSync(path.join(sub1, 'src', 'a.ts'), 'export const a = "from-declared-owner-1";\n');
+
+      // Agent 1 declared src/a.ts as one of its files; agent 0 did not.
+      const declaredFiles = [[], ['src/a.ts']];
+      const result = mergeSubWorktrees(ticket, [0, 1], canonicalDir, declaredFiles);
+
+      expect(result.applied).toBe(1);
+      expect(result.conflicts).toHaveLength(1);
+      expect(fs.readFileSync(path.join(canonicalDir, 'src', 'a.ts'), 'utf8')).toContain('from-declared-owner-1');
+    } finally {
+      cleanupSubs(ticket, 2);
+    }
+  });
+
+  it('AUT-9773 fix: falls back to first-wins when ownership is ambiguous (both declare it)', () => {
+    const ticket = uniqueTicket();
+    const sub0 = makeFakeSubWorktree(ticket, 0);
+    const sub1 = makeFakeSubWorktree(ticket, 1);
+    try {
+      fs.writeFileSync(path.join(sub0, 'src', 'a.ts'), 'export const a = "from-0";\n');
+      fs.writeFileSync(path.join(sub1, 'src', 'a.ts'), 'export const a = "from-1";\n');
+
+      const declaredFiles = [['src/a.ts'], ['src/a.ts']];
+      const result = mergeSubWorktrees(ticket, [0, 1], canonicalDir, declaredFiles);
+
+      expect(fs.readFileSync(path.join(canonicalDir, 'src', 'a.ts'), 'utf8')).toContain('from-0');
+    } finally {
+      cleanupSubs(ticket, 2);
+    }
+  });
+
+  it('AUT-9773 fix: falls back to first-wins when neither declares it (undeclared shared file)', () => {
+    const ticket = uniqueTicket();
+    const sub0 = makeFakeSubWorktree(ticket, 0);
+    const sub1 = makeFakeSubWorktree(ticket, 1);
+    try {
+      fs.writeFileSync(path.join(sub0, 'src', 'a.ts'), 'export const a = "from-0";\n');
+      fs.writeFileSync(path.join(sub1, 'src', 'a.ts'), 'export const a = "from-1";\n');
+
+      const declaredFiles = [['src/other.ts'], ['src/yet-another.ts']];
+      const result = mergeSubWorktrees(ticket, [0, 1], canonicalDir, declaredFiles);
+
+      expect(fs.readFileSync(path.join(canonicalDir, 'src', 'a.ts'), 'utf8')).toContain('from-0');
+    } finally {
+      cleanupSubs(ticket, 2);
+    }
+  });
+
+  it('without declaredFiles at all, behaves exactly as before (backward compatible)', () => {
+    const ticket = uniqueTicket();
+    const sub0 = makeFakeSubWorktree(ticket, 0);
+    const sub1 = makeFakeSubWorktree(ticket, 1);
+    try {
+      fs.writeFileSync(path.join(sub0, 'src', 'a.ts'), 'export const a = "from-0";\n');
+      fs.writeFileSync(path.join(sub1, 'src', 'a.ts'), 'export const a = "from-1";\n');
+
+      const result = mergeSubWorktrees(ticket, [0, 1], canonicalDir);
+
+      expect(fs.readFileSync(path.join(canonicalDir, 'src', 'a.ts'), 'utf8')).toContain('from-0');
+    } finally {
+      cleanupSubs(ticket, 2);
+    }
   });
 
   it('three-way conflict: file modified by agents 0+1+2 is reported once with all agents listed', () => {

@@ -46,7 +46,7 @@ const ERROR_CLASS = {
 const TRANSIENT_CODES = new Set([
   "ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EPIPE",
   "SOCKET_TIMEOUT", "ENOTFOUND", "EHOSTUNREACH",
-  "ECONNABORTED", "EAI_AGAIN", "ENETUNREACH",
+  "ECONNABORTED", "EABORTED", "EAI_AGAIN", "ENETUNREACH",
 ]);
 
 /**
@@ -127,6 +127,20 @@ function classifyError(error: Error | any): ClassifyResult {
   const msg: string = error.message || String(error);
   const code: string = error.code || "";
 
+  // 0. Explicitly-tagged errors — the throw site knows better than any
+  // generic message-pattern match. Checked before AUTH_PATTERNS because
+  // e.g. F3's "forbidden files" message would otherwise match /forbidden/i
+  // and get misread as a 403/credentials issue instead of the security
+  // policy violation (halt, no retry) it actually is.
+  if (code === "F3_FORBIDDEN_FILES") {
+    return {
+      class: ERROR_CLASS.PERMANENT,
+      confidence: 0.95,
+      reason: "F3 forbidden-file violation — security policy halt, not an auth error",
+      retryable: false,
+    };
+  }
+
   // 1. Check for auth errors (highest priority)
   for (const pattern of AUTH_PATTERNS) {
     if (pattern.test(msg) || pattern.test(code)) {
@@ -173,6 +187,20 @@ function classifyError(error: Error | any): ClassifyResult {
         retryable: true,
       };
     }
+  }
+
+  // 2c. Explicitly-tagged retryable errors — the throw site knows better
+  // than a generic message-pattern match (e.g. GQ7 unresolved-import
+  // errors legitimately contain "does not exist", which would otherwise
+  // match PERMANENT_PATTERNS below and skip the feedback-driven retry
+  // the throw site already wired up via state.data.feedback).
+  if (code === "GQ7_RETRYABLE") {
+    return {
+      class: ERROR_CLASS.TRANSIENT,
+      confidence: 0.9,
+      reason: "GQ7 unresolved import — retryable with feedback",
+      retryable: true,
+    };
   }
 
   // 3. Check for permanent errors

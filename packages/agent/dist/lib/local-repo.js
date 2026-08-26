@@ -199,7 +199,20 @@ function localGetChanges(clonePath) {
     // space of the first line, which `git status --porcelain` uses to
     // encode the worktree column (e.g. " M path" for unstaged-modified).
     // Losing that space offsets the downstream `substring(3)` path parse.
-    const output = execFileSync("git", ["-C", clonePath, "status", "--porcelain"], { encoding: "utf8", timeout: 15_000 }).replace(/\n+$/, "");
+    //
+    // `-uall` (--untracked-files=all) is required: without it, git collapses
+    // an entirely-new, untracked directory into a single `?? dir/` line
+    // instead of listing each file inside it. When a Developer Agent creates
+    // a brand-new directory (e.g. `ViewResults/` with several files), that
+    // single collapsed line gets treated as a "file" path, `localGetFile`
+    // can't read a directory as content, and every file inside silently
+    // vanishes from the changeset — even though other files that reference
+    // them (e.g. a barrel `index.tsx` import) merge in fine. This surfaced
+    // as GQ7 repeatedly reporting a freshly-created file as "not found on
+    // disk" specifically for new-directory cases, especially in the
+    // sub-worktree merge path (mergeSubWorktrees) which relies entirely on
+    // this function to know what to copy into the canonical repo.
+    const output = execFileSync("git", ["-C", clonePath, "status", "--porcelain", "-uall"], { encoding: "utf8", timeout: 15_000 }).replace(/\n+$/, "");
     if (!output)
         return [];
     let diffOutput = "";
@@ -596,7 +609,7 @@ function removeAllSubWorktrees(ticket) {
  * earlier), but defense in depth keeps the canonical worktree's preserved
  * secrets intact.
  */
-function mergeSubWorktrees(ticket, agentIndices, canonicalPath) {
+function mergeSubWorktrees(ticket, agentIndices, canonicalPath, declaredFiles) {
     const FORBIDDEN = [
         /(^|\/)\.env(\..+)?$/,
         /(^|\/)\.api-token$/,
@@ -604,7 +617,17 @@ function mergeSubWorktrees(ticket, agentIndices, canonicalPath) {
         /(^|\/)\.npmrc$/,
     ];
     const result = { applied: 0, conflicts: [], skippedForbidden: [] };
-    const fileOwner = new Map(); // file_path → first agent idx that wrote it
+    // file_path → { idx, change } of the change currently slated to win.
+    const fileOwner = new Map();
+    // R2: When two agents touch the same shared file, blind "first agent in
+    // agentIndices order wins" is arbitrary — an agent that strayed outside
+    // its assigned scope (e.g. touching a shared barrel file nobody told it
+    // to touch) can beat the actual declared owner simply by having a lower
+    // index, silently discarding the correct, in-scope edit. If the plan's
+    // task-group file lists are available, prefer whichever candidate
+    // actually DECLARED this file; only fall back to index order when
+    // ownership is ambiguous (both or neither declared it).
+    const declaresFile = (idx, filePath) => !!declaredFiles && !!declaredFiles[idx] && declaredFiles[idx].includes(filePath);
     for (const idx of agentIndices) {
         const sub = _subWorktreePath(ticket, idx);
         if (!fs_1.default.existsSync(sub))
@@ -624,42 +647,58 @@ function mergeSubWorktrees(ticket, agentIndices, canonicalPath) {
             }
             const prior = fileOwner.get(c.file_path);
             if (prior !== undefined) {
-                // Same file modified by two agents → first wins. Track conflict.
+                // Same file modified by two agents. Track the conflict regardless
+                // of outcome (still worth surfacing), but decide the actual winner
+                // by declared ownership rather than blindly keeping whoever we
+                // saw first.
                 const existing = result.conflicts.find((x) => x.file === c.file_path);
                 if (existing) {
                     if (!existing.agents.includes(idx))
                         existing.agents.push(idx);
                 }
                 else {
-                    result.conflicts.push({ file: c.file_path, agents: [prior, idx] });
+                    result.conflicts.push({ file: c.file_path, agents: [prior.idx, idx] });
                 }
+                const priorDeclares = declaresFile(prior.idx, c.file_path);
+                const currentDeclares = declaresFile(idx, c.file_path);
+                if (currentDeclares && !priorDeclares) {
+                    // Current agent is the declared owner; prior wasn't — switch.
+                    fileOwner.set(c.file_path, { idx, change: c });
+                }
+                // Otherwise keep prior (either prior was the declared owner, or
+                // ownership is ambiguous/undeclared — preserve existing first-wins
+                // behavior as the safe default).
                 continue;
             }
-            fileOwner.set(c.file_path, idx);
-            const dst = path_1.default.join(canonicalPath, c.file_path);
-            try {
-                if (c.action === "delete") {
-                    if (fs_1.default.existsSync(dst))
-                        fs_1.default.rmSync(dst, { force: true });
+            fileOwner.set(c.file_path, { idx, change: c });
+        }
+    }
+    for (const { idx, change: c } of fileOwner.values()) {
+        const dst = path_1.default.join(canonicalPath, c.file_path);
+        try {
+            if (c.action === "delete") {
+                if (fs_1.default.existsSync(dst))
+                    fs_1.default.rmSync(dst, { force: true });
+            }
+            else {
+                fs_1.default.mkdirSync(path_1.default.dirname(dst), { recursive: true });
+                if (typeof c.content === "string") {
+                    fs_1.default.writeFileSync(dst, c.content);
                 }
                 else {
-                    fs_1.default.mkdirSync(path_1.default.dirname(dst), { recursive: true });
-                    if (typeof c.content === "string") {
-                        fs_1.default.writeFileSync(dst, c.content);
-                    }
-                    else {
-                        // Binary content placeholder — copy raw bytes from src
-                        const src = path_1.default.join(sub, c.file_path);
-                        if (fs_1.default.existsSync(src)) {
-                            fs_1.default.copyFileSync(src, dst);
-                        }
+                    // Binary content placeholder — copy raw bytes from the winning
+                    // agent's sub-worktree (may differ from the last-iterated one
+                    // now that ownership can switch to an earlier-seen agent).
+                    const src = path_1.default.join(_subWorktreePath(ticket, idx), c.file_path);
+                    if (fs_1.default.existsSync(src)) {
+                        fs_1.default.copyFileSync(src, dst);
                     }
                 }
-                result.applied++;
             }
-            catch (e) {
-                logWarn(`mergeSubWorktrees: failed to apply ${c.file_path}: ${e.message.substring(0, 120)}`);
-            }
+            result.applied++;
+        }
+        catch (e) {
+            logWarn(`mergeSubWorktrees: failed to apply ${c.file_path}: ${e.message.substring(0, 120)}`);
         }
     }
     return result;
