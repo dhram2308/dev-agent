@@ -25,3 +25,6 @@ dist/
 .DS_Store
 *.swp
 *~
+
+# local secrets — never commit
+/env
