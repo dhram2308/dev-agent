@@ -16,6 +16,7 @@ const { isChannelEnabled } = require("../lib/notification-config");
 const gdrive = require("../lib/gdrive");
 const figma = require("../lib/figma");
 const postman = require("../lib/postman");
+const claudeDesign = require("../lib/claude-design");
 
 async function stageFetchTicket(state: PipelineState): Promise<void> {
   logStep(1, "Fetch Jira ticket + full context");
@@ -372,6 +373,7 @@ async function stageFetchTicket(state: PipelineState): Promise<void> {
     const figmaOn = parseBoolean(process.env.FIGMA_ENABLED)
       ?? (!!process.env.FIGMA_OAUTH_ACCESS_TOKEN || !!process.env.FIGMA_TOKEN);
     const postmanOn = parseBoolean(process.env.POSTMAN_ENABLED); // no OAuth path — explicit only
+    const claudeDesignOn = parseBoolean(process.env.CLAUDE_DESIGN_ENABLED) ?? false;
     for (const url of externalUrls) {
       let matched = false;
       if (gdriveOn && gdrive.matchUrl(url)) {
@@ -382,6 +384,9 @@ async function stageFetchTicket(state: PipelineState): Promise<void> {
         matched = true;
       } else if (postmanOn && postman.matchUrl(url)) {
         connectorUrls.push({ url, connector: "postman", match: postman.matchUrl(url) });
+        matched = true;
+      } else if (claudeDesignOn && claudeDesign.matchUrl(url)) {
+        connectorUrls.push({ url, connector: "claude-design", match: claudeDesign.matchUrl(url) });
         matched = true;
       }
       if (!matched) remainingUrls.push(url);
@@ -395,6 +400,7 @@ async function stageFetchTicket(state: PipelineState): Promise<void> {
         if (cu.connector === "gdrive") return `gdrive:${cu.match.fileId}${cu.match.gid ? `#${cu.match.gid}` : ""}`;
         if (cu.connector === "figma") return `figma:${cu.match.fileKey}${cu.match.nodeId ? `#${cu.match.nodeId}` : ""}`;
         if (cu.connector === "postman") return `postman:${cu.match.collectionId}`;
+        if (cu.connector === "claude-design") return `claude-design:${cu.match.type}:${cu.match.id}`;
         return `unknown:${cu.url}`;
       };
       const seen = new Set<string>();
@@ -439,6 +445,10 @@ async function stageFetchTicket(state: PipelineState): Promise<void> {
         if (cu.connector === "postman") {
           const m = cu.match;
           return { ...(await postman.fetchCollection(m.collectionId)), source: "postman", url: cu.url };
+        }
+        if (cu.connector === "claude-design") {
+          const m = cu.match;
+          return { ...(await claudeDesign.fetchClaudeDesign(m, cu.url)), source: "claude-design", url: cu.url };
         }
         return { ok: false, error: "Unknown connector", source: cu.connector, url: cu.url };
       }));
@@ -506,14 +516,14 @@ async function stageFetchTicket(state: PipelineState): Promise<void> {
     logInfo(`Connector contents already populated (${connectorContents.length} items) — skipping re-fetch`);
     // Remove connector URLs from externalUrls to avoid UNFETCHABLE filter noise
     const remainingUrls = externalUrls.filter((url: string) =>
-      !gdrive.matchUrl(url) && !figma.matchUrl(url) && !postman.matchUrl(url)
+      !gdrive.matchUrl(url) && !figma.matchUrl(url) && !postman.matchUrl(url) && !claudeDesign.matchUrl(url)
     );
     externalUrls.splice(0, externalUrls.length, ...remainingUrls);
   }
 
   // ── Layer 7: Fetch accessible external URLs (P2: parallel batches) ──
   // Q1: Expanded unfetchable URL patterns (includes auth-gated services)
-  const UNFETCHABLE = /figma\.com|docs\.google\.com|sheets\.google\.com|drive\.google\.com|lovable\.app|canva\.com|miro\.com|postman\.com|getpostman\.com|confluence\.|notion\.so|\.sharepoint\.com|swagger\/api-docs/i;
+  const UNFETCHABLE = /figma\.com|docs\.google\.com|sheets\.google\.com|drive\.google\.com|claude\.ai|lovable\.app|canva\.com|miro\.com|postman\.com|getpostman\.com|confluence\.|notion\.so|\.sharepoint\.com|swagger\/api-docs/i;
   // G9: Private IP patterns to block SSRF
   const PRIVATE_IP = /^(127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|169\.254\.\d+\.\d+|0\.0\.0\.0|localhost)$/i;
   const fetchedUrlContents: any[] = [];

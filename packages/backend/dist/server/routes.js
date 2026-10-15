@@ -48,6 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setAgentProcessHandlers = setAgentProcessHandlers;
+exports.setPlaygroundProcessHandlers = setPlaygroundProcessHandlers;
 exports.safeTicket = safeTicket;
 exports.safeGate = safeGate;
 exports.safeStage = safeStage;
@@ -64,6 +65,13 @@ let _agentHandlers = null;
  */
 function setAgentProcessHandlers(handlers) {
     _agentHandlers = handlers;
+}
+let _playgroundHandlers = null;
+/**
+ * Register Playground process handlers. Called by http-server.ts on startup.
+ */
+function setPlaygroundProcessHandlers(handlers) {
+    _playgroundHandlers = handlers;
 }
 // ── Resilience modules (safe require -- each may not exist yet) ──
 // Security: input sanitization + safe body parsing
@@ -224,6 +232,50 @@ function safeStage(s) {
     if (!_agentHandlers)
         return null;
     return _agentHandlers.STAGE_DATA_MAP[st] !== undefined ? st : null;
+}
+/**
+ * Playground stage whitelist -- deliberately narrower than the full
+ * pipeline's STAGES list and enforced server-side (not just hidden in the
+ * UI). Only stages with no irreversible external side effect once
+ * simulated are exposed; deploy/gate/dual-approval stages stay out until
+ * the safe stages are proven out.
+ */
+const PLAYGROUND_ALLOWED_STAGES = new Set(['fetch_ticket', 'explore_plan', 'generate_code']);
+// Project root -- packages/agent/src/server/playground-process.ts persists run
+// metadata to <root>/.state/playground/<runId>.json; read it back from here.
+const PLAYGROUND_STATE_DIR = path.join(__dirname, '..', '..', '..', '..', '.state', 'playground');
+function readPlaygroundRun(runId) {
+    try {
+        const filePath = path.join(PLAYGROUND_STATE_DIR, `${runId}.json`);
+        if (!fs.existsSync(filePath))
+            return null;
+        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    }
+    catch {
+        return null;
+    }
+}
+function listPlaygroundRuns() {
+    try {
+        if (!fs.existsSync(PLAYGROUND_STATE_DIR))
+            return [];
+        const files = fs.readdirSync(PLAYGROUND_STATE_DIR).filter((f) => f.endsWith('.json'));
+        const runs = files
+            .map((f) => {
+            try {
+                return JSON.parse(fs.readFileSync(path.join(PLAYGROUND_STATE_DIR, f), 'utf8'));
+            }
+            catch {
+                return null;
+            }
+        })
+            .filter((r) => r !== null);
+        runs.sort((a, b) => b.startedAt - a.startedAt);
+        return runs;
+    }
+    catch {
+        return [];
+    }
 }
 // ── POST Body Parsing ───────────────────────────────────────────
 /**
@@ -1199,6 +1251,219 @@ async function handleRequest(url, request, res, apiToken, html) {
         }
         return true;
     }
+    // -- POST /api/ask-task --
+    // Answers a free-form user question about the current pipeline task.
+    // Builds context from pipeline state and spawns `claude -p` (print mode)
+    // so it uses the same CLI auth as the agent — no ANTHROPIC_API_KEY needed.
+    if (url.pathname === '/api/ask-task' && request.method === 'POST') {
+        try {
+            const raw = await parseBody(request, 32_768);
+            const { ticket, question } = sanitizeBody('/api/ask-task', raw);
+            const t = safeTicket(ticket);
+            if (!t) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: false, error: 'Invalid ticket format' }));
+                return true;
+            }
+            if (!question || typeof question !== 'string' || question.trim().length === 0) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: false, error: 'Question is required' }));
+                return true;
+            }
+            if (question.length > 2000) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: false, error: 'Question too long (max 2000 chars)' }));
+                return true;
+            }
+            // Build context from current pipeline state
+            const state = await (0, state_io_1.getState)(t);
+            const contextParts = [`Ticket: ${t}`];
+            if (state) {
+                contextParts.push(`Current stage: ${state.stage}`);
+                const d = (state.data || {});
+                const ticketData = d.ticket;
+                if (ticketData?.title)
+                    contextParts.push(`Title: ${ticketData.title}`);
+                if (ticketData?.description) {
+                    const desc = String(ticketData.description).slice(0, 1500);
+                    contextParts.push(`Description:\n${desc}`);
+                }
+                if (ticketData?.summary)
+                    contextParts.push(`Ticket summary: ${String(ticketData.summary).slice(0, 1000)}`);
+                const plan = d.explore_plan;
+                if (plan)
+                    contextParts.push(`Exploration plan:\n${String(plan).slice(0, 1500)}`);
+                const codeChanges = d.codeChanges;
+                if (codeChanges?.summary)
+                    contextParts.push(`Code changes summary: ${codeChanges.summary}`);
+                const lastError = d._lastError;
+                if (lastError)
+                    contextParts.push(`Last error: ${lastError}`);
+            }
+            const prompt = `You are a helpful assistant for a developer using an AI pipeline tool. ` +
+                `Answer the user's question about their pipeline task clearly and concisely. ` +
+                `Base your answer on the context provided. If information is missing, say so.\n\n` +
+                `## Pipeline task context\n\n${contextParts.join('\n\n')}\n\n` +
+                `## User question\n\n${question.trim()}`;
+            const model = process.env.CLAUDE_MODEL || 'claude-sonnet-4-5';
+            const answer = await new Promise((resolve, reject) => {
+                const { execFile } = require('child_process');
+                const args = ['-p', prompt, '--model', model, '--output-format', 'text'];
+                const proc = execFile('claude', args, { timeout: 60_000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+                    if (err) {
+                        reject(new Error(stderr?.trim() || err.message));
+                        return;
+                    }
+                    resolve(stdout.trim());
+                });
+                void proc;
+            });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, answer }));
+        }
+        catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: msg }));
+        }
+        return true;
+    }
+    // -- POST /api/playground/start --
+    // Validates input, then either delegates to the real single-stage runner
+    // (packages/agent/src/playground-runner.ts, via playground-process.ts —
+    // once a stage is in PLAYGROUND_WIRED_STAGES) or falls back to a stub
+    // that echoes the request back over the `playground:log` /
+    // `playground:status` SSE events (for stages not yet wired for real
+    // execution). This lets the picker show every allowed stage from day
+    // one while real execution rolls out stage-by-stage.
+    if (url.pathname === '/api/playground/start' && request.method === 'POST') {
+        try {
+            const raw = await parseBody(request, getBodySizeLimit('/api/playground/start'));
+            const { stage, ticket, customInstruction } = sanitizeBody('/api/playground/start', raw);
+            if (!stage || !PLAYGROUND_ALLOWED_STAGES.has(stage)) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: false, error: 'Invalid or disallowed stage' }));
+                return true;
+            }
+            let t = null;
+            if (ticket) {
+                t = safeTicket(ticket);
+                if (!t) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ ok: false, error: 'Invalid ticket format' }));
+                    return true;
+                }
+            }
+            const instruction = typeof customInstruction === 'string' ? customInstruction.trim() : '';
+            if (instruction.length > 10000) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: false, error: 'Custom instruction too long (max 10000 chars)' }));
+                return true;
+            }
+            const runId = `pg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            if (_playgroundHandlers && _playgroundHandlers.PLAYGROUND_WIRED_STAGES.has(stage)) {
+                const startResult = _playgroundHandlers.startPlaygroundRun({ runId, stage, ticket: t, customInstruction: instruction });
+                if (!startResult.ok) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ ok: false, error: startResult.error ?? 'Failed to start Playground run' }));
+                    return true;
+                }
+                (0, sse_1.addLog)(`[Playground] Started real run ${runId} for stage ${stage}`, 'system');
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: true, runId }));
+                return true;
+            }
+            (0, sse_1.addLog)(`[Playground] Stub run ${runId} for stage ${stage}`, 'system');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, runId }));
+            // Broadcast after the response is sent: the client only creates its
+            // local run entry once this POST resolves, so events broadcast
+            // beforehand would arrive over SSE before that entry exists and get
+            // silently dropped. The delay also stands in for real async stage
+            // execution, which genuinely takes time.
+            setTimeout(() => {
+                (0, sse_1.broadcast)('playground:status', { runId, status: 'running', stage, ticket: t });
+                (0, sse_1.broadcast)('playground:log', {
+                    runId,
+                    level: 'info',
+                    message: `[PLAYGROUND] Would run stage "${stage}"`
+                        + (t ? ` with context from ${t}` : '')
+                        + (instruction ? ` — custom instruction: "${instruction}"` : ' — using default instruction')
+                        + ' (not yet wired for real execution — stub echo)',
+                });
+                (0, sse_1.broadcast)('playground:status', { runId, status: 'completed', stage, ticket: t });
+            }, 300);
+        }
+        catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: msg }));
+        }
+        return true;
+    }
+    // -- POST /api/playground/stop --
+    if (url.pathname === '/api/playground/stop' && request.method === 'POST') {
+        try {
+            const raw = await parseBody(request, getBodySizeLimit('/api/playground/stop'));
+            const { runId } = sanitizeBody('/api/playground/stop', raw);
+            if (!runId || typeof runId !== 'string') {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: false, error: 'runId is required' }));
+                return true;
+            }
+            if (!_playgroundHandlers) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: false, error: 'No Playground run in progress' }));
+                return true;
+            }
+            const stopResult = _playgroundHandlers.stopPlaygroundRun(runId);
+            res.writeHead(stopResult.ok ? 200 : 400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(stopResult));
+        }
+        catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: msg }));
+        }
+        return true;
+    }
+    // -- GET /api/playground/runs -- Recent run metadata, optionally filtered --
+    // Backs the "validated in Playground" lookup in GateApproval.tsx: given a
+    // (ticket, stage) pair, find the most recent completed run.
+    if (url.pathname === '/api/playground/runs' && request.method === 'GET') {
+        try {
+            const runs = listPlaygroundRuns();
+            const ticketFilter = url.searchParams.get('ticket');
+            const stageFilter = url.searchParams.get('stage');
+            const filtered = runs.filter((r) => (!ticketFilter || r.ticket === ticketFilter) && (!stageFilter || r.stage === stageFilter));
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, runs: filtered }));
+        }
+        catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: msg }));
+        }
+        return true;
+    }
+    // -- GET /api/playground/run/:runId -- Single run detail --
+    if (url.pathname.startsWith('/api/playground/run/') && request.method === 'GET') {
+        const runId = decodeURIComponent(url.pathname.slice('/api/playground/run/'.length));
+        if (!/^[A-Za-z0-9_-]+$/.test(runId)) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: 'Invalid runId format' }));
+            return true;
+        }
+        const run = readPlaygroundRun(runId);
+        if (!run) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: 'Run not found' }));
+            return true;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, run }));
+        return true;
+    }
     // -- GET /api/health -- Enhanced with service health, Slack, escalations --
     if (url.pathname === '/api/health' && request.method === 'GET') {
         const rawTicket = url.searchParams.get('ticket');
@@ -1441,6 +1706,82 @@ async function handleRequest(url, request, res, apiToken, html) {
         }
         return true;
     }
+    // ── GET /api/gdrive/check — Diagnose Google Drive token + file access ────
+    if (url.pathname === '/api/gdrive/check' && request.method === 'GET') {
+        try {
+            const fileId = url.searchParams.get('fileId');
+            let accessToken = null;
+            let tokenEmail = null;
+            let grantedScopes = null;
+            let tokenError = null;
+            // Get token via token-manager
+            try {
+                const tm = require('../oauth/token-manager');
+                accessToken = await tm.getAccessToken('google');
+                const meta = tm.getMetadataSync('google');
+                tokenEmail = meta?.email ?? null;
+            }
+            catch (e) {
+                tokenError = e.message;
+            }
+            const result = {
+                tokenPresent: !!accessToken,
+                tokenEmail,
+                tokenError,
+            };
+            if (accessToken) {
+                // Check token scopes via Google tokeninfo
+                const https = require('https');
+                const tokenInfo = await new Promise((resolve) => {
+                    https.get(`https://oauth2.googleapis.com/tokeninfo?access_token=${accessToken}`, (res) => {
+                        let d = '';
+                        res.on('data', (c) => d += c);
+                        res.on('end', () => { try {
+                            resolve(JSON.parse(d));
+                        }
+                        catch {
+                            resolve({});
+                        } });
+                    }).on('error', (e) => resolve({ error: e.message }));
+                });
+                grantedScopes = tokenInfo.scope ?? null;
+                result.scopes = grantedScopes;
+                result.hasDriveScope = (grantedScopes ?? '').includes('drive.readonly') || (grantedScopes ?? '').includes('drive');
+                result.tokenExpiry = tokenInfo.expires_in;
+                result.scopeError = tokenInfo.error ?? null;
+                // Test file access if fileId provided
+                if (fileId) {
+                    const fileCheck = await new Promise((resolve) => {
+                        https.get(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType&supportsAllDrives=true`, {
+                            headers: { Authorization: `Bearer ${accessToken}` },
+                        }, (res) => {
+                            let d = '';
+                            res.on('data', (c) => d += c);
+                            res.on('end', () => resolve({ status: res.statusCode ?? 0, body: d }));
+                        }).on('error', (e) => resolve({ status: 0, body: e.message }));
+                    });
+                    result.fileStatus = fileCheck.status;
+                    if (fileCheck.status === 200) {
+                        const fj = JSON.parse(fileCheck.body);
+                        result.fileName = fj.name;
+                        result.fileMimeType = fj.mimeType;
+                        result.fileAccessible = true;
+                    }
+                    else {
+                        result.fileAccessible = false;
+                        result.fileError = JSON.parse(fileCheck.body)?.error?.message ?? fileCheck.body.slice(0, 200);
+                    }
+                }
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result, null, 2));
+        }
+        catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return true;
+    }
     // ── GET /api/config — Return all config vars with values (secrets masked) ──
     if (url.pathname === '/api/config' && request.method === 'GET') {
         const items = [];
@@ -1541,12 +1882,14 @@ async function handleRequest(url, request, res, apiToken, html) {
             // OAuth env-var staging) use the canonical name.
             const SERVICE_ALIASES = {
                 'google-drive': 'gdrive',
+                'claude-design': 'claude-design',
             };
             const service = rawService ? (SERVICE_ALIASES[rawService] ?? rawService) : undefined;
             const allowed = [
                 'jira', 'gitlab', 'slack',
                 'gdrive', 'figma', 'postman',
                 'claude', 'anthropic', 'browser',
+                'claude-design',
             ];
             if (!service || !allowed.includes(service)) {
                 res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -1701,6 +2044,15 @@ async function handleRequest(url, request, res, apiToken, html) {
                 }
                 else {
                     result = { ok: true, message: `Playwright configured: ${browser}` };
+                }
+            }
+            else if (service === 'claude-design') {
+                const enabled = process.env.CLAUDE_DESIGN_ENABLED;
+                if (!enabled || enabled === 'false') {
+                    result = { ok: false, error: 'CLAUDE_DESIGN_ENABLED is not set to true — enable it in Settings → Connectors → Claude Design' };
+                }
+                else {
+                    result = { ok: true, message: 'Claude Design connector active — will detect claude.ai URLs in Jira tickets' };
                 }
             }
             else {

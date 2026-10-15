@@ -9,6 +9,10 @@
 
 import crypto from "crypto";
 import https from "https";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import { execSync } from "child_process";
 
 import type { GDriveResult, GDriveUrlMatch, ConnectorTestResult } from "@mi/shared";
 
@@ -187,6 +191,71 @@ function _httpsGetRaw(hostname: string, urlPath: string, token: string): Promise
   });
 }
 
+// Download file as raw bytes (for non-Google-native formats like .docx)
+function _httpsGetBuffer(hostname: string, urlPath: string, token: string): Promise<{ status: number | undefined; buffer: Buffer }> {
+  return new Promise((resolve, reject) => {
+    const opts = {
+      hostname,
+      port: 443,
+      path: urlPath,
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 60000,
+    };
+    const req = https.request(opts, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (c: Buffer) => { chunks.push(c); });
+      res.on("end", () => resolve({ status: res.statusCode, buffer: Buffer.concat(chunks) }));
+    });
+    req.on("error", reject);
+    req.on("timeout", () => { req.destroy(); reject(new Error("Download timed out")); });
+    req.end();
+  });
+}
+
+/**
+ * Extract plain text from a .docx buffer.
+ * .docx is a ZIP file containing word/document.xml. Uses the system unzip
+ * command (available on macOS and most Linux) to extract and strip XML tags.
+ */
+function _extractDocxText(buffer: Buffer): string {
+  const tmpPath = path.join(os.tmpdir(), `gdrive-${Date.now()}-${Math.random().toString(36).slice(2)}.docx`);
+  try {
+    fs.writeFileSync(tmpPath, buffer);
+    // Extract word/document.xml from the zip archive
+    const xml = execSync(`unzip -p "${tmpPath}" word/document.xml 2>/dev/null`, {
+      timeout: 10000,
+      maxBuffer: 5 * 1024 * 1024,
+    }).toString("utf8");
+
+    // Convert Word XML to readable plain text.
+    // Strategy: replace semantic tags first (consuming the whole opening tag
+    // including all attributes via [^>]*>), then strip remaining tags.
+    const text = xml
+      .replace(/<w:p\b[^>]*>/g, "\n")        // paragraph start → newline
+      .replace(/<\/w:p>/g, "")               // paragraph end
+      .replace(/<w:br\b[^>]*\/>/g, "\n")     // explicit line break
+      .replace(/<w:tab\b[^>]*\/>/g, "\t")    // tab character
+      .replace(/<w:t\b[^>]*>/g, "")          // text run start (consume attrs)
+      .replace(/<\/w:t>/g, "")               // text run end
+      .replace(/<[^>]+>/g, "")               // strip ALL remaining XML tags
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&#x[0-9A-Fa-f]+;/g, "")     // remove hex char entities
+      .replace(/&#\d+;/g, "")               // remove decimal entities
+      .replace(/\n[ \t]+/g, "\n")            // strip leading whitespace on lines
+      .replace(/\n{3,}/g, "\n\n")            // normalise multiple blank lines
+      .trim();
+
+    return text;
+  } finally {
+    try { fs.unlinkSync(tmpPath); } catch { /* ignore cleanup errors */ }
+  }
+}
+
 async function _getAccessToken(sa: ServiceAccount): Promise<string> {
   // OAuth mode: parent server injects access token via env var — bypass JWT exchange
   const oauthToken = process.env.GOOGLE_OAUTH_ACCESS_TOKEN;
@@ -216,17 +285,54 @@ async function fetchGoogleDoc(fileId: string): Promise<GDriveResult> {
   const oauthMode = !!process.env.GOOGLE_OAUTH_ACCESS_TOKEN;
   const sa = oauthMode ? { ok: true as const, data: {} as ServiceAccount } : _parseServiceAccount();
   if (!sa.ok) return { ok: false, error: sa.error };
+
+  const who = oauthMode
+    ? `the Google account connected in Settings (${process.env.GOOGLE_OAUTH_ACCOUNT_EMAIL ?? "yogendrasingh@mastersindia.co"})`
+    : `the service account ${sa.data!.client_email}`;
+
   try {
     const token = await _getAccessToken(sa.data!);
-    const meta = await _httpsGet("www.googleapis.com", `/drive/v3/files/${fileId}?fields=name`, token);
+
+    // supportsAllDrives=true is required for files in Shared Drives or
+    // cross-domain shared files — without it the API returns 403 for viewers.
+    const meta = await _httpsGet("www.googleapis.com", `/drive/v3/files/${fileId}?fields=name,mimeType&supportsAllDrives=true`, token);
+
+    if (meta.status === 403) return { ok: false, error: `File not shared with ${who}. Ask the document owner to share it with view access.` };
+    if (meta.status === 404) return { ok: false, error: `File not found (${fileId}) — the link may be broken or the file deleted.` };
+
     const title = (meta.status === 200 && meta.data.name) ? meta.data.name : `Google Doc ${fileId}`;
-    const exp = await _httpsGetRaw("www.googleapis.com", `/drive/v3/files/${fileId}/export?mimeType=text%2Fmarkdown`, token);
-    if (exp.status === 404 || exp.status === 403) {
-      return { ok: false, error: oauthMode ? "File not accessible — check OAuth token permissions" : `File not accessible — share it with ${sa.data!.client_email}` };
+    const mimeType: string = meta.data?.mimeType ?? "";
+
+    // ── Word / Office documents (.docx, .doc, .pptx, .xlsx) ─────────────
+    // The Drive export endpoint only works for native Google Docs/Sheets.
+    // For uploaded Office files we download the raw bytes and extract text.
+    const isOfficeFile = mimeType.includes("officedocument") || mimeType.includes("msword") || mimeType.includes("ms-excel");
+    if (isOfficeFile) {
+      const dl = await _httpsGetBuffer("www.googleapis.com", `/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, token);
+      if (dl.status === 403) return { ok: false, error: `File not shared with ${who}. Ask the document owner to share it with view access.` };
+      if (dl.status !== 200) return { ok: false, error: `Download failed: HTTP ${dl.status}` };
+      try {
+        let content = _extractDocxText(dl.buffer);
+        if (content.length > CONNECTOR_BUDGET) {
+          const cutoff = content.lastIndexOf("\n\n", CONNECTOR_BUDGET);
+          content = content.slice(0, cutoff > 0 ? cutoff : CONNECTOR_BUDGET) + "\n\n[Content truncated — original document continues]";
+        }
+        return { ok: true, title, content };
+      } catch (e: any) {
+        return { ok: false, error: `Word document text extraction failed: ${e.message}` };
+      }
     }
-    if (exp.status !== 200) {
-      return { ok: false, error: `Export failed: HTTP ${exp.status}` };
+
+    // ── Native Google Docs ───────────────────────────────────────────────
+    // Try markdown export; fall back to plain-text for unsupported variants.
+    let exp = await _httpsGetRaw("www.googleapis.com", `/drive/v3/files/${fileId}/export?mimeType=text%2Fmarkdown&supportsAllDrives=true`, token);
+    if (exp.status === 400) {
+      exp = await _httpsGetRaw("www.googleapis.com", `/drive/v3/files/${fileId}/export?mimeType=text%2Fplain&supportsAllDrives=true`, token);
     }
+    if (exp.status === 403) return { ok: false, error: `File not shared with ${who}. Ask the document owner to share it with view access.` };
+    if (exp.status === 404) return { ok: false, error: `File not found (${fileId}) — the link may be broken or the file deleted.` };
+    if (exp.status !== 200) return { ok: false, error: `Export failed: HTTP ${exp.status}` };
+
     let content: string = exp.data;
     if (content.length > CONNECTOR_BUDGET) {
       const cutoff = content.lastIndexOf("\n\n", CONNECTOR_BUDGET);
@@ -247,13 +353,19 @@ async function fetchGoogleSheet(fileId: string, gid?: string): Promise<GDriveRes
   if (!sa.ok) return { ok: false, error: sa.error };
   try {
     const token = await _getAccessToken(sa.data!);
-    const meta = await _httpsGet("www.googleapis.com", `/drive/v3/files/${fileId}?fields=name`, token);
+    const meta = await _httpsGet("www.googleapis.com", `/drive/v3/files/${fileId}?fields=name&supportsAllDrives=true`, token);
     const title = (meta.status === 200 && meta.data.name) ? meta.data.name : `Google Sheet ${fileId}`;
-    let exportPath = `/drive/v3/files/${fileId}/export?mimeType=text%2Fcsv`;
+    let exportPath = `/drive/v3/files/${fileId}/export?mimeType=text%2Fcsv&supportsAllDrives=true`;
     if (gid) exportPath += `&gid=${gid}`;
     const exp = await _httpsGetRaw("www.googleapis.com", exportPath, token);
-    if (exp.status === 404 || exp.status === 403) {
-      return { ok: false, error: oauthMode ? "File not accessible — check OAuth token permissions" : `File not accessible — share it with ${sa.data!.client_email}` };
+    if (exp.status === 403) {
+      const who = oauthMode
+        ? `the Google account connected in Settings (${process.env.GOOGLE_OAUTH_ACCOUNT_EMAIL ?? "Settings → Connectors → Google Drive"})`
+        : `the service account ${sa.data!.client_email}`;
+      return { ok: false, error: `File not shared with ${who}. Ask the document owner to share it with view access.` };
+    }
+    if (exp.status === 404) {
+      return { ok: false, error: `File not found (${fileId}) — the link may be broken or the file deleted.` };
     }
     if (exp.status !== 200) {
       return { ok: false, error: `Export failed: HTTP ${exp.status}` };

@@ -179,18 +179,38 @@ function startAgent(ticket) {
         const envVars = { ...process.env, ...loadEnv(), TICKET: ticket };
         if (worktreePath)
             envVars.WORKTREE_PATH = worktreePath;
+        // Per-ticket overrides, persisted in state.data by a previous /api/start
+        // call (see routes.ts's resume handling) -- applied only to this ticket's
+        // child process env, never to the global config. Scoped to this ticket
+        // only; other concurrently running tickets are unaffected.
+        try {
+            const existingState = getState(ticket);
+            const modelOverride = existingState?.data?._modelOverride;
+            if (modelOverride) {
+                envVars.CLAUDE_MODEL = modelOverride;
+                addLog(`Using per-ticket model override for ${ticket}: ${modelOverride}`, "system", ticket);
+            }
+        }
+        catch { /* state may not exist yet on a fresh start -- no override to apply */ }
         // [OAuth] Inject fresh OAuth access tokens from TokenManager (if available)
         if (_tokenManager) {
             const oauthProviders = [
-                { provider: 'google', envKey: 'GOOGLE_OAUTH_ACCESS_TOKEN' },
-                { provider: 'figma', envKey: 'FIGMA_OAUTH_ACCESS_TOKEN' },
-                { provider: 'gitlab', envKey: 'GITLAB_OAUTH_ACCESS_TOKEN' },
+                { provider: 'google', envKey: 'GOOGLE_OAUTH_ACCESS_TOKEN', emailKey: 'GOOGLE_OAUTH_ACCOUNT_EMAIL' },
+                { provider: 'figma', envKey: 'FIGMA_OAUTH_ACCESS_TOKEN', emailKey: null },
+                { provider: 'gitlab', envKey: 'GITLAB_OAUTH_ACCESS_TOKEN', emailKey: null },
             ];
-            for (const { provider, envKey } of oauthProviders) {
+            for (const { provider, envKey, emailKey } of oauthProviders) {
                 try {
                     const token = _tokenManager.getAccessTokenSync(provider);
-                    if (token)
+                    if (token) {
                         envVars[envKey] = token;
+                        // Inject account email for clearer error messages in connector libs
+                        if (emailKey && _tokenManager.getMetadataSync) {
+                            const meta = _tokenManager.getMetadataSync(provider);
+                            if (meta?.email)
+                                envVars[emailKey] = String(meta.email);
+                        }
+                    }
                 }
                 catch { /* provider not configured — skip */ }
             }

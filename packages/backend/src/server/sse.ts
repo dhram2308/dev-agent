@@ -411,6 +411,20 @@ export function registerClient(
   writeToClient(client, statusId, 'status', statusData);
   addToReplayBuffer(statusId, 'status', statusData);
 
+  // -- OAuth health check: emit authRequired for any provider missing a token --
+  // Only sent to this client (not broadcast) so repeat connections don't re-fire
+  // for all sessions. The frontend AuthRequiredBanner de-dupes by provider.
+  if (_tokenHealthChecker) {
+    try {
+      const missing = _tokenHealthChecker();
+      for (const { provider, reason } of missing) {
+        const authId = nextMessageId++;
+        const authData = JSON.stringify({ provider, reason });
+        writeToClient(client, authId, 'authRequired', authData);
+      }
+    } catch { /* non-fatal — token checker unavailable */ }
+  }
+
   // -- Backpressure: drain handler (exception-safe) --
   res.on('drain', () => {
     try {
@@ -576,6 +590,22 @@ let _agentProcsGetter: AgentProcsGetter | null = null;
  */
 export function setAgentProcsGetter(fn: AgentProcsGetter): void {
   _agentProcsGetter = fn;
+}
+
+// ── OAuth Token Health Checker (late binding) ────────────────────
+// Returns which configured OAuth providers currently lack valid tokens.
+// Injected by http-server.ts after initFromStore() so SSE can emit
+// authRequired to each new client on connect without importing oauth/.
+
+type TokenHealthChecker = () => Array<{ provider: string; reason: string }>;
+let _tokenHealthChecker: TokenHealthChecker | null = null;
+
+/**
+ * Register a function that returns auth-required providers.
+ * Called by http-server.ts after OAuth token store is initialized.
+ */
+export function setTokenHealthChecker(fn: TokenHealthChecker): void {
+  _tokenHealthChecker = fn;
 }
 
 // ── State Change Broadcast ───────────────────────────────────────

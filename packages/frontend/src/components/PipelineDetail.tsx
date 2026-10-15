@@ -1,22 +1,29 @@
 // ═══════════════════════════════════════════════════════════════
 // MI Dev Agent — Pipeline Detail View
-// Stage progress bar, history, and metadata for selected pipeline
+// Ticket title, status, and metadata — the top of the Dashboard's
+// sticky header (paired visually with AgentStatus's stepper strip
+// directly below it; see dashboard-activity-timeline-redesign).
 // ═══════════════════════════════════════════════════════════════
 
+import { useEffect, useState } from 'react';
 import { STAGE_INFO, type PipelineSummary, type StageName } from '../types';
 import { usePlaygroundStore } from '../store/playground';
 import { useNavigationStore } from '../store/navigation';
 import { PLAYGROUND_ALLOWED_STAGES } from './playground/PlaygroundPage';
+import { getPlaygroundRuns } from '../lib/api';
 
 // ── Styles ─────────────────────────────────────────────────────
 
 const styles = {
   container: {
-    background: 'var(--bg-surface)',
-    border: '1px solid var(--border-subtle)',
-    borderRadius: 'var(--radius-md)',
+    background: 'var(--glass-bg)',
+    backdropFilter: 'blur(var(--glass-blur))',
+    WebkitBackdropFilter: 'blur(var(--glass-blur))',
+    border: '1px solid var(--glass-border)',
+    borderBottom: 'none',
+    borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
     padding: 'var(--sp-4)',
-    marginBottom: 'var(--sp-4)',
+    marginBottom: 0,
   },
   header: {
     display: 'flex',
@@ -25,7 +32,7 @@ const styles = {
     marginBottom: 'var(--sp-3)',
   },
   ticket: {
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: 700,
     color: 'var(--text-primary)',
     fontFamily: 'var(--font-mono)',
@@ -37,33 +44,6 @@ const styles = {
     letterSpacing: '0.05em',
     padding: '2px 8px',
     borderRadius: 'var(--radius-full)',
-  },
-  stageProgress: {
-    display: 'flex',
-    gap: 3,
-    marginBottom: 'var(--sp-3)',
-  },
-  stageStep: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    gap: 2,
-  },
-  stepBar: {
-    width: '100%',
-    height: 4,
-    borderRadius: 2,
-  },
-  stepLabel: {
-    fontSize: 8,
-    color: 'var(--text-tertiary)',
-    textAlign: 'center' as const,
-    lineHeight: 1.2,
-    maxWidth: '100%',
-    overflow: 'hidden' as const,
-    textOverflow: 'ellipsis' as const,
-    whiteSpace: 'nowrap' as const,
   },
   meta: {
     display: 'flex',
@@ -95,6 +75,23 @@ const styles = {
     fontFamily: 'var(--font-sans)',
     whiteSpace: 'nowrap' as const,
   },
+  bridgeRow: {
+    marginTop: 'var(--sp-2)',
+  },
+  bridgeLink: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 'var(--sp-1)',
+    padding: '3px 10px',
+    borderRadius: 'var(--radius-full)',
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: 'pointer',
+    background: 'var(--accent-muted)',
+    color: 'var(--accent)',
+    border: '1px solid transparent',
+    fontFamily: 'var(--font-sans)',
+  },
 } as const;
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -102,7 +99,7 @@ const styles = {
 function getStatusPillStyle(status: string): React.CSSProperties {
   switch (status) {
     case 'running': return { background: 'var(--success-muted)', color: 'var(--success)' };
-    case 'gate_waiting': return { background: 'var(--warning-muted)', color: 'var(--warning)' };
+    case 'gate_waiting': return { background: 'var(--gate-muted)', color: 'var(--gate)' };
     case 'paused': return { background: 'var(--bg-elevated)', color: 'var(--text-tertiary)' };
     case 'done': return { background: 'var(--success-muted)', color: 'var(--success)' };
     case 'expired': return { background: 'var(--danger-muted)', color: 'var(--danger)' };
@@ -150,6 +147,24 @@ export function PipelineDetail({ pipeline }: PipelineDetailProps): JSX.Element {
     useNavigationStore.getState().setView('playground');
   };
 
+  // Bridge link: surface past Playground runs for this ticket, if any,
+  // as a one-click jump to the full Playground page (run history there).
+  const [pastRunCount, setPastRunCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    getPlaygroundRuns(pipeline.ticket)
+      .then((res) => {
+        if (!cancelled && res.ok) setPastRunCount(res.runs.length);
+      })
+      .catch(() => { /* best-effort — bridge link just stays hidden */ });
+    return () => { cancelled = true; };
+  }, [pipeline.ticket]);
+
+  const handleViewPlaygroundRuns = (): void => {
+    usePlaygroundStore.getState().prefill(pipeline.stage as StageName, pipeline.ticket);
+    useNavigationStore.getState().setView('playground');
+  };
+
   return (
     <div style={styles.container}>
       {/* Header row */}
@@ -168,32 +183,6 @@ export function PipelineDetail({ pipeline }: PipelineDetailProps): JSX.Element {
             Run in Playground
           </button>
         )}
-      </div>
-
-      {/* Stage progress bar */}
-      <div style={styles.stageProgress}>
-        {STAGE_INFO.map((info, idx) => (
-          <div key={info.stage} style={styles.stageStep}>
-            <div
-              style={{
-                ...styles.stepBar,
-                background:
-                  idx < stageIdx
-                    ? 'var(--success)'
-                    : idx === stageIdx
-                      ? (pipeline.running ? 'var(--accent)' : 'var(--warning)')
-                      : 'var(--bg-elevated)',
-              }}
-            />
-            <span style={{
-              ...styles.stepLabel,
-              color: idx === stageIdx ? 'var(--text-primary)' : undefined,
-              fontWeight: idx === stageIdx ? 600 : undefined,
-            }}>
-              {info.label.split(' ')[0]}
-            </span>
-          </div>
-        ))}
       </div>
 
       {/* Metadata row */}
@@ -220,6 +209,15 @@ export function PipelineDetail({ pipeline }: PipelineDetailProps): JSX.Element {
           </div>
         )}
       </div>
+
+      {/* Bridge link to Playground's run history for this ticket */}
+      {pastRunCount > 0 && (
+        <div style={styles.bridgeRow}>
+          <button type="button" style={styles.bridgeLink} onClick={handleViewPlaygroundRuns}>
+            {pastRunCount} past Playground run{pastRunCount === 1 ? '' : 's'} for this ticket →
+          </button>
+        </div>
+      )}
     </div>
   );
 }

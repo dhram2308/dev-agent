@@ -104,6 +104,15 @@ type AgentProcsGetter = () => Record<string, unknown>;
  * Called by http-server.ts on startup to break the circular dependency.
  */
 export declare function setAgentProcsGetter(fn: AgentProcsGetter): void;
+type TokenHealthChecker = () => Array<{
+    provider: string;
+    reason: string;
+}>;
+/**
+ * Register a function that returns auth-required providers.
+ * Called by http-server.ts after OAuth token store is initialized.
+ */
+export declare function setTokenHealthChecker(fn: TokenHealthChecker): void;
 /**
  * Broadcast a pipeline state change to all SSE clients.
  * Called by the http-server state poller when a ticket's stage changes.

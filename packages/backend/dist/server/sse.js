@@ -32,6 +32,7 @@ exports.getSseClients = getSseClients;
 exports.addSseClient = addSseClient;
 exports.removeSseClient = removeSseClient;
 exports.setAgentProcsGetter = setAgentProcsGetter;
+exports.setTokenHealthChecker = setTokenHealthChecker;
 exports.broadcastStateChange = broadcastStateChange;
 exports.broadcastPipelineList = broadcastPipelineList;
 exports.getSSEStats = getSSEStats;
@@ -338,6 +339,20 @@ function registerClient(res, request, url, apiToken) {
     const statusId = nextMessageId++;
     writeToClient(client, statusId, 'status', statusData);
     addToReplayBuffer(statusId, 'status', statusData);
+    // -- OAuth health check: emit authRequired for any provider missing a token --
+    // Only sent to this client (not broadcast) so repeat connections don't re-fire
+    // for all sessions. The frontend AuthRequiredBanner de-dupes by provider.
+    if (_tokenHealthChecker) {
+        try {
+            const missing = _tokenHealthChecker();
+            for (const { provider, reason } of missing) {
+                const authId = nextMessageId++;
+                const authData = JSON.stringify({ provider, reason });
+                writeToClient(client, authId, 'authRequired', authData);
+            }
+        }
+        catch { /* non-fatal — token checker unavailable */ }
+    }
     // -- Backpressure: drain handler (exception-safe) --
     res.on('drain', () => {
         try {
@@ -486,6 +501,14 @@ let _agentProcsGetter = null;
  */
 function setAgentProcsGetter(fn) {
     _agentProcsGetter = fn;
+}
+let _tokenHealthChecker = null;
+/**
+ * Register a function that returns auth-required providers.
+ * Called by http-server.ts after OAuth token store is initialized.
+ */
+function setTokenHealthChecker(fn) {
+    _tokenHealthChecker = fn;
 }
 // ── State Change Broadcast ───────────────────────────────────────
 /**

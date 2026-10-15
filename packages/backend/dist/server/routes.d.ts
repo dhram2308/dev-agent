@@ -26,6 +26,27 @@ interface AgentChildProcess {
  * Register agent process handlers. Called by http-server.ts on startup.
  */
 export declare function setAgentProcessHandlers(handlers: AgentProcessHandlers): void;
+interface PlaygroundProcessHandlers {
+    startPlaygroundRun: (opts: {
+        runId: string;
+        stage: string;
+        ticket?: string | null;
+        customInstruction?: string;
+    }) => {
+        ok: boolean;
+        error?: string;
+    };
+    stopPlaygroundRun: (runId: string) => {
+        ok: boolean;
+        error?: string;
+    };
+    getPlaygroundProcs: () => Record<string, AgentChildProcess>;
+    PLAYGROUND_WIRED_STAGES: Set<string>;
+}
+/**
+ * Register Playground process handlers. Called by http-server.ts on startup.
+ */
+export declare function setPlaygroundProcessHandlers(handlers: PlaygroundProcessHandlers): void;
 /**
  * F12: Path traversal guard -- validate ticket params.
  * Uses security module's validateTicket when available, falls back to basic regex.

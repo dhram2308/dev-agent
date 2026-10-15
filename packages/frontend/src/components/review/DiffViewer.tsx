@@ -5,8 +5,9 @@
 // ===================================================================
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { usePipelineStore } from '../../store/pipeline';
-import { useReviewStore } from '../../store/review';
+import { usePipelineStore, useActiveTicketState } from '../../store/pipeline';
+import { useNavigationStore } from '../../store/navigation';
+import { useReviewStore, useHydrateComments } from '../../store/review';
 import { useToast } from '../../contexts/ToastContext';
 import * as api from '../../lib/api';
 import { FileTree } from './FileTree';
@@ -101,6 +102,20 @@ const styles = {
     color: 'var(--accent)',
     textTransform: 'uppercase' as const,
     letterSpacing: '0.04em',
+  },
+  bridgeLink: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 'var(--sp-1)',
+    padding: '3px 10px',
+    borderRadius: 'var(--radius-full)',
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: 'pointer',
+    background: 'var(--warning-muted)',
+    color: 'var(--warning)',
+    border: 'none',
+    fontFamily: 'var(--font-sans)',
   },
   modeToggle: {
     display: 'flex',
@@ -291,6 +306,9 @@ export interface DiffViewerProps {
 export function DiffViewer({ source = 'frozen', liveData = null, frozenData = null }: DiffViewerProps = {}): JSX.Element {
   const activeTicket = usePipelineStore((s) => s.activeTicket);
   const frozenReviewData = usePipelineStore((s) => s.reviewData);
+  const ticketState = useActiveTicketState();
+  const setNavView = useNavigationStore((s) => s.setView);
+  useHydrateComments(activeTicket);
 
   const viewMode = useReviewStore((s) => s.viewMode);
   const setViewMode = useReviewStore((s) => s.setViewMode);
@@ -515,6 +533,15 @@ export function DiffViewer({ source = 'frozen', liveData = null, frozenData = nu
               </svg>
               MR {reviewData.mrIid ? `!${reviewData.mrIid}` : ''}
             </a>
+          )}
+          {ticketState?.isRunning && (
+            <button
+              type="button"
+              style={styles.bridgeLink}
+              onClick={() => setNavView('dashboard')}
+            >
+              Pipeline still running — view live →
+            </button>
           )}
         </div>
         <div style={styles.toolbarRight}>

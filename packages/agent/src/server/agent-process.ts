@@ -87,6 +87,7 @@ try {
 // [OAuth] Token manager injection point -- set by the backend server
 interface TokenManagerLike {
   getAccessTokenSync(provider: string): string | null;
+  getMetadataSync?(provider: string): Record<string, unknown> | null;
   // `trigger` is a diagnostic label propagated to the backend's refresh-history
   // ring buffer (oauth-connectors task 11.12). Optional for back-compat with
   // older builds of the backend that don't accept it.
@@ -237,14 +238,21 @@ function startAgent(ticket: string): AgentStartResult {
     // [OAuth] Inject fresh OAuth access tokens from TokenManager (if available)
     if (_tokenManager) {
       const oauthProviders = [
-        { provider: 'google', envKey: 'GOOGLE_OAUTH_ACCESS_TOKEN' },
-        { provider: 'figma', envKey: 'FIGMA_OAUTH_ACCESS_TOKEN' },
-        { provider: 'gitlab', envKey: 'GITLAB_OAUTH_ACCESS_TOKEN' },
+        { provider: 'google', envKey: 'GOOGLE_OAUTH_ACCESS_TOKEN', emailKey: 'GOOGLE_OAUTH_ACCOUNT_EMAIL' },
+        { provider: 'figma', envKey: 'FIGMA_OAUTH_ACCESS_TOKEN', emailKey: null },
+        { provider: 'gitlab', envKey: 'GITLAB_OAUTH_ACCESS_TOKEN', emailKey: null },
       ];
-      for (const { provider, envKey } of oauthProviders) {
+      for (const { provider, envKey, emailKey } of oauthProviders) {
         try {
           const token = _tokenManager.getAccessTokenSync(provider);
-          if (token) envVars[envKey] = token;
+          if (token) {
+            envVars[envKey] = token;
+            // Inject account email for clearer error messages in connector libs
+            if (emailKey && _tokenManager.getMetadataSync) {
+              const meta = _tokenManager.getMetadataSync(provider);
+              if (meta?.email) envVars[emailKey] = String(meta.email);
+            }
+          }
         } catch { /* provider not configured — skip */ }
       }
     }

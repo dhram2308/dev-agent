@@ -79,9 +79,11 @@ interface ConnectorCardProps {
 
 const styles = {
   card: {
-    borderRadius: 'var(--radius-md)',
-    border: '1px solid var(--border-default)',
-    background: 'var(--bg-surface)',
+    borderRadius: 'var(--radius-lg)',
+    border: '1px solid var(--glass-border)',
+    background: 'var(--glass-bg)',
+    backdropFilter: 'blur(var(--glass-blur))',
+    WebkitBackdropFilter: 'blur(var(--glass-blur))',
     padding: 'var(--sp-5)',
     display: 'flex',
     flexDirection: 'column' as const,

@@ -14,6 +14,7 @@ import { useToast } from '../contexts/ToastContext';
 import { RejectForm } from './approval/RejectForm';
 import { RefineForm } from './approval/RefineForm';
 import { Markdown } from './Markdown';
+import { CommentThreadPanel } from './review/CommentThreadPanel';
 import { PendingQuestionsPanel } from './PendingQuestionsPanel';
 import { ConfirmDialog } from './ConfirmDialog';
 import { getPlaygroundRuns, type PlaygroundRunRecord } from '../lib/api';
@@ -53,6 +54,13 @@ const styles = {
     padding: 'var(--sp-5)',
     marginBottom: 'var(--sp-6)',
     animation: 'fadeIn 0.3s ease-out',
+  },
+  // When embedded inside a timeline card, the card's own .ev-body chrome
+  // already supplies border/background/blur/padding — this near-zero-chrome
+  // variant avoids a visibly doubled glass panel.
+  containerEmbedded: {
+    padding: 0,
+    marginBottom: 0,
   },
   header: {
     display: 'flex',
@@ -300,6 +308,74 @@ const styles = {
     color: 'var(--text-secondary)',
     lineHeight: 1.8,
   },
+  viewDiffLink: {
+    display: 'inline-block',
+    marginLeft: 'var(--sp-3)',
+    padding: 'var(--sp-2) var(--sp-4)',
+    borderRadius: 'var(--radius-md)',
+    background: 'transparent',
+    color: 'var(--text-tertiary)',
+    textDecoration: 'none',
+    fontSize: 13,
+    fontWeight: 600,
+    marginBottom: 'var(--sp-4)',
+    border: '1px solid var(--border-default)',
+    cursor: 'pointer',
+    fontFamily: 'var(--font-sans)',
+  },
+  rejectionBudget: {
+    fontSize: 12,
+    fontWeight: 600,
+    marginBottom: 'var(--sp-2)',
+    color: 'var(--text-secondary)',
+  },
+  rejectionBudgetDanger: {
+    color: 'var(--danger)',
+  },
+  rejectionHistoryToggle: {
+    padding: 'var(--sp-1) 0',
+    fontSize: 12,
+    fontWeight: 600,
+    color: 'var(--text-tertiary)',
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    fontFamily: 'var(--font-sans)',
+    marginBottom: 'var(--sp-3)',
+  },
+  rejectionHistoryList: {
+    marginTop: 'var(--sp-2)',
+    marginBottom: 'var(--sp-3)',
+    padding: 'var(--sp-3)',
+    borderRadius: 'var(--radius-sm)',
+    background: 'var(--bg-elevated)',
+    fontSize: 12,
+    color: 'var(--text-secondary)',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 'var(--sp-3)',
+  },
+  rejectionRound: {
+    fontSize: 11,
+    fontWeight: 700,
+    color: 'var(--text-tertiary)',
+    marginBottom: 'var(--sp-1)',
+  },
+  rejectionTimestamp: {
+    fontSize: 10,
+    color: 'var(--text-ghost)',
+    fontWeight: 400,
+    marginLeft: 'var(--sp-2)',
+  },
+  commentPanelWrap: {
+    marginBottom: 'var(--sp-4)',
+  },
+  commentPanelLabel: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: 'var(--text-tertiary)',
+    marginBottom: 'var(--sp-2)',
+  },
 } as const;
 
 // ── Gate info per stage ────────────────────────────────────────
@@ -355,7 +431,15 @@ const GATE_CONFIGS: Partial<Record<StageName, GateConfig>> = {
 
 // ── Component ──────────────────────────────────────────────────
 
-export function GateApproval(): JSX.Element | null {
+interface GateApprovalProps {
+  /** When true, renders without its own glass-panel chrome — used when
+   * mounted inside a dashboard-activity-timeline-redesign card, whose
+   * `.ev-body` already supplies that chrome. Defaults to false, preserving
+   * today's standalone rendering for any caller that omits it. */
+  embedded?: boolean;
+}
+
+export function GateApproval({ embedded = false }: GateApprovalProps = {}): JSX.Element | null {
   const ticketState = useActiveTicketState();
   const reviewData = usePipelineStore((s) => s.reviewData);
   const activeTicket = usePipelineStore((s) => s.activeTicket);
@@ -389,6 +473,7 @@ export function GateApproval(): JSX.Element | null {
   const [secondsLeft, setSecondsLeft] = useState(AUTO_APPROVE_COUNTDOWN_SEC);
   const [validatedRun, setValidatedRun] = useState<PlaygroundRunRecord | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [showRejectionHistory, setShowRejectionHistory] = useState(false);
 
   // Load config once (idempotent — cheap no-op if another component already did).
   useEffect(() => {
@@ -530,7 +615,7 @@ export function GateApproval(): JSX.Element | null {
 
   return (
     <>
-      <div style={styles.container}>
+      <div style={{ ...styles.container, ...(embedded ? styles.containerEmbedded : {}) }}>
         {/* Header */}
         <div style={styles.header}>
           <div style={styles.title}>{config.title}</div>
@@ -626,6 +711,71 @@ export function GateApproval(): JSX.Element | null {
           >
             View Merge Request {mrIid ? `!${mrIid}` : ''}
           </a>
+        )}
+
+        {/* View full diff (code review gate) — the file tree + diff pane stay
+            on /review; this card only surfaces the comment threads + decision. */}
+        {gateWaiting === 'gate_code_review' && (
+          <button
+            type="button"
+            style={styles.viewDiffLink}
+            onClick={() => setNavView('review')}
+          >
+            View full diff →
+          </button>
+        )}
+
+        {/* Rejection budget + round history (code review gate) — both fields
+            already exist in state.data (written by incrementRejectionCounter()
+            in gate-code-review.ts), just never surfaced in the UI before. */}
+        {gateWaiting === 'gate_code_review' && (() => {
+          const rejections = (data._gate_rejections as Record<string, number> | undefined)?.gate1 ?? 0;
+          const maxRejections = Number(settingsConfig['MAX_REJECTIONS'] ?? 3);
+          const history = (data.rejectionHistory as Array<{ round: number; feedback: string; timestamp: string }> | undefined) ?? [];
+          const nearLimit = rejections >= maxRejections - 1 && maxRejections > 0;
+          return (
+            <>
+              <div style={{ ...styles.rejectionBudget, ...(nearLimit ? styles.rejectionBudgetDanger : {}) }}>
+                Rejection rounds: {rejections}/{maxRejections}
+              </div>
+              {history.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    style={styles.rejectionHistoryToggle}
+                    onClick={() => setShowRejectionHistory(!showRejectionHistory)}
+                    aria-expanded={showRejectionHistory}
+                  >
+                    {showRejectionHistory ? '▾' : '▸'} Rejection rounds ({history.length})
+                  </button>
+                  {showRejectionHistory && (
+                    <div style={styles.rejectionHistoryList}>
+                      {history.map((round) => (
+                        <div key={round.round}>
+                          <div style={styles.rejectionRound}>
+                            Round {round.round}
+                            <span style={styles.rejectionTimestamp}>{new Date(round.timestamp).toLocaleString()}</span>
+                          </div>
+                          <Markdown>{round.feedback}</Markdown>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          );
+        })()}
+
+        {/* Comment threads (code review gate) — read + reply inline, using the
+            same InlineComment component and persisted comments /review shows.
+            Starting a brand-new (non-reply) thread still requires /review's
+            diff pane, since that's where a file/line is picked. */}
+        {gateWaiting === 'gate_code_review' && (
+          <div style={styles.commentPanelWrap}>
+            <div style={styles.commentPanelLabel}>Comments</div>
+            <CommentThreadPanel ticket={activeTicket} />
+          </div>
         )}
 
         {/* Approval status for dual approval */}

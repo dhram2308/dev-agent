@@ -14,6 +14,7 @@ import { useNavigationStore, type AppView } from '../store/navigation';
 import { usePlaygroundStore } from '../store/playground';
 import { PLAYGROUND_ALLOWED_STAGES } from './playground/PlaygroundPage';
 import { STAGE_INFO, type StageName, type PipelineSummary } from '../types';
+import { FORCE_OPEN_STAGE_EVENT } from './StageOverviewSection';
 
 // ── View navigation config ────────────────────────────────────
 
@@ -523,6 +524,7 @@ export function Sidebar(): JSX.Element {
               const handleActivate = (): void => {
                 const target = document.getElementById(`stage-section-${info.stage}`);
                 if (target) {
+                  target.dispatchEvent(new CustomEvent(FORCE_OPEN_STAGE_EVENT));
                   target.scrollIntoView({ behavior: 'smooth', block: 'start' });
                   target.classList.add('mi-stage-highlight');
                   window.setTimeout(() => target.classList.remove('mi-stage-highlight'), 1500);

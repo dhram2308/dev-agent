@@ -198,7 +198,11 @@ export function useSSEConnection(): void {
 
     onPlaygroundStatus: (data) => {
       if (!data?.runId || !data?.status) return;
-      usePlaygroundStore.getState().setStatus(data.runId, data.status);
+      usePlaygroundStore.getState().setStatus(
+        data.runId,
+        data.status,
+        typeof data.resultSummary === 'string' ? data.resultSummary : undefined,
+      );
     },
   }), []);
 

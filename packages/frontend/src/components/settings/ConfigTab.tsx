@@ -21,9 +21,11 @@ const styles = {
     gap: 'var(--sp-4)',
   },
   group: {
-    borderRadius: 'var(--radius-md)',
-    border: '1px solid var(--border-default)',
-    background: 'var(--bg-surface)',
+    borderRadius: 'var(--radius-lg)',
+    border: '1px solid var(--glass-border)',
+    background: 'var(--glass-bg)',
+    backdropFilter: 'blur(var(--glass-blur))',
+    WebkitBackdropFilter: 'blur(var(--glass-blur))',
     overflow: 'hidden',
     transition: 'border-color 0.2s',
   },
@@ -106,9 +108,11 @@ const styles = {
     alignItems: 'center',
     gap: 'var(--sp-3)',
     padding: 'var(--sp-4)',
-    borderRadius: 'var(--radius-md)',
-    background: 'var(--bg-surface)',
-    border: '1px solid var(--border-default)',
+    borderRadius: 'var(--radius-lg)',
+    background: 'var(--glass-bg)',
+    backdropFilter: 'blur(var(--glass-blur))',
+    WebkitBackdropFilter: 'blur(var(--glass-blur))',
+    border: '1px solid var(--glass-border)',
     position: 'sticky' as const,
     bottom: 0,
     zIndex: 10,
@@ -181,7 +185,7 @@ const styles = {
 
 // ── Services that support test connection ────────────────────
 
-const TESTABLE_SERVICES = new Set(['jira', 'gitlab', 'slack']);
+const TESTABLE_SERVICES = new Set(['jira', 'gitlab', 'slack', 'claude-design']);
 
 // ── Group Icon SVGs ──────────────────────────────────────────
 
@@ -196,6 +200,9 @@ function GroupIcon({ id }: { id: string }): JSX.Element {
     ),
     slack: (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><rect x="2" y="6" width="4" height="4" rx="1" /><rect x="10" y="6" width="4" height="4" rx="1" /><rect x="6" y="2" width="4" height="4" rx="1" /><rect x="6" y="10" width="4" height="4" rx="1" /></svg>
+    ),
+    'claude-design': (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l1.8 4.2L14 7l-4.2 1.8L8 13l-1.8-4.2L2 7l4.2-1.8z" /></svg>
     ),
     default: (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6" /><path d="M8 5v3l2 1" /></svg>

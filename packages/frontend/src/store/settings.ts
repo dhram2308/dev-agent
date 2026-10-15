@@ -384,11 +384,20 @@ export const CONFIG_GROUPS: ConfigGroup[] = [
       { key: 'POSTMAN_API_KEY', label: 'Postman API Key', type: 'password', description: 'Postman API key for fetching collections referenced from Jira tickets. Required when POSTMAN_ENABLED is on. Generate one at https://www.postman.com/settings/me/api-keys (Postman has no OAuth — API key is the only auth mode).', required: false, frozen: false },
     ],
   },
+  {
+    id: 'claude-design',
+    label: 'Claude Design',
+    description: 'Claude.ai project and shared conversation integration',
+    icon: 'claude-design',
+    fields: [
+      { key: 'CLAUDE_DESIGN_ENABLED', label: 'Enable Claude Design Fetch', type: 'boolean', description: 'Detect claude.ai project and share URLs in Jira tickets. Public shared links are fetched automatically; private project links prompt the user to paste the content.', required: false, frozen: false, defaultValue: false },
+    ],
+  },
 ];
 
 /** Config group IDs that belong to connectors (shown in Manage modal, hidden from ConfigTab) */
 export const CONNECTOR_GROUP_IDS = new Set([
-  'jira', 'gitlab', 'slack', 'claude', 'browser', 'figma', 'google-drive', 'postman',
+  'jira', 'gitlab', 'slack', 'claude', 'browser', 'figma', 'google-drive', 'postman', 'claude-design',
 ]);
 
 // ── Notification defaults ───────────────────────────────────
@@ -468,6 +477,13 @@ const DEFAULT_CONNECTORS: ConnectorInfo[] = [
     name: 'Postman',
     description: 'Auto-fetch Postman collections, flatten API endpoints.',
     icon: 'postman',
+    status: 'disconnected',
+  },
+  {
+    id: 'claude-design',
+    name: 'Claude Design',
+    description: 'Detect claude.ai project links in tickets — fetch public shares or prompt to paste private designs.',
+    icon: 'claude-design',
     status: 'disconnected',
   },
   {
@@ -554,6 +570,9 @@ export function deriveConnectorStatuses(
         break;
       case 'postman':
         connected = has('POSTMAN_API_KEY');
+        break;
+      case 'claude-design':
+        connected = has('CLAUDE_DESIGN_ENABLED') && cfg['CLAUDE_DESIGN_ENABLED'] !== false && cfg['CLAUDE_DESIGN_ENABLED'] !== 'false';
         break;
       default:
         connected = false;

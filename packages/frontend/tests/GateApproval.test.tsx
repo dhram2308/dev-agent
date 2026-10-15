@@ -337,4 +337,134 @@ describe('GateApproval', () => {
       expect(link.getAttribute('target')).toBe('_blank');
     });
   });
+
+  // ── Rejection budget & round history (code review gate only) ──
+
+  describe('rejection budget', () => {
+    it('shows 0/3 (default MAX_REJECTIONS) when no rejections have occurred', () => {
+      mockTicketState = makeTicketState({ gateWaiting: 'gate_code_review' });
+
+      renderApproval();
+
+      expect(screen.getByText('Rejection rounds: 0/3')).toBeDefined();
+    });
+
+    it('shows the current rejection count against the budget', () => {
+      mockTicketState = makeTicketState({
+        gateWaiting: 'gate_code_review',
+        state: {
+          ticket: 'AUT-123',
+          stage: 'gate_code_review',
+          data: { _gate_rejections: { gate1: 1 } },
+        },
+      });
+
+      renderApproval();
+
+      expect(screen.getByText('Rejection rounds: 1/3')).toBeDefined();
+    });
+
+    it('does not render a rejection-round history toggle when there is no history', () => {
+      mockTicketState = makeTicketState({ gateWaiting: 'gate_code_review' });
+
+      renderApproval();
+
+      expect(screen.queryByText(/Rejection rounds \(/)).toBeNull();
+    });
+
+    it('renders a round-history disclosure with feedback and timestamp, expandable on click', () => {
+      mockTicketState = makeTicketState({
+        gateWaiting: 'gate_code_review',
+        state: {
+          ticket: 'AUT-123',
+          stage: 'gate_code_review',
+          data: {
+            _gate_rejections: { gate1: 1 },
+            rejectionHistory: [
+              { round: 1, feedback: 'Please add unit tests', timestamp: '2026-08-24T16:12:00.000Z' },
+            ],
+          },
+        },
+      });
+
+      renderApproval();
+
+      const toggle = screen.getByRole('button', { name: /Rejection rounds \(1\)/ });
+      expect(screen.queryByText('Please add unit tests')).toBeNull();
+
+      fireEvent.click(toggle);
+
+      expect(screen.getByText('Please add unit tests')).toBeDefined();
+      expect(screen.getByText('Round 1')).toBeDefined();
+    });
+
+    it('does not render the rejection budget section for other gates', () => {
+      mockTicketState = makeTicketState({
+        gateWaiting: 'explore_plan',
+        state: {
+          ticket: 'AUT-123',
+          stage: 'explore_plan',
+          data: { explore_plan: 'Test plan' },
+        },
+      });
+
+      renderApproval();
+
+      expect(screen.queryByText(/Rejection rounds:/)).toBeNull();
+    });
+  });
+
+  // ── View full diff link (code review gate only) ────────────────
+
+  describe('view full diff link', () => {
+    it('renders a "View full diff" control for the code review gate', () => {
+      mockTicketState = makeTicketState({ gateWaiting: 'gate_code_review' });
+
+      renderApproval();
+
+      expect(screen.getByText('View full diff →')).toBeDefined();
+    });
+
+    it('does not render "View full diff" for other gates', () => {
+      mockTicketState = makeTicketState({
+        gateWaiting: 'explore_plan',
+        state: {
+          ticket: 'AUT-123',
+          stage: 'explore_plan',
+          data: { explore_plan: 'Test plan' },
+        },
+      });
+
+      renderApproval();
+
+      expect(screen.queryByText('View full diff →')).toBeNull();
+    });
+  });
+
+  // ── Comment thread panel (code review gate only) ────────────────
+
+  describe('comment thread panel', () => {
+    it('renders the Comments section for the code review gate', () => {
+      mockTicketState = makeTicketState({ gateWaiting: 'gate_code_review' });
+
+      renderApproval();
+
+      expect(screen.getByText('Comments')).toBeDefined();
+    });
+
+    it('does not render the Comments section for other gates', () => {
+      mockTicketState = makeTicketState({
+        gateWaiting: 'explore_plan',
+        state: {
+          ticket: 'AUT-123',
+          stage: 'explore_plan',
+          data: { explore_plan: 'Test plan' },
+        },
+      });
+
+      renderApproval();
+
+      expect(screen.queryByText('Comments')).toBeNull();
+    });
+  });
 });

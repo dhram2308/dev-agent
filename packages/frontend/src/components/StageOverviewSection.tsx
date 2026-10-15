@@ -1,47 +1,96 @@
 // ═══════════════════════════════════════════════════════════════
 // MI Dev Agent — Stage Overview Section
 //
-// One always-rendered section per pipeline stage. Provides the scroll
-// target for the clickable stage pills in AgentStatus, and shows a
-// compact summary of that stage's status + key state.data fields.
-// Stages with dedicated detail panels (WriteCodeDetail, QAProgressPanel,
-// GateApproval) render those AFTER this overview — this section is
-// always visible, the detail panels add depth when relevant.
+// One always-rendered section per pipeline stage, rendered as a timeline
+// event card (dashboard-activity-timeline-redesign). Provides the scroll
+// target for the clickable stage pills in AgentStatus/Sidebar, and shows
+// a summary of that stage's status + key state.data fields.
+//
+// The `gate_code_review` and `generate_code` cards embed the real
+// GateApproval / WriteCodeDetail components (via their `embedded` prop)
+// as their body content instead of the generic key-value rows, so their
+// full existing functionality (comment threads, rejection budget, tab
+// bars, Sandbox tab, etc.) renders inline in the timeline — see
+// dashboard-activity-timeline-redesign's design.md for why gate_code_review
+// only embeds GateApproval while it's the *current* gate (GateApproval's
+// own single-active-gate design returns null otherwise), whereas
+// generate_code always embeds WriteCodeDetail (it already stays relevant
+// through later stages via its own `shouldShow` logic).
 // ═══════════════════════════════════════════════════════════════
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useActiveTicketState } from '../store/pipeline';
 import { stageIndex } from '../store/pipeline';
 import { STAGE_INFO, type StageName } from '../types';
+import { GateApproval } from './GateApproval';
+import { WriteCodeDetail } from './WriteCodeDetail';
+
+/** Custom event name AgentStatus's stage-pill click handler dispatches on
+ * the `#stage-section-{stage}` DOM node to force it open when scrolling
+ * to a currently-collapsed card. Kept as a plain DOM event (not a new
+ * store) since this is transient UI state local to each card. */
+export const FORCE_OPEN_STAGE_EVENT = 'mi:force-open-stage';
 
 const styles = {
+  timeline: {
+    position: 'relative' as const,
+  },
+  row: {
+    display: 'flex',
+    gap: 'var(--sp-3)',
+    alignItems: 'stretch',
+  },
+  railCol: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    width: 28,
+    flexShrink: 0,
+  },
+  railLine: {
+    width: 2,
+    flex: 1,
+    background: 'var(--rail)',
+    minHeight: 8,
+  },
   section: {
+    flex: 1,
     marginBottom: 'var(--sp-3)',
     padding: 'var(--sp-3) var(--sp-4)',
     borderRadius: 'var(--radius-md)',
     background: 'var(--bg-elevated)',
-    border: '1px solid var(--border)',
-    fontSize: 13,
-    transition: 'background 0.2s ease',
+    border: '1px solid var(--border-default)',
+  },
+  sectionPending: {
+    background: 'transparent',
+    border: '1px dashed var(--border-default)',
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     gap: 'var(--sp-2)',
     marginBottom: 'var(--sp-2)',
+    cursor: 'pointer',
+    userSelect: 'none' as const,
   },
-  num: {
-    width: 22,
-    height: 22,
+  chevron: {
+    fontSize: 11,
+    color: 'var(--text-tertiary)',
+    width: 10,
+    flexShrink: 0,
+  },
+  node: {
+    width: 26,
+    height: 26,
     borderRadius: '50%',
-    background: 'var(--bg-base)',
-    color: 'var(--text-secondary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: 11,
-    fontWeight: 600,
+    fontSize: 12,
+    fontWeight: 700,
     flexShrink: 0,
+    marginTop: 'var(--sp-3)',
+    border: '2px solid transparent',
   },
   label: {
     fontWeight: 600,
@@ -98,6 +147,33 @@ function statusColors(status: Status): React.CSSProperties {
     case 'current':   return { background: 'rgba(99,102,241,0.15)', color: 'var(--accent)' };
     case 'upcoming':  return { background: 'rgba(148,163,184,0.15)', color: 'var(--text-tertiary)' };
   }
+}
+
+/** Node glyph + color for the timeline rail — done stages get a checkmark
+ * (or a flag for the final `done` stage), gate stages (`who !== 'agent'`)
+ * get a diamond in the gate-identity color, everything else falls back to
+ * its ordinal position. */
+function nodeContent(
+  status: Status,
+  isGate: boolean,
+  isFinalStage: boolean,
+  ordinal: number,
+): { glyph: string; style: React.CSSProperties } {
+  if (status === 'completed') {
+    return {
+      glyph: isFinalStage ? '🏁' : '✓',
+      style: { background: 'var(--success-muted)', color: 'var(--success)', borderColor: 'var(--success)' },
+    };
+  }
+  if (status === 'current') {
+    return isGate
+      ? { glyph: '◆', style: { background: 'var(--gate-muted)', color: 'var(--gate)', borderColor: 'var(--gate)' } }
+      : { glyph: String(ordinal), style: { background: 'var(--accent-muted)', color: 'var(--accent)', borderColor: 'var(--accent)' } };
+  }
+  return {
+    glyph: isGate ? '◆' : String(ordinal),
+    style: { background: 'var(--gray-bg)', color: 'var(--text-tertiary)', borderColor: 'var(--rail)' },
+  };
 }
 
 function pickStageData(stage: StageName, data: Record<string, unknown>): Array<{ key: string; value: string }> {
@@ -190,9 +266,10 @@ function pickStageData(stage: StageName, data: Record<string, unknown>): Array<{
 
 interface Props {
   stage: StageName;
+  isLast?: boolean;
 }
 
-export function StageOverviewSection({ stage }: Props): JSX.Element | null {
+export function StageOverviewSection({ stage, isLast = false }: Props): JSX.Element | null {
   const ticketState = useActiveTicketState();
   const info = STAGE_INFO.find((s) => s.stage === stage);
 
@@ -211,54 +288,110 @@ export function StageOverviewSection({ stage }: Props): JSX.Element | null {
     return pickStageData(stage, data);
   }, [ticketState, stage]);
 
+  // Independent per-card expand/collapse (each card toggles on its own,
+  // unlike AgentSwimLanes' single-open accordion — the mockup's per-card
+  // classList.toggle('open') is independent, not exclusive).
+  const [open, setOpen] = useState(status === 'current');
+  const sectionRef = useRef<HTMLElement>(null);
+
+  // Auto-open when this card becomes the current stage (fires once per
+  // transition, so a user who manually collapses it isn't fought).
+  useEffect(() => {
+    if (status === 'current') setOpen(true);
+  }, [status]);
+
+  // Reset to the default (open only if current) whenever the active ticket
+  // changes — these section components don't unmount between tickets.
+  useEffect(() => {
+    setOpen(status === 'current');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticketState?.ticket]);
+
+  // Let AgentStatus's stage-pill click force this card open when scrolling
+  // to a currently-collapsed stage.
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const handler = (): void => setOpen(true);
+    el.addEventListener(FORCE_OPEN_STAGE_EVENT, handler);
+    return () => el.removeEventListener(FORCE_OPEN_STAGE_EVENT, handler);
+  }, []);
+
   if (!info) return null;
 
   const isMrLink = (v: string): boolean => v.startsWith('http://') || v.startsWith('https://');
+  const isGate = info.who !== 'agent';
+  const { glyph, style: nodeStyle } = nodeContent(status, isGate, stage === 'done', idx + 1);
 
   return (
-    <section
-      id={`stage-section-${stage}`}
-      style={styles.section}
-      aria-label={`${info.label} overview`}
-    >
-      <div style={styles.header}>
-        <div style={styles.num}>{idx + 1}</div>
-        <div style={styles.label}>{info.label}</div>
-        <div style={{ ...styles.statusBadge, ...statusColors(status) }}>{status}</div>
+    <div style={styles.row}>
+      <div style={styles.railCol}>
+        <div style={{ ...styles.node, ...nodeStyle }}>{glyph}</div>
+        {!isLast && <div style={styles.railLine} />}
       </div>
-      <div style={styles.body}>
-        {rows.length === 0 ? (
-          <span style={styles.empty}>
-            {status === 'upcoming'
-              ? 'Not yet started.'
-              : status === 'current'
-              ? 'In progress — details will appear as the stage runs.'
-              : 'No data captured for this stage.'}
-          </span>
-        ) : (
-          rows.map((r) => (
-            <div key={r.key} style={styles.kvRow}>
-              <span style={styles.kvKey}>{r.key}</span>
-              {isMrLink(r.value) ? (
-                <a href={r.value} target="_blank" rel="noopener noreferrer" style={{ ...styles.kvValue, ...styles.link }}>
-                  {r.value}
-                </a>
-              ) : (
-                <span style={styles.kvValue}>{r.value}</span>
-              )}
-            </div>
-          ))
+      <section
+        ref={sectionRef}
+        id={`stage-section-${stage}`}
+        style={{ ...styles.section, ...(status === 'upcoming' ? styles.sectionPending : {}) }}
+        aria-label={`${info.label} overview`}
+      >
+        <div
+          style={styles.header}
+          role="button"
+          tabIndex={0}
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setOpen((v) => !v);
+            }
+          }}
+        >
+          <span style={styles.chevron} aria-hidden="true">{open ? '▾' : '▸'}</span>
+          <div style={styles.label}>{info.label}</div>
+          <div style={{ ...styles.statusBadge, ...statusColors(status) }}>{status}</div>
+        </div>
+        {open && (
+          <div style={styles.body} onClick={(e) => e.stopPropagation()}>
+            {stage === 'generate_code' && status !== 'upcoming' ? (
+              <WriteCodeDetail embedded />
+            ) : stage === 'gate_code_review' && status === 'current' ? (
+              <GateApproval embedded />
+            ) : rows.length === 0 ? (
+              <span style={styles.empty}>
+                {status === 'upcoming'
+                  ? 'Not yet started.'
+                  : status === 'current'
+                  ? 'In progress — details will appear as the stage runs.'
+                  : 'No data captured for this stage.'}
+              </span>
+            ) : (
+              rows.map((r) => (
+                <div key={r.key} style={styles.kvRow}>
+                  <span style={styles.kvKey}>{r.key}</span>
+                  {isMrLink(r.value) ? (
+                    <a href={r.value} target="_blank" rel="noopener noreferrer" style={{ ...styles.kvValue, ...styles.link }}>
+                      {r.value}
+                    </a>
+                  ) : (
+                    <span style={styles.kvValue}>{r.value}</span>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
         )}
-      </div>
-    </section>
+      </section>
+    </div>
   );
 }
 
 export function StageOverviewList(): JSX.Element {
   return (
-    <div>
-      {STAGE_INFO.map((info) => (
-        <StageOverviewSection key={info.stage} stage={info.stage} />
+    <div style={styles.timeline}>
+      {STAGE_INFO.map((info, i) => (
+        <StageOverviewSection key={info.stage} stage={info.stage} isLast={i === STAGE_INFO.length - 1} />
       ))}
     </div>
   );

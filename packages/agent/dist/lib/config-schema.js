@@ -445,6 +445,13 @@ exports.CONFIG_SCHEMA = {
         group: "postman", description: "Postman API key for fetching collections",
         hotReload: true, riskLevel: "CAUTION",
     },
+    // ── Claude Design Connector ────────────────────────────────────
+    CLAUDE_DESIGN_ENABLED: {
+        env: "CLAUDE_DESIGN_ENABLED", type: "bool", default: false,
+        required: false, sensitive: false, group: "claude-design",
+        description: "Detect claude.ai project/share URLs in Jira tickets and route them through the connector pipeline",
+        hotReload: true, riskLevel: "SAFE",
+    },
     // ── QA Environments ────────────────────────────────────────────
     QA_URL: {
         env: "QA_URL", type: "url", default: "https://qa-enterprise.mastersindia-einv.com",
@@ -916,6 +923,12 @@ exports.CONFIG_SCHEMA = {
         allowed: ["manual", "playground_validated", "always"], required: false, sensitive: false,
         group: "automation", description: "Auto-approve policy for the Dual Approval (Production) gate",
         hotReload: true, riskLevel: "DANGEROUS",
+    },
+    DEVELOPMENT_ADVANCE_MODE: {
+        env: "DEVELOPMENT_ADVANCE_MODE", type: "enum", default: "openspec",
+        allowed: ["direct", "openspec"], required: false, sensitive: false,
+        group: "automation", description: "explore_plan output: 'openspec' scaffolds formal proposal/design/specs/tasks artifacts (default, unchanged behavior); 'direct' produces a plain-text plan only. Applies to the next ticket started — does not affect tickets already past fetch_ticket.",
+        hotReload: true, riskLevel: "CAUTION",
     },
     // ── Playground (single-stage sandbox runs) ─────────────────────
     PLAYGROUND_MAX_RUNTIME_MS: {

@@ -22,12 +22,18 @@ const GATE_STUCK_THRESHOLD_MS = 10 * 60 * 60 * 1000; // 10 hours for gate stages
 const MEMORY_WARNING_MB = 512; // Warn above 512MB RSS
 const MEMORY_CRITICAL_MB = 1024; // Critical above 1GB RSS
 const MEMORY_SAMPLES_MAX = 60; // Keep last 60 memory samples
-// Gate stages have longer acceptable durations
+// Gate stages wait on a human, not on the pipeline -- never classified as stuck.
 const GATE_STAGES = new Set([
     "gate_code_review",
     "gate_preprod_approval",
     "gate_dual_approval",
+    "test_qa",
 ]);
+// A service's degraded/unhealthy status only counts toward a "network" cause
+// classification if its last recorded failure is this recent -- otherwise a
+// service that failed once early in a long-running pipeline and was never
+// called again would incorrectly poison every later stuck check.
+const RECENT_FAILURE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 const _serviceHealth = {
     jira: { lastSuccess: null, lastFailure: null, consecutiveFailures: 0, status: "unknown" },
     gitlab: { lastSuccess: null, lastFailure: null, consecutiveFailures: 0, status: "unknown" },
@@ -124,20 +130,48 @@ function recordStageChange(stageName) {
     _lastStageChange = Date.now();
     _lastStage = stageName;
 }
+/**
+ * Classify why a stage looks stuck, using the same _serviceHealth signal
+ * recordServiceFailure/-Success maintain, rather than raw elapsed time alone.
+ */
+function _classifyCause() {
+    const now = Date.now();
+    for (const svc of Object.values(_serviceHealth)) {
+        if ((svc.status === "degraded" || svc.status === "unhealthy") &&
+            svc.lastFailure !== null &&
+            (now - svc.lastFailure) < RECENT_FAILURE_WINDOW_MS) {
+            return "network";
+        }
+    }
+    return "slow";
+}
 function checkProgress(currentStage) {
     const elapsed = Date.now() - _lastStageChange;
-    const threshold = GATE_STAGES.has(currentStage) ? GATE_STUCK_THRESHOLD_MS : STUCK_THRESHOLD_MS;
-    if (elapsed > threshold) {
+    // Human-gate stages are waiting on a person, not stalled -- never stuck,
+    // regardless of elapsed time.
+    if (GATE_STAGES.has(currentStage)) {
+        return {
+            stuck: false,
+            cause: "gate-wait",
+            elapsedMinutes: Math.floor(elapsed / 60000),
+            stage: currentStage,
+        };
+    }
+    const cause = _classifyCause();
+    if (elapsed > STUCK_THRESHOLD_MS) {
         return {
             stuck: true,
+            cause,
             stuckMinutes: Math.floor(elapsed / 60000),
             stage: currentStage,
-            threshold: threshold / 60000,
-            message: `Pipeline appears stuck on "${currentStage}" — ${Math.floor(elapsed / 60000)} minutes without progress`,
+            threshold: STUCK_THRESHOLD_MS / 60000,
+            message: `Pipeline appears stuck on "${currentStage}" — ${Math.floor(elapsed / 60000)} minutes without progress` +
+                (cause === "network" ? " (recent network failures detected)" : ""),
         };
     }
     return {
         stuck: false,
+        cause,
         elapsedMinutes: Math.floor(elapsed / 60000),
         stage: currentStage,
     };

@@ -9,6 +9,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useActiveTicketState } from '../store/pipeline';
 import { Markdown } from './Markdown';
 import { ChangesTab } from './write-code/ChangesTab';
+import { SandboxTab } from './write-code/SandboxTab';
 import type { StageName } from '../types';
 
 const POST_CODEGEN_STAGES: ReadonlySet<StageName> = new Set([
@@ -27,7 +28,7 @@ const SHOW_STAGES: StageName[] = [
 
 // ── Tab definitions ───────────────────────────────────────────
 
-type TabKey = 'developer' | 'changes' | 'review' | 'build' | 'runtime' | 'browser' | 'ac' | 'mr';
+type TabKey = 'developer' | 'changes' | 'review' | 'build' | 'runtime' | 'browser' | 'ac' | 'mr' | 'sandbox';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'developer', label: 'Developer' },
@@ -38,6 +39,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'browser', label: 'Browser' },
   { key: 'ac', label: 'AC' },
   { key: 'mr', label: 'Create MR' },
+  { key: 'sandbox', label: 'Sandbox' },
 ];
 
 // ── Styles ────────────────────────────────────────────────────
@@ -52,6 +54,13 @@ const styles = {
     padding: 'var(--sp-5)',
     marginBottom: 'var(--sp-6)',
     animation: 'fadeIn 0.3s ease-out',
+  },
+  // When embedded inside a timeline card, the card's own .ev-body chrome
+  // already supplies border/background/blur/padding — this near-zero-chrome
+  // variant avoids a visibly doubled glass panel.
+  containerEmbedded: {
+    padding: 0,
+    marginBottom: 0,
   },
   header: {
     display: 'flex',
@@ -326,6 +335,10 @@ function deriveTabStatus(tab: TabKey, d: Record<string, unknown>, isGen: boolean
     case 'mr':
       if (d.code_mr_url) return 'done';
       if (d.code_committed || d.code_branch) return 'in_progress';
+      return 'pending';
+    case 'sandbox':
+      // Not a pipeline checkpoint — a manual tool. Always neutral, unlike
+      // every other tab whose dot reflects a state.data checkpoint field.
       return 'pending';
   }
 }
@@ -649,7 +662,15 @@ function MRTab({ d }: { d: Record<string, unknown> }): JSX.Element {
 
 // ── Main Component ────────────────────────────────────────────
 
-export function WriteCodeDetail(): JSX.Element | null {
+interface WriteCodeDetailProps {
+  /** When true, renders without its own glass-panel chrome — used when
+   * mounted inside a dashboard-activity-timeline-redesign card, whose
+   * `.ev-body` already supplies that chrome. Defaults to false, preserving
+   * today's standalone rendering for any caller that omits it. */
+  embedded?: boolean;
+}
+
+export function WriteCodeDetail({ embedded = false }: WriteCodeDetailProps = {}): JSX.Element | null {
   const ticketState = useActiveTicketState();
   const [activeTab, setActiveTab] = useState<TabKey>('developer');
 
@@ -673,7 +694,7 @@ export function WriteCodeDetail(): JSX.Element | null {
   const mode = d._codegen_mode as string | undefined;
 
   return (
-    <div style={styles.container}>
+    <div style={{ ...styles.container, ...(embedded ? styles.containerEmbedded : {}) }}>
       {/* Header */}
       <div style={styles.header}>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -711,6 +732,7 @@ export function WriteCodeDetail(): JSX.Element | null {
         {activeTab === 'browser' && <BrowserTab d={d} />}
         {activeTab === 'ac' && <ACTab d={d} />}
         {activeTab === 'mr' && <MRTab d={d} />}
+        {activeTab === 'sandbox' && <SandboxTab />}
       </div>
     </div>
   );

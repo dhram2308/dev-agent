@@ -23,6 +23,7 @@ const CONNECTOR_TO_GROUP: Record<string, string> = {
   figma: 'figma',
   'google-drive': 'google-drive',
   postman: 'postman',
+  'claude-design': 'claude-design',
 };
 
 // Providers that support OAuth flow (show Connect/Disconnect buttons)
@@ -75,7 +76,7 @@ const CATEGORIES: ProviderCategory[] = [
   {
     label: 'Design & Documents',
     description: 'Auto-fetch designs, docs, and API specs from linked resources',
-    ids: ['figma', 'google-drive', 'postman'],
+    ids: ['figma', 'google-drive', 'postman', 'claude-design'],
   },
   {
     label: 'Additional',
@@ -97,9 +98,11 @@ const styles = {
     color: 'var(--text-secondary)',
     lineHeight: 1.6,
     padding: 'var(--sp-3) var(--sp-4)',
-    background: 'var(--bg-surface)',
-    borderRadius: 'var(--radius-md)',
-    border: '1px solid var(--border-default)',
+    background: 'var(--glass-bg)',
+    backdropFilter: 'blur(var(--glass-blur))',
+    WebkitBackdropFilter: 'blur(var(--glass-blur))',
+    borderRadius: 'var(--radius-lg)',
+    border: '1px solid var(--glass-border)',
   },
   categoryLabel: {
     fontSize: 14,

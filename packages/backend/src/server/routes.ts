@@ -1350,6 +1350,351 @@ export async function handleRequest(
     return true;
   }
 
+  // ── Local dev server management ─────────────────────────────────
+  // Starts `npx nx serve enterprise --port 4200` in the agent's .repo-cache
+  // after optionally checking out the ticket's feature branch, so the
+  // Playground shows exactly the code developed for that ticket.
+
+  // Shared in-module state (one server per backend process)
+  const _lss = (globalThis as Record<string, unknown>);
+  if (!_lss.__localServer) {
+    _lss.__localServer = { pid: null, port: null, ready: false, startedAt: null, logs: [] as string[], stopping: false, ticket: null as string | null, branch: null as string | null };
+  }
+  const _ls = _lss.__localServer as { pid: number | null; port: number | null; ready: boolean; startedAt: number | null; logs: string[]; stopping: boolean; ticket: string | null; branch: string | null };
+
+  // The agent always clones to this fixed path regardless of process context
+  const REPO_CACHE = path.resolve(__dirname, '..', '..', '..', 'agent', 'dist', '.repo-cache');
+
+  // POST /api/local-server/start
+  if (url.pathname === '/api/local-server/start' && request.method === 'POST') {
+    try {
+      const rawBody = await parseBody(request, 65_536);
+      const reqTicket = (rawBody.ticket as string | undefined)?.trim().toUpperCase() || null;
+
+      // Kill any previous server first (user wants a fresh start)
+      _ls.stopping = true;
+      if (_ls.pid) {
+        try { process.kill(_ls.pid, 'SIGTERM'); } catch { /* already dead */ }
+        await new Promise((r) => setTimeout(r, 500));
+        try { process.kill(_ls.pid, 'SIGKILL'); } catch { /* */ }
+        _ls.pid = null; _ls.ready = false;
+      }
+
+      // Force-free port 4200 — kill whatever is using it
+      try {
+        const { execSync } = require('child_process') as typeof import('child_process');
+        const pids = execSync('lsof -ti:4200 2>/dev/null || true').toString().trim();
+        if (pids) {
+          pids.split('\n').forEach((p: string) => { try { process.kill(Number(p), 'SIGKILL'); } catch { /* */ } });
+          await new Promise((r) => setTimeout(r, 800));
+        }
+      } catch { /* lsof not available or no process */ }
+
+      // Verify repo-cache exists
+      if (!fs.existsSync(REPO_CACHE)) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: `Repo cache not found at ${REPO_CACHE}. Run a pipeline first to clone the repository.` }));
+        return true;
+      }
+
+      const { execSync, spawn } = require('child_process') as typeof import('child_process');
+      const appendLog = (line: string): void => { _ls.logs.push(line); if (_ls.logs.length > 150) _ls.logs = _ls.logs.slice(-150); };
+
+      _ls.logs = [];
+      _ls.stopping = false;
+      _ls.ticket = reqTicket;
+      _ls.branch = null;
+
+      // Determine which branch to checkout
+      let targetBranch: string | null = null;
+      if (reqTicket) {
+        try {
+          // Read the pipeline state to get the feature branch for this ticket
+          const stateFile = path.join(BASE_DIR, `state-${reqTicket}.json`);
+          if (fs.existsSync(stateFile)) {
+            const stateJson = JSON.parse(fs.readFileSync(stateFile, 'utf8')) as Record<string, unknown>;
+            const stateData = ((stateJson.state as Record<string, unknown>)?.data || stateJson.data || {}) as Record<string, unknown>;
+            targetBranch = (stateData.code_branch as string | undefined) ?? null;
+          }
+        } catch { /* state unreadable */ }
+      }
+
+      // Checkout the ticket's branch in repo-cache
+      if (targetBranch) {
+        appendLog(`[git] Fetching branch ${targetBranch}…`);
+        try {
+          execSync(`git -C "${REPO_CACHE}" fetch origin "${targetBranch}" --depth=5 2>&1`, { timeout: 60_000 });
+          appendLog(`[git] Checking out ${targetBranch}…`);
+          execSync(`git -C "${REPO_CACHE}" checkout -f "${targetBranch}" 2>&1`, { timeout: 30_000 });
+          _ls.branch = targetBranch;
+          appendLog(`[git] ✓ On branch ${targetBranch}`);
+        } catch (ge: unknown) {
+          appendLog(`[git] ⚠ Could not checkout ${targetBranch}: ${(ge as Error).message?.slice(0, 120)} — using current branch`);
+          try { _ls.branch = execSync(`git -C "${REPO_CACHE}" branch --show-current`).toString().trim(); } catch { _ls.branch = 'unknown'; }
+        }
+      } else {
+        try { _ls.branch = execSync(`git -C "${REPO_CACHE}" branch --show-current`).toString().trim(); } catch { _ls.branch = 'current'; }
+        appendLog(`[git] Using current branch: ${_ls.branch}`);
+      }
+
+      // Write env file if provided in the request body
+      const envContent = typeof rawBody.envContent === 'string' ? rawBody.envContent : null;
+      if (envContent !== null) {
+        try {
+          const envFile = path.join(REPO_CACHE, 'apps', 'enterprise', '.env');
+          const tmp = envFile + '.tmp';
+          fs.writeFileSync(tmp, envContent, 'utf8');
+          fs.renameSync(tmp, envFile);
+          appendLog('[env] ✓ apps/enterprise/.env written');
+        } catch (ee: unknown) {
+          appendLog(`[env] ⚠ Could not write .env: ${(ee as Error).message?.slice(0, 80)}`);
+        }
+      }
+
+      // Install missing packages before starting the dev server.
+      // Uses --prefer-offline so cached packages install instantly.
+      // Only needed when package.json changed since last install.
+      appendLog('[npm] Checking dependencies…');
+      try {
+        const pkgJson = path.join(REPO_CACHE, 'package.json');
+        const nmMeta  = path.join(REPO_CACHE, 'node_modules', '.package-lock.json');
+        const pkgMtime = fs.existsSync(pkgJson) ? fs.statSync(pkgJson).mtimeMs : 0;
+        const nmMtime  = fs.existsSync(nmMeta)  ? fs.statSync(nmMeta).mtimeMs  : 0;
+        if (pkgMtime > nmMtime) {
+          appendLog('[npm] package.json changed — running npm install…');
+          execSync('npm install --prefer-offline --no-audit --no-fund --legacy-peer-deps', {
+            cwd: REPO_CACHE,
+            timeout: 300_000,
+            stdio: 'pipe',
+          });
+          appendLog('[npm] ✓ Dependencies installed');
+        } else {
+          appendLog('[npm] ✓ Dependencies up to date');
+        }
+      } catch (ne: unknown) {
+        appendLog(`[npm] ⚠ Install warning: ${(ne as Error).message?.slice(0, 120)}`);
+      }
+
+      const port = 4200;
+      appendLog(`[local-server] Starting nx serve enterprise on port ${port}…`);
+
+      const proc = spawn('npx', ['nx', 'serve', 'enterprise', '--port', String(port), '--host', '0.0.0.0'], {
+        cwd: REPO_CACHE,
+        stdio: 'pipe',
+        detached: true,
+        env: { ...process.env, NODE_OPTIONS: '--max_old_space_size=4096', FORCE_COLOR: '0', BROWSER: 'none' },
+      });
+      proc.unref();
+
+      _ls.pid = proc.pid ?? null;
+      _ls.port = port;
+      _ls.ready = false;
+      _ls.startedAt = Date.now();
+
+      const streamText = (stream: NodeJS.ReadableStream, tag: string): void => {
+        let buf = '';
+        stream.on('data', (c: Buffer) => {
+          buf += c.toString();
+          const parts = buf.split('\n');
+          buf = parts.pop() ?? '';
+          for (const line of parts) {
+            const clean = line.replace(/\x1b\[[0-9;]*m/g, '').trim(); // strip ANSI
+            if (clean) appendLog(`[${tag}] ${clean}`);
+          }
+        });
+      };
+      streamText(proc.stdout as NodeJS.ReadableStream, 'nx');
+      streamText(proc.stderr as NodeJS.ReadableStream, 'nx');
+
+      proc.on('exit', (code: number | null) => {
+        if (!_ls.stopping) appendLog(`[local-server] Process exited (code ${code})`);
+        _ls.pid = null; _ls.ready = false;
+      });
+
+      // Background health-check: poll http://localhost:4200 until it responds
+      const startedAt = Date.now();
+      const pollTimer = setInterval(async () => {
+        if (!_ls.pid || _ls.ready || _ls.stopping) { clearInterval(pollTimer); return; }
+        if (Date.now() - startedAt > 180_000) { appendLog('[local-server] Timeout (3 min)'); clearInterval(pollTimer); return; }
+        try {
+          // App may use HTTP or HTTPS (mkcert) — try both
+          const httpsM = require('https') as typeof import('https');
+          const httpM = require('http') as typeof import('http');
+          const tryUrl = async (mod: typeof import('http') | typeof import('https'), urlStr: string): Promise<boolean> =>
+            new Promise((resolve) => {
+              const r = (mod as typeof import('https')).get(urlStr, { rejectUnauthorized: false, timeout: 4000 } as Parameters<typeof import('https').get>[1],
+                (resp: { statusCode: number; resume: () => void }) => { resp.resume(); resolve((resp.statusCode ?? 0) < 500); });
+              r.on('error', () => resolve(false));
+              r.on('timeout', () => { r.destroy(); resolve(false); });
+            });
+          const ok = await tryUrl(httpsM, `https://localhost:${port}/`) || await tryUrl(httpM, `http://localhost:${port}/`);
+          if (ok) {
+            _ls.ready = true;
+            appendLog(`[local-server] ✓ Ready → https://localhost:${port}`);
+            clearInterval(pollTimer);
+          }
+        } catch { /* keep polling */ }
+      }, 4000);
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, port, ticket: reqTicket, branch: _ls.branch }));
+    } catch (e: unknown) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: (e as Error).message }));
+    }
+    return true;
+  }
+
+  // GET /api/local-server/status
+  if (url.pathname === '/api/local-server/status' && request.method === 'GET') {
+    let alive = false;
+    if (_ls.pid) { try { process.kill(_ls.pid, 0); alive = true; } catch { _ls.pid = null; _ls.ready = false; } }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ running: alive, port: _ls.port, ready: _ls.ready, startedAt: _ls.startedAt, ticket: _ls.ticket, branch: _ls.branch, logs: _ls.logs.slice(-40) }));
+    return true;
+  }
+
+  // GET /api/local-server/env — read apps/enterprise/.env from repo-cache
+  if (url.pathname === '/api/local-server/env' && request.method === 'GET') {
+    const envFile = path.join(REPO_CACHE, 'apps', 'enterprise', '.env');
+    try {
+      const content = fs.existsSync(envFile) ? fs.readFileSync(envFile, 'utf8') : '';
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, content, path: 'apps/enterprise/.env' }));
+    } catch (e: unknown) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: (e as Error).message }));
+    }
+    return true;
+  }
+
+  // POST /api/local-server/env — write apps/enterprise/.env in repo-cache
+  if (url.pathname === '/api/local-server/env' && request.method === 'POST') {
+    try {
+      const body = await parseBody(request, 65_536);
+      const content = typeof body.content === 'string' ? body.content : '';
+      const envFile = path.join(REPO_CACHE, 'apps', 'enterprise', '.env');
+      const dir = path.dirname(envFile);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      // Atomic write: tmp → rename
+      const tmp = envFile + '.tmp';
+      fs.writeFileSync(tmp, content, 'utf8');
+      fs.renameSync(tmp, envFile);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, path: 'apps/enterprise/.env', bytes: content.length }));
+    } catch (e: unknown) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: (e as Error).message }));
+    }
+    return true;
+  }
+
+  // POST /api/local-server/stop
+  if (url.pathname === '/api/local-server/stop' && request.method === 'POST') {
+    _ls.stopping = true;
+    // Kill tracked PID first
+    if (_ls.pid) {
+      try { process.kill(_ls.pid, 'SIGTERM'); } catch { /* already dead */ }
+      try { process.kill(_ls.pid, 'SIGKILL'); } catch { /* */ }
+      _ls.pid = null;
+    }
+    // Force-kill everything still on the port (NX spawns daemon + vite child processes)
+    if (_ls.port) {
+      try {
+        const { execSync } = require('child_process') as typeof import('child_process');
+        const pids = execSync(`lsof -ti:${_ls.port} 2>/dev/null || true`).toString().trim();
+        if (pids) pids.split('\n').forEach((p: string) => { try { process.kill(Number(p), 'SIGKILL'); } catch { /* */ } });
+      } catch { /* lsof unavailable */ }
+    }
+    _ls.ready = false;
+    _ls.port = null;
+    _ls.logs.push('[local-server] Stopped');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    return true;
+  }
+
+  // -- POST /api/ask-task --
+  // Answers a free-form user question about the current pipeline task.
+  // Builds context from pipeline state and spawns `claude -p` (print mode)
+  // so it uses the same CLI auth as the agent — no ANTHROPIC_API_KEY needed.
+  if (url.pathname === '/api/ask-task' && request.method === 'POST') {
+    try {
+      const raw = await parseBody(request, 32_768);
+      const { ticket, question } = sanitizeBody('/api/ask-task', raw) as {
+        ticket?: string; question?: string;
+      };
+      const t = safeTicket(ticket);
+      if (!t) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Invalid ticket format' }));
+        return true;
+      }
+      if (!question || typeof question !== 'string' || question.trim().length === 0) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Question is required' }));
+        return true;
+      }
+      if (question.length > 2000) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Question too long (max 2000 chars)' }));
+        return true;
+      }
+
+      // Build context from current pipeline state
+      const state = await getState(t);
+      const contextParts: string[] = [`Ticket: ${t}`];
+      if (state) {
+        contextParts.push(`Current stage: ${state.stage}`);
+        const d = (state.data || {}) as Record<string, unknown>;
+
+        const ticketData = d.ticket as Record<string, unknown> | undefined;
+        if (ticketData?.title) contextParts.push(`Title: ${ticketData.title}`);
+        if (ticketData?.description) {
+          const desc = String(ticketData.description).slice(0, 1500);
+          contextParts.push(`Description:\n${desc}`);
+        }
+        if (ticketData?.summary) contextParts.push(`Ticket summary: ${String(ticketData.summary).slice(0, 1000)}`);
+
+        const plan = d.explore_plan as string | undefined;
+        if (plan) contextParts.push(`Exploration plan:\n${String(plan).slice(0, 1500)}`);
+
+        const codeChanges = d.codeChanges as { summary?: string } | undefined;
+        if (codeChanges?.summary) contextParts.push(`Code changes summary: ${codeChanges.summary}`);
+
+        const lastError = d._lastError as string | undefined;
+        if (lastError) contextParts.push(`Last error: ${lastError}`);
+      }
+
+      const prompt =
+        `You are a helpful assistant for a developer using an AI pipeline tool. ` +
+        `Answer the user's question about their pipeline task clearly and concisely. ` +
+        `Base your answer on the context provided. If information is missing, say so.\n\n` +
+        `## Pipeline task context\n\n${contextParts.join('\n\n')}\n\n` +
+        `## User question\n\n${question.trim()}`;
+
+      const model = process.env.CLAUDE_MODEL || 'claude-sonnet-4-5';
+
+      const answer = await new Promise<string>((resolve, reject) => {
+        const { execFile } = require('child_process') as typeof import('child_process');
+        const args = ['-p', prompt, '--model', model, '--output-format', 'text'];
+        const proc = execFile('claude', args, { timeout: 60_000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+          if (err) { reject(new Error(stderr?.trim() || err.message)); return; }
+          resolve(stdout.trim());
+        });
+        void proc;
+      });
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, answer }));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: msg }));
+    }
+    return true;
+  }
+
   // -- POST /api/playground/start --
   // Validates input, then either delegates to the real single-stage runner
   // (packages/agent/src/playground-runner.ts, via playground-process.ts —
@@ -1750,6 +2095,102 @@ export async function handleRequest(
     return true;
   }
 
+  // ── GET /api/gdrive/check — Diagnose Google Drive token + file access ────
+  if (url.pathname === '/api/gdrive/check' && request.method === 'GET') {
+    try {
+      const fileId = url.searchParams.get('fileId');
+      let accessToken: string | null = null;
+      let tokenEmail: string | null = null;
+      let grantedScopes: string | null = null;
+      let tokenError: string | null = null;
+
+      // Get token via token-manager
+      try {
+        const tm = require('../oauth/token-manager') as {
+          getAccessToken: (p: string) => Promise<string | null>;
+          getMetadataSync: (p: string) => Record<string, unknown> | null;
+        };
+        accessToken = await tm.getAccessToken('google');
+        const meta = tm.getMetadataSync('google');
+        tokenEmail = meta?.email as string ?? null;
+      } catch (e) {
+        tokenError = (e as Error).message;
+      }
+
+      const result: Record<string, unknown> = {
+        tokenPresent: !!accessToken,
+        tokenEmail,
+        tokenError,
+      };
+
+      if (accessToken) {
+        // Check token scopes via Google tokeninfo
+        const https = require('https') as typeof import('https');
+        const tokenInfo = await new Promise<Record<string, unknown>>((resolve) => {
+          https.get(`https://oauth2.googleapis.com/tokeninfo?access_token=${accessToken}`, (res) => {
+            let d = ''; res.on('data', (c: Buffer) => d += c);
+            res.on('end', () => { try { resolve(JSON.parse(d)); } catch { resolve({}); } });
+          }).on('error', (e: Error) => resolve({ error: e.message }));
+        });
+        grantedScopes = tokenInfo.scope as string ?? null;
+        result.scopes = grantedScopes;
+        result.hasDriveScope = (grantedScopes ?? '').includes('drive.readonly') || (grantedScopes ?? '').includes('drive');
+        result.tokenExpiry = tokenInfo.expires_in;
+        result.scopeError = tokenInfo.error ?? null;
+
+        // Test file access if fileId provided
+        if (fileId) {
+          const fileCheck = await new Promise<{ status: number; body: string }>((resolve) => {
+            https.get(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType&supportsAllDrives=true`, {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            }, (res) => {
+              let d = ''; res.on('data', (c: Buffer) => d += c);
+              res.on('end', () => resolve({ status: res.statusCode ?? 0, body: d }));
+            }).on('error', (e: Error) => resolve({ status: 0, body: e.message }));
+          });
+          result.fileStatus = fileCheck.status;
+          if (fileCheck.status === 200) {
+            const fj = JSON.parse(fileCheck.body);
+            result.fileName = fj.name;
+            result.fileMimeType = fj.mimeType;
+            result.fileAccessible = true;
+          } else {
+            result.fileAccessible = false;
+            result.fileError = JSON.parse(fileCheck.body)?.error?.message ?? fileCheck.body.slice(0, 200);
+          }
+        }
+      }
+
+      // Full content fetch if ?fetch=true
+      if (url.searchParams.get('fetch') === 'true' && fileId && accessToken) {
+        try {
+          process.env['GOOGLE_OAUTH_ACCESS_TOKEN'] = accessToken;
+          if (tokenEmail) process.env['GOOGLE_OAUTH_ACCOUNT_EMAIL'] = tokenEmail;
+          // dev-boot rewriter maps agent/dist → agent/src at runtime
+          const gdrive = require('../../../agent/dist/lib/gdrive') as {
+            fetchGoogleDoc: (id: string) => Promise<{ ok: boolean; title?: string; content?: string; error?: string }>;
+          };
+          const fr = await gdrive.fetchGoogleDoc(fileId);
+          result.fetchOk = fr.ok;
+          result.fetchTitle = fr.title ?? null;
+          result.fetchError = fr.error ?? null;
+          result.fetchContentLength = fr.content?.length ?? 0;
+          result.fetchContentPreview = fr.content?.slice(0, 800) ?? null;
+        } catch (fe: unknown) {
+          result.fetchError = (fe as Error).message;
+          result.fetchOk = false;
+        }
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result, null, 2));
+    } catch (e: unknown) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: (e as Error).message }));
+    }
+    return true;
+  }
+
   // ── GET /api/config — Return all config vars with values (secrets masked) ──
   if (url.pathname === '/api/config' && request.method === 'GET') {
     const items: unknown[] = [];
@@ -1845,12 +2286,14 @@ export async function handleRequest(
       // OAuth env-var staging) use the canonical name.
       const SERVICE_ALIASES: Record<string, string> = {
         'google-drive': 'gdrive',
+        'claude-design': 'claude-design',
       };
       const service = rawService ? (SERVICE_ALIASES[rawService] ?? rawService) : undefined;
       const allowed = [
         'jira', 'gitlab', 'slack',
         'gdrive', 'figma', 'postman',
         'claude', 'anthropic', 'browser',
+        'claude-design',
       ];
       if (!service || !allowed.includes(service)) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -1989,6 +2432,13 @@ export async function handleRequest(
           result = { ok: false, error: `PLAYWRIGHT_BROWSER must be one of: ${validBrowsers.join(', ')}` };
         } else {
           result = { ok: true, message: `Playwright configured: ${browser}` };
+        }
+      } else if (service === 'claude-design') {
+        const enabled = process.env.CLAUDE_DESIGN_ENABLED;
+        if (!enabled || enabled === 'false') {
+          result = { ok: false, error: 'CLAUDE_DESIGN_ENABLED is not set to true — enable it in Settings → Connectors → Claude Design' };
+        } else {
+          result = { ok: true, message: 'Claude Design connector active — will detect claude.ai URLs in Jira tickets' };
         }
       } else {
         // gdrive / figma / postman — load agent lib via relative require.

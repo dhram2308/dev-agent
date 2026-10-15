@@ -7,6 +7,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { usePipelineStore, useActiveTicketState, stageIndex } from '../store/pipeline';
 import { STAGE_ORDER, STAGE_INFO } from '../types';
 import { AgentActivityBar } from './AgentActivityBar';
+import { ConfirmDialog } from './ConfirmDialog';
+import { FORCE_OPEN_STAGE_EVENT } from './StageOverviewSection';
+import { useToast } from '../contexts/ToastContext';
 
 // ── Timer hook ─────────────────────────────────────────────────
 
@@ -36,6 +39,14 @@ export function useElapsedTime(startTime: number | null): string {
 
 const styles = {
   container: {
+    background: 'var(--glass-bg)',
+    backdropFilter: 'blur(var(--glass-blur))',
+    WebkitBackdropFilter: 'blur(var(--glass-blur))',
+    border: '1px solid var(--glass-border)',
+    borderTop: 'none',
+    borderRadius: '0 0 var(--radius-lg) var(--radius-lg)',
+    padding: 'var(--sp-4)',
+    paddingTop: 0,
     marginBottom: 'var(--sp-6)',
   },
   topBar: {
@@ -77,6 +88,45 @@ const styles = {
     background: 'var(--danger-muted)',
     color: 'var(--danger)',
     border: '1px solid rgba(239,68,68,0.2)',
+    transition: 'all 0.2s',
+    fontFamily: 'var(--font-sans)',
+  },
+  stoppedBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--sp-2)',
+    padding: 'var(--sp-2) var(--sp-4)',
+    borderRadius: 'var(--radius-sm)',
+    background: 'var(--bg-elevated)',
+    border: '1px solid var(--border-default)',
+    fontSize: 12,
+    color: 'var(--text-tertiary)',
+    fontWeight: 500,
+  },
+  restartBtn: {
+    padding: 'var(--sp-2) var(--sp-4)',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer',
+    background: 'var(--accent-muted)',
+    color: 'var(--accent)',
+    border: '1px solid var(--accent)',
+    transition: 'all 0.2s',
+    fontFamily: 'var(--font-sans)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 'var(--sp-2)',
+  },
+  dropBtn: {
+    padding: 'var(--sp-2) var(--sp-4)',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer',
+    background: 'transparent',
+    color: 'var(--danger)',
+    border: '1px solid rgba(239,68,68,0.3)',
     transition: 'all 0.2s',
     fontFamily: 'var(--font-sans)',
   },
@@ -162,7 +212,7 @@ function getSegmentStyle(status: StageStatus): React.CSSProperties {
     case 'failed':
       return { background: 'var(--danger)', boxShadow: '0 0 6px var(--danger-glow)' };
     default:
-      return { background: 'var(--bg-elevated)' };
+      return { background: 'var(--gray-bg)' };
   }
 }
 
@@ -175,7 +225,7 @@ function getPillStyle(status: StageStatus): React.CSSProperties {
     case 'failed':
       return { borderColor: 'var(--danger)', background: 'var(--danger-muted)' };
     default:
-      return {};
+      return { borderColor: 'var(--rail)' };
   }
 }
 
@@ -193,16 +243,55 @@ function getDotColor(status: StageStatus): string {
 export function AgentStatus(): JSX.Element | null {
   const ticketState = useActiveTicketState();
   const stopAgent = usePipelineStore((s) => s.stopAgent);
+  const startAgent = usePipelineStore((s) => s.startAgent);
+  const deletePipeline = usePipelineStore((s) => s.deletePipeline);
   const activeTicket = usePipelineStore((s) => s.activeTicket);
+  const { addToast } = useToast();
+
+  const [confirmRestart, setConfirmRestart] = useState(false);
+  const [confirmDrop, setConfirmDrop] = useState(false);
+  const [actioning, setActioning] = useState(false);
 
   const stageElapsed = useElapsedTime(ticketState?.stageStartedAt ?? null);
   const pipelineElapsed = useElapsedTime(ticketState?.pipelineStartedAt ?? null);
 
-  const handleStop = useCallback(() => {
-    if (activeTicket) {
-      stopAgent(activeTicket);
+  const handleStop = useCallback(async () => {
+    if (!activeTicket) return;
+    try {
+      await stopAgent(activeTicket);
+      addToast(`Agent stopped for ${activeTicket}`, 'warn');
+    } catch {
+      addToast('Failed to stop agent', 'error');
     }
-  }, [activeTicket, stopAgent]);
+  }, [activeTicket, stopAgent, addToast]);
+
+  const handleRestart = useCallback(async () => {
+    if (!activeTicket) return;
+    setActioning(true);
+    try {
+      await startAgent(activeTicket, 'fresh');
+      addToast(`${activeTicket} restarted from scratch`, 'success');
+    } catch {
+      addToast('Failed to restart — please try again', 'error');
+    } finally {
+      setActioning(false);
+      setConfirmRestart(false);
+    }
+  }, [activeTicket, startAgent, addToast]);
+
+  const handleDrop = useCallback(async () => {
+    if (!activeTicket) return;
+    setActioning(true);
+    try {
+      await deletePipeline(activeTicket);
+      addToast(`${activeTicket} removed`, 'info');
+    } catch {
+      addToast('Failed to remove pipeline — please try again', 'error');
+    } finally {
+      setActioning(false);
+      setConfirmDrop(false);
+    }
+  }, [activeTicket, deletePipeline, addToast]);
 
   if (!ticketState) return null;
 
@@ -245,7 +334,7 @@ export function AgentStatus(): JSX.Element | null {
         </div>
       )}
 
-      {/* Top bar: stage name + timers + stop button */}
+      {/* Top bar: stage name + timers + stop/restart/drop buttons */}
       <div style={styles.topBar}>
         <div>
           <div style={styles.stageLabel}>
@@ -264,12 +353,56 @@ export function AgentStatus(): JSX.Element | null {
           {pipelineElapsed}
         </div>
 
-        {isRunning && (
-          <button style={styles.stopButton} onClick={handleStop} aria-label="Stop the running agent">
+        {isRunning ? (
+          <button style={styles.stopButton} onClick={() => void handleStop()} aria-label="Stop the running agent">
             Stop
           </button>
+        ) : currentStage !== 'done' && (
+          <div style={styles.stoppedBar}>
+            <span>Stopped</span>
+            <button
+              style={styles.restartBtn}
+              onClick={() => setConfirmRestart(true)}
+              disabled={actioning}
+              aria-label="Restart this ticket from scratch"
+            >
+              Restart
+            </button>
+            <button
+              style={styles.dropBtn}
+              onClick={() => setConfirmDrop(true)}
+              disabled={actioning}
+              aria-label="Remove this pipeline"
+            >
+              Drop
+            </button>
+          </div>
         )}
       </div>
+
+      {/* Restart confirmation */}
+      <ConfirmDialog
+        open={confirmRestart}
+        title={`Restart ${activeTicket}?`}
+        message="This will delete all existing progress and start the pipeline from scratch. This cannot be undone."
+        confirmText="Restart"
+        cancelText="Cancel"
+        onConfirm={() => void handleRestart()}
+        onCancel={() => setConfirmRestart(false)}
+        danger
+      />
+
+      {/* Drop confirmation */}
+      <ConfirmDialog
+        open={confirmDrop}
+        title={`Drop ${activeTicket}?`}
+        message="This permanently removes all pipeline state, logs, and history for this ticket. This cannot be undone."
+        confirmText="Drop"
+        cancelText="Cancel"
+        onConfirm={() => void handleDrop()}
+        onCancel={() => setConfirmDrop(false)}
+        danger
+      />
 
       {/* Segmented progress bar */}
       <div style={styles.progressContainer} role="progressbar" aria-valuenow={progressPercent} aria-valuemin={0} aria-valuemax={100} aria-label="Pipeline progress">
@@ -295,6 +428,7 @@ export function AgentStatus(): JSX.Element | null {
           const handleActivate = (): void => {
             const target = document.getElementById(`stage-section-${info.stage}`);
             if (target) {
+              target.dispatchEvent(new CustomEvent(FORCE_OPEN_STAGE_EVENT));
               target.scrollIntoView({ behavior: 'smooth', block: 'start' });
               // Brief highlight pulse so the operator sees where they landed
               target.classList.add('mi-stage-highlight');

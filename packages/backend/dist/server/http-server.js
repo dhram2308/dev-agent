@@ -65,6 +65,10 @@ const graceful_shutdown_1 = require("../lib/graceful-shutdown");
 const sse_1 = require("./sse");
 const routes_1 = require("./routes");
 const state_manager_1 = require("../state/state-manager");
+const loader_1 = require("../config/loader");
+// Load .env into process.env on startup so saved config values survive restarts.
+// API_TOKEN (injected by the Taskfile) is already set and won't be overridden.
+(0, loader_1.loadAndApplyEnv)();
 let securityMiddleware = null;
 try {
     securityMiddleware = require('../../lib/security').securityMiddleware || null;
@@ -98,6 +102,33 @@ if (agentProcess && typeof agentProcess.setSseModule === 'function') {
     }
     catch (e) {
         console.warn('[http-server] Failed to inject SSE module into agent-process:', e.message);
+    }
+}
+let playgroundProcess = null;
+try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    playgroundProcess = require('./playground-process');
+}
+catch {
+    try {
+        // Fall back to compiled agent package (packages/agent/dist/server/playground-process.js)
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        playgroundProcess = require('../../../agent/dist/server/playground-process');
+    }
+    catch {
+        playgroundProcess = null;
+    }
+}
+// Same "inject the backend's live SSE module" rationale as agent-process.ts
+// above — without this, playground-process falls back to an orphan sse
+// instance with zero connected clients.
+if (playgroundProcess && typeof playgroundProcess.setSseModule === 'function') {
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        playgroundProcess.setSseModule(require('./sse'));
+    }
+    catch (e) {
+        console.warn('[http-server] Failed to inject SSE module into playground-process:', e.message);
     }
 }
 let localRepo = null;
@@ -228,6 +259,7 @@ function startServer() {
                     const tokenManager = require('../oauth/token-manager');
                     agentProcess.setTokenManager({
                         getAccessTokenSync: tokenManager.getAccessTokenSync,
+                        getMetadataSync: tokenManager.getMetadataSync,
                         refresh: tokenManager.refresh,
                     });
                     // Warm the in-memory token cache (and recover any interrupted refreshes
@@ -238,6 +270,30 @@ function startServer() {
                     tokenManager.initFromStore().catch((e) => {
                         const msg = e instanceof Error ? e.message : String(e);
                         console.warn('[http-server] OAuth token-manager initFromStore failed (non-fatal):', msg);
+                    });
+                    // Wire a token-health checker into SSE so each new client connection
+                    // immediately receives an authRequired event for any configured OAuth
+                    // provider that is missing a valid token. This triggers the amber
+                    // AuthRequiredBanner automatically without the user having to navigate
+                    // to Settings → Connectors first.
+                    const OAUTH_PROVIDERS = [
+                        { provider: 'google', envKey: 'OAUTH_GOOGLE_CLIENT_ID', label: 'Google Drive' },
+                        { provider: 'figma', envKey: 'OAUTH_FIGMA_CLIENT_ID', label: 'Figma' },
+                    ];
+                    (0, sse_1.setTokenHealthChecker)(() => {
+                        const missing = [];
+                        for (const { provider, envKey, label } of OAUTH_PROVIDERS) {
+                            if (!process.env[envKey])
+                                continue; // provider not configured — skip
+                            const token = tokenManager.getAccessTokenSync(provider);
+                            if (!token) {
+                                missing.push({
+                                    provider,
+                                    reason: `${label} authorization missing or expired — click Re-authorize to reconnect`,
+                                });
+                            }
+                        }
+                        return missing;
                     });
                 }
                 catch (e) {
@@ -250,6 +306,15 @@ function startServer() {
                     'Rebuild the agent package or set ENABLE_OAUTH=false to silence this warning.');
             }
         }
+    }
+    // Wire playground process handlers into routes
+    if (playgroundProcess) {
+        (0, routes_1.setPlaygroundProcessHandlers)({
+            startPlaygroundRun: playgroundProcess.startPlaygroundRun,
+            stopPlaygroundRun: playgroundProcess.stopPlaygroundRun,
+            getPlaygroundProcs: playgroundProcess.getPlaygroundProcs,
+            PLAYGROUND_WIRED_STAGES: playgroundProcess.PLAYGROUND_WIRED_STAGES,
+        });
     }
     // ── Create HTTP Server ─────────────────────────────────────────
     server = http.createServer(async (request, res) => {

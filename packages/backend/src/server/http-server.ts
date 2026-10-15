@@ -29,7 +29,7 @@ import {
   onShutdown,
 } from '../lib/graceful-shutdown';
 
-import { getSseClients, setAgentProcsGetter, broadcastStateChange } from './sse';
+import { getSseClients, setAgentProcsGetter, broadcastStateChange, setTokenHealthChecker } from './sse';
 import { handleRequest, setAgentProcessHandlers, setPlaygroundProcessHandlers } from './routes';
 import { cleanupStaleStates, readForDisplay } from '../state/state-manager';
 import { loadAndApplyEnv } from '../config/loader';
@@ -88,6 +88,7 @@ interface AgentProcessModule {
    */
   setTokenManager?: (tm: {
     getAccessTokenSync: (provider: string) => string | null;
+    getMetadataSync?: (provider: string) => Record<string, unknown> | null;
     refresh: (provider: string) => Promise<unknown>;
   }) => void;
 }
@@ -309,11 +310,13 @@ export function startServer(): Server {
         try {
           const tokenManager = require('../oauth/token-manager') as {
             getAccessTokenSync: (provider: string) => string | null;
+            getMetadataSync: (provider: string) => Record<string, unknown> | null;
             refresh: (provider: string) => Promise<unknown>;
             initFromStore: () => Promise<void>;
           };
           agentProcess.setTokenManager({
             getAccessTokenSync: tokenManager.getAccessTokenSync,
+            getMetadataSync: tokenManager.getMetadataSync,
             refresh: tokenManager.refresh,
           });
           // Warm the in-memory token cache (and recover any interrupted refreshes
@@ -324,6 +327,30 @@ export function startServer(): Server {
           tokenManager.initFromStore().catch((e: unknown) => {
             const msg = e instanceof Error ? e.message : String(e);
             console.warn('[http-server] OAuth token-manager initFromStore failed (non-fatal):', msg);
+          });
+
+          // Wire a token-health checker into SSE so each new client connection
+          // immediately receives an authRequired event for any configured OAuth
+          // provider that is missing a valid token. This triggers the amber
+          // AuthRequiredBanner automatically without the user having to navigate
+          // to Settings → Connectors first.
+          const OAUTH_PROVIDERS: Array<{ provider: string; envKey: string; label: string }> = [
+            { provider: 'google', envKey: 'OAUTH_GOOGLE_CLIENT_ID', label: 'Google Drive' },
+            { provider: 'figma',  envKey: 'OAUTH_FIGMA_CLIENT_ID',  label: 'Figma' },
+          ];
+          setTokenHealthChecker(() => {
+            const missing: Array<{ provider: string; reason: string }> = [];
+            for (const { provider, envKey, label } of OAUTH_PROVIDERS) {
+              if (!process.env[envKey]) continue; // provider not configured — skip
+              const token = tokenManager.getAccessTokenSync(provider);
+              if (!token) {
+                missing.push({
+                  provider,
+                  reason: `${label} authorization missing or expired — click Re-authorize to reconnect`,
+                });
+              }
+            }
+            return missing;
           });
         } catch (e) {
           console.warn('[http-server] Failed to wire TokenManager into agent-process:', (e as Error).message);

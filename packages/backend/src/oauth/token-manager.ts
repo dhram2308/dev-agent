@@ -492,6 +492,13 @@ export function getAccessTokenSync(provider: string): string | null {
   return tokenCache.get(provider)!.tokenSet.accessToken;
 }
 
+/** Return cached token metadata (email, accountId, etc.) without blocking. */
+export function getMetadataSync(provider: string): Record<string, unknown> | null {
+  const entry = tokenCache.get(provider);
+  if (!entry) return null;
+  return (entry.tokenSet.metadata as Record<string, unknown> | undefined) ?? null;
+}
+
 /**
  * Get a valid access token for a provider.
  *

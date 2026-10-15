@@ -485,6 +485,14 @@ export const CONFIG_SCHEMA: Record<string, ConfigSchemaEntry> = {
     hotReload: true, riskLevel: "CAUTION",
   },
 
+  // ── Claude Design Connector ────────────────────────────────────
+  CLAUDE_DESIGN_ENABLED: {
+    env: "CLAUDE_DESIGN_ENABLED", type: "bool", default: false,
+    required: false, sensitive: false, group: "claude-design",
+    description: "Detect claude.ai project/share URLs in Jira tickets and route them through the connector pipeline",
+    hotReload: true, riskLevel: "SAFE",
+  },
+
   // ── QA Environments ────────────────────────────────────────────
   QA_URL: {
     env: "QA_URL", type: "url", default: "https://qa-enterprise.mastersindia-einv.com",

@@ -151,6 +151,17 @@ export async function getState(ticket?: string): Promise<StateResponse | null> {
   return apiFetch<StateResponse>(`/api/state${query}`);
 }
 
+/** Ask a free-form question about the current pipeline task */
+export async function askTask(
+  ticket: string,
+  question: string,
+): Promise<{ ok: boolean; answer?: string; error?: string }> {
+  return apiFetch('/api/ask-task', {
+    method: 'POST',
+    body: JSON.stringify({ ticket, question }),
+  });
+}
+
 /** Reset the agent state */
 export async function resetAgent(ticket?: string): Promise<{ ok: boolean }> {
   return apiFetch('/api/reset', {
@@ -291,6 +302,32 @@ export async function submitComment(
     method: 'POST',
     body: JSON.stringify({ ticket, file, line, body, parentId }),
   });
+}
+
+/**
+ * A single persisted comment entry as the backend stores it under a
+ * `${file}:${line}` key (see packages/backend/src/server/routes.ts's
+ * POST /api/comments "Shape 2" append path).
+ */
+export interface RawCommentEntry {
+  id?: string;
+  file?: string;
+  line?: number;
+  body: string;
+  author?: string;
+  timestamp: number;
+  parentId?: string;
+}
+
+/** Fetch all persisted comments for a ticket, keyed by `${file}:${line}`. */
+export async function getComments(
+  ticket: string,
+): Promise<{ ok: boolean; comments: Record<string, RawCommentEntry[]> }> {
+  const raw = await apiFetch<{ comments?: Record<string, unknown> }>(
+    `/api/comments?ticket=${encodeURIComponent(ticket)}`,
+  );
+  const comments = (raw?.comments ?? {}) as Record<string, RawCommentEntry[]>;
+  return { ok: true, comments };
 }
 
 /**
@@ -501,4 +538,40 @@ export async function removePat(provider: string): Promise<{ ok: boolean; provid
   return apiFetch(`/api/connectors/${encodeURIComponent(provider)}/pat`, {
     method: 'DELETE',
   });
+}
+
+export interface LocalServerStatus {
+  running: boolean;
+  port: number | null;
+  ready: boolean;
+  startedAt: number | null;
+  ticket: string | null;
+  branch: string | null;
+  logs: string[];
+}
+
+export async function getLocalServerStatus(): Promise<LocalServerStatus> {
+  return apiFetch('/api/local-server/status');
+}
+
+export async function startLocalServer(ticket?: string, envContent?: string): Promise<{ ok: boolean; port?: number; branch?: string; error?: string }> {
+  return apiFetch('/api/local-server/start', {
+    method: 'POST',
+    body: JSON.stringify({ ticket: ticket ?? null, envContent: envContent ?? null }),
+  });
+}
+
+export async function getLocalServerEnv(): Promise<{ ok: boolean; content?: string; path?: string; error?: string }> {
+  return apiFetch('/api/local-server/env');
+}
+
+export async function saveLocalServerEnv(content: string): Promise<{ ok: boolean; error?: string }> {
+  return apiFetch('/api/local-server/env', {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
+}
+
+export async function stopLocalServer(): Promise<{ ok: boolean }> {
+  return apiFetch('/api/local-server/stop', { method: 'POST', body: '{}' });
 }

@@ -11,17 +11,16 @@ import { AgentStatus } from './components/AgentStatus';
 import { AutomationStatusStrip } from './components/AutomationStatusStrip';
 import { StageMetricsPanel } from './components/StageMetricsPanel';
 import { LogViewer } from './components/LogViewer';
-import { GateApproval } from './components/GateApproval';
 import { ResumeDialog } from './components/ResumeDialog';
 import { GateNotificationBar } from './components/GateNotificationBar';
 import { PipelineDetail } from './components/PipelineDetail';
 import { ErrorOverlay } from './components/ErrorOverlay';
 import { ContextInjectionPanel } from './components/ContextInjectionPanel';
+import { TaskChatPanel } from './components/TaskChatPanel';
 import { StuckPopup } from './components/StuckPopup';
 import { LogFileArchiveViewer } from './components/LogFileArchiveViewer';
 import { TicketTabBar } from './components/TicketTabBar';
 import { QAProgressPanel } from './components/QAProgressPanel';
-import { WriteCodeDetail } from './components/WriteCodeDetail';
 import { StageOverviewList } from './components/StageOverviewSection';
 import { DiffViewer } from './components/review/DiffViewer';
 import { AgentSwimLanes } from './components/AgentSwimLanes';
@@ -367,6 +366,9 @@ function DashboardView({
 
       {/* Main panels */}
       <div style={styles.mainPanels}>
+        {/* Ask anything — always visible for any active ticket */}
+        {activeTicket && <TaskChatPanel ticket={activeTicket} />}
+
         {!hasActiveTicket ? (
           /* Empty state: show ticket form */
           <TicketForm />
@@ -383,15 +385,15 @@ function DashboardView({
             <StageMetricsPanel />
             <AgentSwimLanes />
             <LiveCodegenDiff />
-            <WriteCodeDetail />
             <QAProgressPanel />
             {activeTicket && (
               <ContextInjectionPanel ticket={activeTicket} isRunning={isRunning} />
             )}
-            <GateApproval />
-            {/* Per-stage overview sections — always rendered so every
-                stage pill in AgentStatus has a scroll target. Existing
-                detail panels above add depth when relevant. */}
+            {/* Per-stage timeline cards — every stage gets a card, and the
+                generate_code / gate_code_review cards embed the real
+                WriteCodeDetail / GateApproval components as their body
+                (dashboard-activity-timeline-redesign) instead of those
+                components being separate flat siblings here. */}
             <StageOverviewList />
             <LogViewer />
             {activeTicket && <LogFileArchiveViewer ticket={activeTicket} />}
